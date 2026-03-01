@@ -97,20 +97,35 @@ async function handleSend(interaction: ChatInputCommandInteraction, bridge: Brid
     }
 
     await interaction.deferReply();
-    await bridge.sendMessage(message);
-    await interaction.editReply(`Sent: "${message}"`);
+    try {
+        await bridge.sendMessage(message);
+        await interaction.editReply(`Sent: "${message}"`);
+    } catch (err) {
+        const detail = err instanceof Error ? err.message : 'Unknown error';
+        await interaction.editReply(`Failed to send: ${detail}`);
+    }
 }
 
 async function handleStop(interaction: ChatInputCommandInteraction, bridge: Bridge): Promise<void> {
     await interaction.deferReply();
-    await bridge.stopSession();
-    await interaction.editReply('Stop requested.');
+    try {
+        await bridge.stopSession();
+        await interaction.editReply('Stop requested.');
+    } catch (err) {
+        const detail = err instanceof Error ? err.message : 'Unknown error';
+        await interaction.editReply(`Failed to stop: ${detail}`);
+    }
 }
 
 async function handleCompact(interaction: ChatInputCommandInteraction, bridge: Bridge): Promise<void> {
     await interaction.deferReply();
-    await bridge.compactSession();
-    await interaction.editReply('Compact requested.');
+    try {
+        await bridge.compactSession();
+        await interaction.editReply('Compact requested.');
+    } catch (err) {
+        const detail = err instanceof Error ? err.message : 'Unknown error';
+        await interaction.editReply(`Failed to compact: ${detail}`);
+    }
 }
 
 async function handleMode(interaction: ChatInputCommandInteraction): Promise<void> {

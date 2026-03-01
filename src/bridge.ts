@@ -58,6 +58,9 @@ export class Bridge {
     }
 
     async start(): Promise<void> {
+        // Register listener before loading sessions to avoid missing events
+        this.happy.on('update', (data) => this.processUpdate(data));
+
         const sessions = await this.loadSessions();
 
         // Auto-select latest active session by activeAt
@@ -65,9 +68,6 @@ export class Bridge {
             const latest = sessions.reduce((a, b) => (a.activeAt > b.activeAt ? a : b));
             this.activeSessionId = latest.id;
         }
-
-        // Listen for updates
-        this.happy.on('update', (data) => this.processUpdate(data));
     }
 
     async listSessions(): Promise<DecryptedSession[]> {
@@ -107,10 +107,12 @@ export class Bridge {
     }
 
     private async handleNewMessage(sessionId: string, raw: unknown): Promise<void> {
-        const msg = raw as {
-            id: string;
-            content: { c: string; t: string };
-        };
+        const msg = raw as Record<string, unknown> | null;
+        const content = (msg?.content as Record<string, unknown> | undefined);
+        if (!content?.c || typeof content.c !== 'string') {
+            console.warn(`[Bridge] Malformed message for session ${sessionId}, skipping`);
+            return;
+        }
 
         const enc = this.happy.getSessionEncryption(sessionId);
         if (!enc) {
@@ -118,9 +120,9 @@ export class Bridge {
             return;
         }
 
-        const decrypted = decrypt(enc.key, enc.variant, decodeBase64(msg.content.c));
+        const decrypted = decrypt(enc.key, enc.variant, decodeBase64(content.c));
         if (!decrypted) {
-            console.error(`[Bridge] Failed to decrypt message ${msg.id}`);
+            console.error(`[Bridge] Failed to decrypt message for session ${sessionId}`);
             return;
         }
 
@@ -137,7 +139,7 @@ export class Bridge {
                     type?: string;
                     message?: { content?: Array<{ type: string; text?: string }> };
                 };
-                if (outputData?.type === 'assistant' && outputData.message?.content) {
+                if (outputData?.type === 'assistant' && Array.isArray(outputData.message?.content)) {
                     const textBlocks = outputData.message.content
                         .filter((block) => block.type === 'text' && block.text)
                         .map((block) => block.text!);
