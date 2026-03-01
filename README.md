@@ -33,9 +33,8 @@ npm install
 **Option A: File-based (local development)**
 
 ```bash
-cd ~/Coding/happy/packages/happy-agent
-npm install
-npx tsx src/index.ts auth login
+npm install -g @slopus/agent
+happy-agent auth login
 ```
 
 This creates `~/.happy/agent.key` with your token and secret.
