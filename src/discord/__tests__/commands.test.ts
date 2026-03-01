@@ -38,11 +38,11 @@ describe('commands', () => {
         });
 
         it('includes /sessions command', () => {
-            expect(commandDefinitions.find((c) => c.name === 'sessions')).toBeDefined();
+            expect(commandDefinitions.find((c: { name: string }) => c.name === 'sessions')).toBeDefined();
         });
 
         it('includes /send command with message option', () => {
-            const send = commandDefinitions.find((c) => c.name === 'send');
+            const send = commandDefinitions.find((c: { name: string }) => c.name === 'send');
             expect(send).toBeDefined();
             expect(send!.options).toBeDefined();
         });
