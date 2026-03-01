@@ -98,6 +98,30 @@ npm run build
 npm start
 ```
 
+## Starting a Claude Code Session
+
+The bot monitors Claude Code sessions running through the Happy relay. You need at least one active session for the bot to interact with.
+
+### Using `happy` CLI
+
+```bash
+# Install happy CLI (if not already installed)
+brew install slopus/tap/happy
+
+# Authenticate (first time only)
+happy auth
+
+# Start a Claude Code session in any project directory
+cd ~/your-project
+happy
+```
+
+The `happy auth` command will prompt you to authenticate via the Happy Coder mobile app (scan QR code) or web browser. Once authenticated, `happy` starts a Claude Code session connected through the relay.
+
+### How the bot discovers sessions
+
+On startup, the bot calls the relay API to list all active sessions and auto-selects the most recently active one. To refresh the session list after starting new sessions, use the `/sessions` command in Discord.
+
 ## Slash Commands
 
 | Command | Description |
