@@ -249,6 +249,12 @@ describe('HappyClient', () => {
             expect(client.getSessionEncryption('nonexistent')).toBeUndefined();
         });
 
+        it('registers encryption directly without raw session', () => {
+            const enc = { key: new Uint8Array(32), variant: 'dataKey' as const };
+            client.registerSessionEncryption('direct-sess', enc);
+            expect(client.getSessionEncryption('direct-sess')).toBe(enc);
+        });
+
         it('removes session key', () => {
             client.registerSessionKey(makeRawSession('sess-1'));
             expect(client.getSessionEncryption('sess-1')).toBeDefined();

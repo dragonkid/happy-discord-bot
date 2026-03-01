@@ -2,7 +2,7 @@ import { loadBotConfig } from './config.js';
 import { HappyClient } from './happy/client.js';
 import { DiscordBot } from './discord/bot.js';
 import { handleCommand } from './discord/commands.js';
-import { listActiveSessions } from './vendor/api.js';
+import { Bridge } from './bridge.js';
 
 async function main(): Promise<void> {
     const config = loadBotConfig();
@@ -10,20 +10,10 @@ async function main(): Promise<void> {
     console.log(`Discord channel: ${config.discord.channelId}`);
 
     // --- Happy relay ---
-    const sessions = await listActiveSessions(config.happy, config.credentials);
-    console.log(`Found ${sessions.length} active session(s)`);
-    for (const s of sessions) {
-        console.log(`  - ${s.id} (active: ${s.active})`);
-    }
-
     const happy = new HappyClient(config.happy, config.credentials);
 
     happy.on('connected', () => {
         console.log('[Happy] Connected to relay');
-    });
-
-    happy.on('update', (data) => {
-        console.log('[Happy] Update:', JSON.stringify(data).slice(0, 200));
     });
 
     happy.on('disconnected', (reason) => {
@@ -35,6 +25,16 @@ async function main(): Promise<void> {
     // --- Discord bot ---
     const discord = new DiscordBot(config.discord);
 
+    // --- Bridge ---
+    const bridge = new Bridge(happy, discord, config);
+    await bridge.start();
+
+    if (bridge.activeSession) {
+        console.log(`[Bridge] Active session: ${bridge.activeSession}`);
+    } else {
+        console.log('[Bridge] No active sessions found');
+    }
+
     discord.onInteraction(async (interaction) => {
         if (!interaction.isChatInputCommand()) return;
 
@@ -44,7 +44,7 @@ async function main(): Promise<void> {
         }
 
         try {
-            await handleCommand(interaction);
+            await handleCommand(interaction, bridge);
         } catch (err) {
             console.error('[Discord] Command error:', err);
             const reply = interaction.deferred

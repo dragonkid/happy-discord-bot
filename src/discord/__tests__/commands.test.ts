@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { commandDefinitions, handleCommand } from '../commands.js';
+import type { Bridge } from '../../bridge.js';
 
 // Minimal interaction mock
 function mockInteraction(name: string, options: Record<string, string> = {}) {
@@ -7,7 +8,7 @@ function mockInteraction(name: string, options: Record<string, string> = {}) {
         commandName: name,
         user: { id: 'u-1' },
         options: {
-            getString: vi.fn((key: string) => options[key] ?? null),
+            getString: vi.fn((key: string, _required?: boolean) => options[key] ?? null),
         },
         reply: vi.fn().mockResolvedValue(undefined),
         deferReply: vi.fn().mockResolvedValue(undefined),
@@ -15,12 +16,21 @@ function mockInteraction(name: string, options: Record<string, string> = {}) {
     };
 }
 
+function makeMockBridge(): Bridge {
+    return {
+        listSessions: vi.fn().mockResolvedValue([]),
+        sendMessage: vi.fn().mockResolvedValue(undefined),
+        stopSession: vi.fn().mockResolvedValue(undefined),
+        compactSession: vi.fn().mockResolvedValue(undefined),
+        activeSession: null,
+    } as unknown as Bridge;
+}
+
 describe('commands', () => {
     describe('commandDefinitions', () => {
         it('exports an array of slash command JSON objects', () => {
             expect(Array.isArray(commandDefinitions)).toBe(true);
             expect(commandDefinitions.length).toBeGreaterThan(0);
-
             for (const cmd of commandDefinitions) {
                 expect(cmd).toHaveProperty('name');
                 expect(cmd).toHaveProperty('description');
@@ -28,43 +38,97 @@ describe('commands', () => {
         });
 
         it('includes /sessions command', () => {
-            const sessions = commandDefinitions.find((c) => c.name === 'sessions');
-            expect(sessions).toBeDefined();
+            expect(commandDefinitions.find((c: { name: string }) => c.name === 'sessions')).toBeDefined();
         });
 
         it('includes /send command with message option', () => {
-            const send = commandDefinitions.find((c) => c.name === 'send');
+            const send = commandDefinitions.find((c: { name: string }) => c.name === 'send');
             expect(send).toBeDefined();
             expect(send!.options).toBeDefined();
         });
     });
 
     describe('handleCommand', () => {
-        it('replies to /sessions', async () => {
+        it('/sessions calls bridge.listSessions and formats result', async () => {
+            const bridge = makeMockBridge();
+            vi.mocked(bridge.listSessions).mockResolvedValueOnce([
+                { id: 'sess-1', active: true, activeAt: 1000 },
+                { id: 'sess-2', active: true, activeAt: 2000 },
+            ] as any);
+            Object.defineProperty(bridge, 'activeSession', { value: 'sess-2' });
+
             const interaction = mockInteraction('sessions');
-            await handleCommand(interaction as any);
+            await handleCommand(interaction as any, bridge);
+
             expect(interaction.deferReply).toHaveBeenCalled();
-            expect(interaction.editReply).toHaveBeenCalled();
+            expect(bridge.listSessions).toHaveBeenCalled();
+            expect(interaction.editReply).toHaveBeenCalledWith(
+                expect.stringContaining('sess-1'),
+            );
         });
 
-        it('replies to /send with message', async () => {
+        it('/sessions shows "no active sessions" when empty', async () => {
+            const bridge = makeMockBridge();
+            const interaction = mockInteraction('sessions');
+            await handleCommand(interaction as any, bridge);
+
+            expect(interaction.editReply).toHaveBeenCalledWith(
+                expect.stringContaining('No active sessions'),
+            );
+        });
+
+        it('/send calls bridge.sendMessage', async () => {
+            const bridge = makeMockBridge();
             const interaction = mockInteraction('send', { message: 'hello' });
-            await handleCommand(interaction as any);
-            expect(interaction.deferReply).toHaveBeenCalled();
-            expect(interaction.editReply).toHaveBeenCalled();
+            await handleCommand(interaction as any, bridge);
+
+            expect(bridge.sendMessage).toHaveBeenCalledWith('hello');
+            expect(interaction.editReply).toHaveBeenCalledWith(
+                expect.stringContaining('Sent'),
+            );
         });
 
-        it('replies with error for /send without message', async () => {
+        it('/send replies with error when no message', async () => {
+            const bridge = makeMockBridge();
             const interaction = mockInteraction('send');
-            await handleCommand(interaction as any);
+            await handleCommand(interaction as any, bridge);
+
             expect(interaction.reply).toHaveBeenCalledWith(
                 expect.objectContaining({ content: expect.stringContaining('message') }),
             );
         });
 
-        it('replies with unknown command message for unregistered commands', async () => {
+        it('/stop calls bridge.stopSession', async () => {
+            const bridge = makeMockBridge();
+            const interaction = mockInteraction('stop');
+            await handleCommand(interaction as any, bridge);
+
+            expect(bridge.stopSession).toHaveBeenCalled();
+        });
+
+        it('/compact calls bridge.compactSession', async () => {
+            const bridge = makeMockBridge();
+            const interaction = mockInteraction('compact');
+            await handleCommand(interaction as any, bridge);
+
+            expect(bridge.compactSession).toHaveBeenCalled();
+        });
+
+        it('/mode replies with mode value (Phase 5 placeholder)', async () => {
+            const bridge = makeMockBridge();
+            const interaction = mockInteraction('mode', { mode: 'acceptEdits' });
+            await handleCommand(interaction as any, bridge);
+
+            expect(interaction.editReply).toHaveBeenCalledWith(
+                expect.stringContaining('acceptEdits'),
+            );
+        });
+
+        it('unknown command replies with error', async () => {
+            const bridge = makeMockBridge();
             const interaction = mockInteraction('nonexistent');
-            await handleCommand(interaction as any);
+            await handleCommand(interaction as any, bridge);
+
             expect(interaction.reply).toHaveBeenCalledWith(
                 expect.objectContaining({ content: expect.stringContaining('Unknown') }),
             );
