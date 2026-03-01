@@ -121,48 +121,43 @@ function decryptSession(raw: RawSession, creds: Credentials): DecryptedSession {
 
 class ApiError extends Error {
     constructor(
-        public readonly status: number,
         message: string,
+        public readonly status?: number,
     ) {
         super(message);
         this.name = 'ApiError';
     }
 }
 
-function handleApiError(err: unknown, context: string): never {
-    if (err instanceof ApiError) {
-        const status = err.status;
-        if (status === 401) {
-            throw new Error('Authentication expired. Run `happy-agent auth login` to re-authenticate.');
-        }
-        if (status === 403) {
-            throw new Error(`Forbidden: ${context}. Check your account permissions.`);
-        }
-        if (status === 404) {
-            throw new Error(`Not found: ${context}`);
-        }
-        if (status >= 400 && status < 500) {
-            throw new Error(`Request failed (${status}): ${err.message}`);
-        }
-        if (status >= 500) {
-            throw new Error(`Server error (${status}): ${context}`);
-        }
-        throw new Error(`Request failed: ${err.message}`);
+async function handleApiResponse(resp: Response, context: string): Promise<void> {
+    if (resp.ok) return;
+
+    const status = resp.status;
+    if (status === 401) {
+        throw new ApiError('Authentication expired. Run `happy-agent auth login` to re-authenticate.', status);
     }
-    throw err;
+    if (status === 403) {
+        throw new ApiError(`Forbidden: ${context}. Check your account permissions.`, status);
+    }
+    if (status === 404) {
+        throw new ApiError(`Not found: ${context}`, status);
+    }
+    if (status >= 400 && status < 500) {
+        let detail = '';
+        try {
+            const body = await resp.text();
+            if (body) detail = `: ${body}`;
+        } catch { /* ignore */ }
+        throw new ApiError(`Request failed (${status})${detail}`, status);
+    }
+    if (status >= 500) {
+        throw new ApiError(`Server error (${status}): ${context}`, status);
+    }
+    throw new ApiError(`Request failed: ${context}`, status);
 }
 
 function authHeaders(creds: Credentials): Record<string, string> {
     return { Authorization: `Bearer ${creds.token}` };
-}
-
-async function fetchJson<T>(url: string, init: RequestInit): Promise<T> {
-    const resp = await fetch(url, init);
-    if (!resp.ok) {
-        const body = await resp.text().catch(() => '');
-        throw new ApiError(resp.status, body);
-    }
-    return resp.json() as Promise<T>;
 }
 
 // --- API functions ---
@@ -171,16 +166,11 @@ export async function listSessions(
     config: Config,
     creds: Credentials,
 ): Promise<DecryptedSession[]> {
-    let data: { sessions: RawSession[] };
-    try {
-        data = await fetchJson<{ sessions: RawSession[] }>(
-            `${config.serverUrl}/v1/sessions`,
-            { headers: authHeaders(creds) },
-        );
-    } catch (err) {
-        handleApiError(err, 'listing sessions');
-    }
-
+    const resp = await fetch(`${config.serverUrl}/v1/sessions`, {
+        headers: authHeaders(creds),
+    });
+    await handleApiResponse(resp, 'listing sessions');
+    const data = (await resp.json()) as { sessions: RawSession[] };
     return data.sessions.map(raw => decryptSession(raw, creds));
 }
 
@@ -188,16 +178,11 @@ export async function listActiveSessions(
     config: Config,
     creds: Credentials,
 ): Promise<DecryptedSession[]> {
-    let data: { sessions: RawSession[] };
-    try {
-        data = await fetchJson<{ sessions: RawSession[] }>(
-            `${config.serverUrl}/v2/sessions/active`,
-            { headers: authHeaders(creds) },
-        );
-    } catch (err) {
-        handleApiError(err, 'listing active sessions');
-    }
-
+    const resp = await fetch(`${config.serverUrl}/v2/sessions/active`, {
+        headers: authHeaders(creds),
+    });
+    await handleApiResponse(resp, 'listing active sessions');
+    const data = (await resp.json()) as { sessions: RawSession[] };
     return data.sessions.map(raw => decryptSession(raw, creds));
 }
 
@@ -206,40 +191,28 @@ export async function createSession(
     creds: Credentials,
     opts: { tag: string; metadata: unknown },
 ): Promise<DecryptedSession & { sessionKey: Uint8Array }> {
-    // Generate random 32-byte per-session AES key
     const sessionKey = getRandomBytes(32);
 
-    // Encrypt session key with content public key, prepend version byte
     const encryptedKey = libsodiumEncryptForPublicKey(sessionKey, creds.contentKeyPair.publicKey);
     const withVersion = new Uint8Array(1 + encryptedKey.length);
-    withVersion[0] = 0x00; // version byte
+    withVersion[0] = 0x00;
     withVersion.set(encryptedKey, 1);
     const dataEncryptionKeyBase64 = encodeBase64(withVersion);
 
-    // Encrypt metadata with the session key
     const encryptedMetadata = encryptWithDataKey(opts.metadata, sessionKey);
     const metadataBase64 = encodeBase64(encryptedMetadata);
 
-    let data: { session: RawSession };
-    try {
-        data = await fetchJson<{ session: RawSession }>(
-            `${config.serverUrl}/v1/sessions`,
-            {
-                method: 'POST',
-                body: JSON.stringify({
-                    tag: opts.tag,
-                    metadata: metadataBase64,
-                    dataEncryptionKey: dataEncryptionKeyBase64,
-                }),
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...authHeaders(creds),
-                },
-            },
-        );
-    } catch (err) {
-        handleApiError(err, 'creating session');
-    }
+    const resp = await fetch(`${config.serverUrl}/v1/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders(creds) },
+        body: JSON.stringify({
+            tag: opts.tag,
+            metadata: metadataBase64,
+            dataEncryptionKey: dataEncryptionKeyBase64,
+        }),
+    });
+    await handleApiResponse(resp, 'creating session');
+    const data = (await resp.json()) as { session: RawSession };
 
     const decrypted = decryptSession(data.session, creds);
     return { ...decrypted, sessionKey: decrypted.encryption.key };
@@ -250,21 +223,11 @@ export async function deleteSession(
     creds: Credentials,
     sessionId: string,
 ): Promise<void> {
-    try {
-        const resp = await fetch(
-            `${config.serverUrl}/v1/sessions/${encodeURIComponent(sessionId)}`,
-            {
-                method: 'DELETE',
-                headers: authHeaders(creds),
-            },
-        );
-        if (!resp.ok) {
-            const body = await resp.text().catch(() => '');
-            throw new ApiError(resp.status, body);
-        }
-    } catch (err) {
-        handleApiError(err, `deleting session ${sessionId}`);
-    }
+    const resp = await fetch(`${config.serverUrl}/v1/sessions/${encodeURIComponent(sessionId)}`, {
+        method: 'DELETE',
+        headers: authHeaders(creds),
+    });
+    await handleApiResponse(resp, `deleting session ${sessionId}`);
 }
 
 export async function getSessionMessages(
@@ -273,15 +236,12 @@ export async function getSessionMessages(
     sessionId: string,
     encryption: SessionEncryption,
 ): Promise<DecryptedMessage[]> {
-    let data: { messages: RawMessage[] };
-    try {
-        data = await fetchJson<{ messages: RawMessage[] }>(
-            `${config.serverUrl}/v1/sessions/${encodeURIComponent(sessionId)}/messages`,
-            { headers: authHeaders(creds) },
-        );
-    } catch (err) {
-        handleApiError(err, `session ${sessionId} messages`);
-    }
+    const resp = await fetch(
+        `${config.serverUrl}/v1/sessions/${encodeURIComponent(sessionId)}/messages`,
+        { headers: authHeaders(creds) },
+    );
+    await handleApiResponse(resp, `session ${sessionId} messages`);
+    const data = (await resp.json()) as { messages: RawMessage[] };
 
     return data.messages.map(msg => ({
         id: msg.id,

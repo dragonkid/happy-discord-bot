@@ -99,8 +99,8 @@ export function encryptWithDataKey(data: unknown, dataKey: Uint8Array): Uint8Arr
 }
 
 export function decryptWithDataKey(bundle: Uint8Array, dataKey: Uint8Array): unknown | null {
-    if (bundle.length < 1 + 12 + 16) return null; // minimum: version + nonce + authTag
-    if (bundle[0] !== 0) return null; // only version 0
+    if (bundle.length < 1 + 12 + 16) return null;
+    if (bundle[0] !== 0) return null;
 
     const nonce = bundle.slice(1, 13);
     const authTag = bundle.slice(bundle.length - 16);
@@ -165,11 +165,8 @@ export function authChallenge(secret: Uint8Array): {
     publicKey: Uint8Array;
     signature: Uint8Array;
 } {
-    // Derive signing keypair from secret seed
     const signingKeyPair = tweetnacl.sign.keyPair.fromSeed(secret);
-    // Create random 32-byte challenge
     const challenge = getRandomBytes(32);
-    // Sign the challenge
     const signature = tweetnacl.sign.detached(challenge, signingKeyPair.secretKey);
     return {
         challenge,
@@ -185,7 +182,6 @@ export function libsodiumEncryptForPublicKey(data: Uint8Array, recipientPublicKe
     const nonce = getRandomBytes(tweetnacl.box.nonceLength);
     const encrypted = tweetnacl.box(data, nonce, recipientPublicKey, ephemeralKeyPair.secretKey);
 
-    // Bundle: ephemeral pubkey(32) + nonce(24) + ciphertext
     const result = new Uint8Array(32 + 24 + encrypted.length);
     result.set(ephemeralKeyPair.publicKey, 0);
     result.set(nonce, 32);
