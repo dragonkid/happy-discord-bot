@@ -1,5 +1,7 @@
 import { loadBotConfig } from './config.js';
 import { HappyClient } from './happy/client.js';
+import { DiscordBot } from './discord/bot.js';
+import { handleCommand } from './discord/commands.js';
 import { listActiveSessions } from './vendor/api.js';
 
 async function main(): Promise<void> {
@@ -7,34 +9,59 @@ async function main(): Promise<void> {
     console.log(`Happy server: ${config.happy.serverUrl}`);
     console.log(`Discord channel: ${config.discord.channelId}`);
 
-    // List active sessions to verify API access
+    // --- Happy relay ---
     const sessions = await listActiveSessions(config.happy, config.credentials);
     console.log(`Found ${sessions.length} active session(s)`);
     for (const s of sessions) {
         console.log(`  - ${s.id} (active: ${s.active})`);
     }
 
-    // Create and connect HappyClient
     const happy = new HappyClient(config.happy, config.credentials);
 
     happy.on('connected', () => {
-        console.log('[Bot] Connected to relay, ready to receive events');
+        console.log('[Happy] Connected to relay');
     });
 
     happy.on('update', (data) => {
-        console.log('[Bot] Update:', JSON.stringify(data).slice(0, 200));
+        console.log('[Happy] Update:', JSON.stringify(data).slice(0, 200));
     });
 
     happy.on('disconnected', (reason) => {
-        console.log(`[Bot] Disconnected: ${reason}`);
+        console.log(`[Happy] Disconnected: ${reason}`);
     });
 
     happy.connect();
 
-    // Keep process alive
+    // --- Discord bot ---
+    const discord = new DiscordBot(config.discord);
+
+    discord.onInteraction(async (interaction) => {
+        if (!interaction.isChatInputCommand()) return;
+
+        if (interaction.user.id !== config.discord.userId) {
+            await interaction.reply({ content: 'Unauthorized.', ephemeral: true });
+            return;
+        }
+
+        try {
+            await handleCommand(interaction);
+        } catch (err) {
+            console.error('[Discord] Command error:', err);
+            const reply = interaction.deferred
+                ? interaction.editReply('An error occurred.')
+                : interaction.reply({ content: 'An error occurred.', ephemeral: true });
+            await reply.catch(() => {});
+        }
+    });
+
+    await discord.start();
+    console.log('[Discord] Bot online');
+
+    // --- Graceful shutdown ---
     process.on('SIGINT', () => {
         console.log('Shutting down...');
         happy.close();
+        discord.destroy();
         process.exit(0);
     });
 }

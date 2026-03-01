@@ -68,11 +68,24 @@ Fill in:
 | `DISCORD_TOKEN` | Yes | Discord Bot token |
 | `DISCORD_CHANNEL_ID` | Yes | Target channel ID (right-click → Copy Channel ID) |
 | `DISCORD_USER_ID` | Yes | Your Discord user ID (right-click → Copy User ID) |
-| `HAPPY_TOKEN` | No* | Happy API token (env-based auth) |
-| `HAPPY_SECRET` | No* | Happy account secret, base64 (env-based auth) |
+| `DISCORD_APPLICATION_ID` | Yes* | Application ID (Developer Portal → General Information) |
+| `DISCORD_GUILD_ID` | No | Guild ID for fast command deployment (dev only) |
+| `HAPPY_TOKEN` | No** | Happy API token (env-based auth) |
+| `HAPPY_SECRET` | No** | Happy account secret, base64 (env-based auth) |
 | `HAPPY_SERVER_URL` | No | Override relay URL (default: `https://api.cluster-fluster.com`) |
 
-\* Either set `HAPPY_TOKEN` + `HAPPY_SECRET`, or have `~/.happy/agent.key` present.
+\* Required for `npm run deploy-commands`.
+\*\* Either set `HAPPY_TOKEN` + `HAPPY_SECRET`, or have `~/.happy/agent.key` present.
+
+### 5. Deploy slash commands
+
+Register bot commands with Discord (run once, or after adding new commands):
+
+```bash
+npm run deploy-commands
+```
+
+If `DISCORD_GUILD_ID` is set, commands deploy to that guild instantly. Otherwise they deploy globally (up to 1 hour propagation).
 
 ## Run
 
@@ -85,11 +98,22 @@ npm run build
 npm start
 ```
 
-## Commands
+## Slash Commands
+
+| Command | Description |
+|---------|-------------|
+| `/sessions` | List active Claude Code sessions |
+| `/send <message>` | Send a message to the active session |
+| `/stop` | Abort the current operation |
+| `/compact` | Compact session context |
+| `/mode <mode>` | Set permission mode (default/accept-edits/bypass/plan) |
+
+## npm Scripts
 
 ```bash
-npm run dev              # Development with tsx (auto-restart)
+npm run dev              # Development with tsx
 npm run build            # Compile TypeScript to dist/
 npm start                # Run compiled JS
 npm run deploy-commands  # Register Discord slash commands (run once)
+npm test                 # Run tests
 ```
