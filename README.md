@@ -46,6 +46,8 @@ Once paired, `~/.happy/agent.key` is created with your token and secret.
 
 Extract token and secret from an existing `agent.key`:
 
+TODO: remove the dependency on the app and Happy Server api.cluster-fluster.com
+
 ```bash
 cat ~/.happy/agent.key
 # Output: {"token":"...","secret":"..."}
