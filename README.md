@@ -37,7 +37,10 @@ npm install -g @slopus/agent
 happy-agent auth login
 ```
 
-This creates `~/.happy/agent.key` with your token and secret.
+This displays a QR code in the terminal. Scan it with the Happy Coder app:
+**Settings → Account → Link New Device**. The app is required for this step — it performs a device pairing that transfers your encrypted account secret to the CLI.
+
+Once paired, `~/.happy/agent.key` is created with your token and secret.
 
 **Option B: Environment variables (deployment)**
 
