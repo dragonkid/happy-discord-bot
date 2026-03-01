@@ -4,6 +4,7 @@ import { DiscordBot } from '../bot.js';
 // --- Mock discord.js ---
 const mockChannel = {
     send: vi.fn().mockResolvedValue({ id: 'msg-1' }),
+    isTextBased: vi.fn().mockReturnValue(true),
 };
 
 const mockClient = {

@@ -45,6 +45,9 @@ export class DiscordBot {
 
         await this.client.login(this.config.token);
         const ch = await this.client.channels.fetch(this.config.channelId);
+        if (!ch || !ch.isTextBased()) {
+            throw new Error(`Channel ${this.config.channelId} is not a text channel`);
+        }
         this.channel = ch as TextChannel;
     }
 

@@ -36,8 +36,21 @@ async function main(): Promise<void> {
     const discord = new DiscordBot(config.discord);
 
     discord.onInteraction(async (interaction) => {
-        if (interaction.isChatInputCommand()) {
+        if (!interaction.isChatInputCommand()) return;
+
+        if (interaction.user.id !== config.discord.userId) {
+            await interaction.reply({ content: 'Unauthorized.', ephemeral: true });
+            return;
+        }
+
+        try {
             await handleCommand(interaction);
+        } catch (err) {
+            console.error('[Discord] Command error:', err);
+            const reply = interaction.deferred
+                ? interaction.editReply('An error occurred.')
+                : interaction.reply({ content: 'An error occurred.', ephemeral: true });
+            await reply.catch(() => {});
         }
     });
 
