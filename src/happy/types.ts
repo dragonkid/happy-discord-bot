@@ -60,14 +60,16 @@ export interface UpdateSessionUpdate {
     metadata?: { version: number; value: string };
 }
 
-// --- Session types ---
+// --- Session types (bot-internal, derived from vendor DecryptedSession) ---
 
 export interface Session {
     id: string;
-    name?: string;
-    machineId: string;
+    seq: number;
+    active: boolean;
+    activeAt: number;
     agentState?: AgentState;
     metadata?: unknown;
+    dataEncryptionKey: string | null;
     createdAt: number;
     updatedAt: number;
 }

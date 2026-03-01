@@ -51,7 +51,7 @@ export type DecryptedSession = {
     active: boolean;
     activeAt: number;
     metadata: unknown;
-    agentState: unknown | null;
+    agentState: unknown;
     dataEncryptionKey: string | null;
     encryption: SessionEncryption;
 };
