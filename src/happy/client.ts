@@ -12,6 +12,7 @@ import type { RpcCallPayload, RpcResult } from './types.js';
 interface HappyClientEvents {
     connected: [];
     disconnected: [reason: string];
+    connect_error: [error: Error];
     update: [data: unknown];
 }
 
@@ -48,6 +49,7 @@ export class HappyClient extends EventEmitter<HappyClientEvents> {
         this.socket.on('disconnect', (reason) => this.emit('disconnected', reason));
         this.socket.on('connect_error', (err) => {
             console.error('[HappyClient] connect_error:', err.message);
+            this.emit('connect_error', err);
         });
         this.socket.onAny((event: string, data: unknown) => {
             if (event === 'update') {
@@ -122,12 +124,13 @@ export class HappyClient extends EventEmitter<HappyClientEvents> {
 
     // --- HTTP request ---
 
+    /** Raw HTTP request. Caller is responsible for checking response status. */
     async request(path: string, options?: RequestInit): Promise<Response> {
         return fetch(`${this.config.serverUrl}${path}`, {
             ...options,
             headers: {
-                Authorization: `Bearer ${this.credentials.token}`,
                 ...options?.headers,
+                Authorization: `Bearer ${this.credentials.token}`,
             },
         });
     }
@@ -146,13 +149,21 @@ export class HappyClient extends EventEmitter<HappyClientEvents> {
 
         const encrypted = encodeBase64(encrypt(key, variant, params));
         const payload: RpcCallPayload = { method, params: encrypted };
-        const result: RpcResult = await this.socket.emitWithAck('rpc-call', payload);
+        const result: RpcResult = await this.socket
+            .timeout(30_000)
+            .emitWithAck('rpc-call', payload);
 
         if (!result.ok) {
             throw new Error(`RPC failed [${method}]: ${result.error ?? 'unknown error'}`);
         }
+        if (!result.result) {
+            throw new Error(`RPC returned no result [${method}]`);
+        }
 
-        const decrypted = decrypt(key, variant, decodeBase64(result.result!));
+        const decrypted = decrypt(key, variant, decodeBase64(result.result));
+        if (decrypted === null) {
+            throw new Error(`RPC decryption failed [${method}]`);
+        }
         return decrypted as R;
     }
 }
