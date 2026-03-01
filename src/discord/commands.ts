@@ -3,6 +3,7 @@ import {
     type ChatInputCommandInteraction,
     type RESTPostAPIChatInputApplicationCommandsJSONBody,
 } from 'discord.js';
+import type { Bridge } from '../bridge.js';
 
 // --- Command definitions ---
 
@@ -48,16 +49,19 @@ export const commandDefinitions: RESTPostAPIChatInputApplicationCommandsJSONBody
 
 // --- Command handler ---
 
-export async function handleCommand(interaction: ChatInputCommandInteraction): Promise<void> {
+export async function handleCommand(
+    interaction: ChatInputCommandInteraction,
+    bridge: Bridge,
+): Promise<void> {
     switch (interaction.commandName) {
         case 'sessions':
-            return handleSessions(interaction);
+            return handleSessions(interaction, bridge);
         case 'send':
-            return handleSend(interaction);
+            return handleSend(interaction, bridge);
         case 'stop':
-            return handleStop(interaction);
+            return handleStop(interaction, bridge);
         case 'compact':
-            return handleCompact(interaction);
+            return handleCompact(interaction, bridge);
         case 'mode':
             return handleMode(interaction);
         default:
@@ -65,15 +69,27 @@ export async function handleCommand(interaction: ChatInputCommandInteraction): P
     }
 }
 
-// --- Handlers (placeholders — wired to Happy RPC in Phase 4) ---
+// --- Handlers ---
 
-async function handleSessions(interaction: ChatInputCommandInteraction): Promise<void> {
+async function handleSessions(interaction: ChatInputCommandInteraction, bridge: Bridge): Promise<void> {
     await interaction.deferReply();
-    // TODO: Phase 4 — call listActiveSessions via bridge
-    await interaction.editReply('No active sessions. (Connect bridge in Phase 4)');
+    const sessions = await bridge.listSessions();
+
+    if (sessions.length === 0) {
+        await interaction.editReply('No active sessions.');
+        return;
+    }
+
+    const lines = sessions.map((s) => {
+        const marker = s.id === bridge.activeSession ? ' ← current' : '';
+        const time = new Date(s.activeAt).toLocaleTimeString();
+        return `• \`${s.id.slice(0, 8)}\` (active ${time})${marker}`;
+    });
+
+    await interaction.editReply(lines.join('\n'));
 }
 
-async function handleSend(interaction: ChatInputCommandInteraction): Promise<void> {
+async function handleSend(interaction: ChatInputCommandInteraction, bridge: Bridge): Promise<void> {
     const message = interaction.options.getString('message');
     if (!message) {
         await interaction.reply({ content: 'Please provide a message.', ephemeral: true });
@@ -81,25 +97,25 @@ async function handleSend(interaction: ChatInputCommandInteraction): Promise<voi
     }
 
     await interaction.deferReply();
-    // TODO: Phase 4 — send message via bridge
-    await interaction.editReply(`Queued: "${message}" (Connect bridge in Phase 4)`);
+    await bridge.sendMessage(message);
+    await interaction.editReply(`Sent: "${message}"`);
 }
 
-async function handleStop(interaction: ChatInputCommandInteraction): Promise<void> {
+async function handleStop(interaction: ChatInputCommandInteraction, bridge: Bridge): Promise<void> {
     await interaction.deferReply();
-    // TODO: Phase 4 — send abort RPC
-    await interaction.editReply('Stop requested. (Connect bridge in Phase 4)');
+    await bridge.stopSession();
+    await interaction.editReply('Stop requested.');
 }
 
-async function handleCompact(interaction: ChatInputCommandInteraction): Promise<void> {
+async function handleCompact(interaction: ChatInputCommandInteraction, bridge: Bridge): Promise<void> {
     await interaction.deferReply();
-    // TODO: Phase 4 — send compact command
-    await interaction.editReply('Compact requested. (Connect bridge in Phase 4)');
+    await bridge.compactSession();
+    await interaction.editReply('Compact requested.');
 }
 
 async function handleMode(interaction: ChatInputCommandInteraction): Promise<void> {
     const modeValue = interaction.options.getString('mode', true);
     await interaction.deferReply();
-    // TODO: Phase 5 — set permission mode on PermissionCache
-    await interaction.editReply(`Permission mode set to: ${modeValue} (Connect in Phase 5)`);
+    // Phase 5: set permission mode on PermissionCache
+    await interaction.editReply(`Permission mode set to: ${modeValue} (Phase 5)`);
 }
