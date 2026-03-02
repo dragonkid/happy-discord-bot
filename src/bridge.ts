@@ -119,8 +119,8 @@ export class Bridge {
             });
         }
 
-        if (body.t === 'update-session' && body.agentState) {
-            this.handleSessionUpdate(body.id!, body.agentState).catch((err) => {
+        if (body.t === 'update-session' && body.id && body.agentState) {
+            this.handleSessionUpdate(body.id, body.agentState).catch((err: unknown) => {
                 console.error('[Bridge] Error handling session update:', err);
             });
         }
