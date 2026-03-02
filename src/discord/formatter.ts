@@ -1,3 +1,5 @@
+import type { AskUserQuestionItem } from '../happy/types.js';
+
 const DISCORD_MAX = 2000;
 
 /** Split text into chunks that fit within Discord's message limit. */
@@ -84,4 +86,16 @@ export function formatPermissionRequest(toolName: string, input: unknown): strin
             return `${header}\n${codeBlock(truncate(jsonStr, 200))}`;
         }
     }
+}
+
+/** Format AskUserQuestion items for Discord display. */
+export function formatAskUserQuestion(questions: readonly AskUserQuestionItem[]): string {
+    return questions.map((q) => {
+        const multiTag = q.multiSelect ? ' *(select multiple)*' : '';
+        const header = `**${q.question}**${multiTag}`;
+        const options = q.options
+            .map((opt, i) => `${i + 1}. **${opt.label}** — ${opt.description}`)
+            .join('\n');
+        return `${header}\n${options}`;
+    }).join('\n\n');
 }

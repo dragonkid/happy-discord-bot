@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { chunkMessage, codeBlock, diffBlock, truncate, formatPermissionRequest } from '../formatter.js';
+import { chunkMessage, codeBlock, diffBlock, truncate, formatPermissionRequest, formatAskUserQuestion } from '../formatter.js';
 
 describe('formatter', () => {
     describe('chunkMessage', () => {
@@ -119,6 +119,53 @@ describe('formatter', () => {
             const text = formatPermissionRequest('Edit', { file_path: '/src/index.ts' });
             expect(text).toContain('Edit');
             expect(text).toContain('/src/index.ts');
+        });
+    });
+
+    describe('formatAskUserQuestion', () => {
+        it('formats a single question with options', () => {
+            const question = {
+                question: 'Which database?',
+                header: 'Database',
+                options: [
+                    { label: 'PostgreSQL', description: 'Relational database' },
+                    { label: 'MongoDB', description: 'Document database' },
+                ],
+                multiSelect: false,
+            };
+            const result = formatAskUserQuestion([question]);
+            expect(result).toContain('Which database?');
+            expect(result).toContain('PostgreSQL');
+            expect(result).toContain('Relational database');
+        });
+
+        it('formats multiple questions separated by blank lines', () => {
+            const questions = [
+                {
+                    question: 'Q1?', header: 'H1',
+                    options: [{ label: 'A', description: 'desc A' }],
+                    multiSelect: false,
+                },
+                {
+                    question: 'Q2?', header: 'H2',
+                    options: [{ label: 'B', description: 'desc B' }],
+                    multiSelect: true,
+                },
+            ];
+            const result = formatAskUserQuestion(questions);
+            expect(result).toContain('Q1?');
+            expect(result).toContain('Q2?');
+            expect(result).toContain('(select multiple)');
+        });
+
+        it('marks multi-select questions', () => {
+            const question = {
+                question: 'Pick features', header: 'Features',
+                options: [{ label: 'A', description: 'desc' }],
+                multiSelect: true,
+            };
+            const result = formatAskUserQuestion([question]);
+            expect(result).toContain('(select multiple)');
         });
     });
 });
