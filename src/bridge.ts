@@ -6,9 +6,9 @@ import { encrypt, encodeBase64, decrypt, decodeBase64 } from './vendor/encryptio
 import { listActiveSessions, type DecryptedSession } from './vendor/api.js';
 import type { StateTracker } from './happy/state-tracker.js';
 import type { PermissionCache } from './happy/permission-cache.js';
-import { buildPermissionButtons } from './discord/buttons.js';
-import { formatPermissionRequest } from './discord/formatter.js';
-import type { PermissionRequest, PermissionResponse, PermissionMode, AgentState } from './happy/types.js';
+import { buildPermissionButtons, buildAskButtons } from './discord/buttons.js';
+import { formatPermissionRequest, formatAskUserQuestion } from './discord/formatter.js';
+import type { PermissionRequest, PermissionResponse, PermissionMode, AgentState, AskUserQuestionInput } from './happy/types.js';
 
 const RESPONSE_TIMEOUT_MS = 30_000;
 
@@ -18,6 +18,7 @@ export class Bridge {
     private readonly config: BotConfig;
     private readonly stateTracker: StateTracker;
     private readonly permissionCache: PermissionCache;
+    private readonly multiSelectState = new Map<string, Set<number>>();
     private activeSessionId: string | null = null;
     private responseTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -168,6 +169,33 @@ export class Bridge {
         await this.happy.sessionRPC(sessionId, 'permission', response);
     }
 
+    async handleAskUserAnswer(sessionId: string, requestId: string, answerText: string): Promise<void> {
+        await this.approvePermission(sessionId, requestId);
+        await this.sendMessage(answerText);
+    }
+
+    toggleMultiSelect(key: string, optionIndex: number): ReadonlySet<number> {
+        let selected = this.multiSelectState.get(key);
+        if (!selected) {
+            selected = new Set();
+            this.multiSelectState.set(key, selected);
+        }
+        if (selected.has(optionIndex)) {
+            selected.delete(optionIndex);
+        } else {
+            selected.add(optionIndex);
+        }
+        return selected;
+    }
+
+    getMultiSelectState(key: string): ReadonlySet<number> {
+        return this.multiSelectState.get(key) ?? new Set();
+    }
+
+    clearMultiSelectState(key: string): void {
+        this.multiSelectState.delete(key);
+    }
+
     private startResponseTimer(): void {
         this.cancelResponseTimer();
         this.responseTimer = setTimeout(() => {
@@ -216,6 +244,23 @@ export class Bridge {
         sessionId: string,
         request: PermissionRequest,
     ): Promise<void> {
+        // AskUserQuestion gets special UI
+        if (request.tool === 'AskUserQuestion') {
+            const input = request.arguments as AskUserQuestionInput;
+            const questions = input?.questions;
+            if (!questions?.length) {
+                await this.approvePermission(sessionId, request.id);
+                return;
+            }
+
+            const description = formatAskUserQuestion(questions);
+            const allRows = questions.flatMap((q, i) =>
+                buildAskButtons(sessionId, request.id, q.options, q.multiSelect, i),
+            );
+            await this.discord.sendWithButtons(description, allRows.slice(0, 5));
+            return;
+        }
+
         if (this.permissionCache.isAutoApproved(request.tool, request.arguments)) {
             console.log(`[Bridge] Auto-approving ${request.tool} (${request.id})`);
             await this.approvePermission(sessionId, request.id);

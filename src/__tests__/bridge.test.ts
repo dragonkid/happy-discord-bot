@@ -492,6 +492,88 @@ describe('Bridge', () => {
         });
     });
 
+    describe('AskUserQuestion handling', () => {
+        it('sends question buttons instead of permission buttons for AskUserQuestion', async () => {
+            await bridge.start();
+            bridge.setActiveSession('sess-1');
+
+            const agentState = {
+                requests: {
+                    'req-1': {
+                        id: 'req-1',
+                        tool: 'AskUserQuestion',
+                        arguments: {
+                            questions: [{
+                                question: 'Which DB?',
+                                header: 'Database',
+                                options: [
+                                    { label: 'PostgreSQL', description: 'Relational' },
+                                    { label: 'MongoDB', description: 'Document' },
+                                ],
+                                multiSelect: false,
+                            }],
+                        },
+                        createdAt: 1000,
+                    },
+                },
+            };
+            const encrypted = Buffer.from(JSON.stringify(agentState)).toString('base64');
+
+            bridge.processUpdate({
+                body: {
+                    t: 'update-session',
+                    id: 'sess-1',
+                    agentState: { version: 1, value: encrypted },
+                },
+            });
+
+            await vi.waitFor(() => {
+                expect(discord.sendWithButtons).toHaveBeenCalled();
+            });
+
+            const [text] = vi.mocked(discord.sendWithButtons).mock.calls[0];
+            expect(text).toContain('Which DB?');
+            expect(text).toContain('PostgreSQL');
+        });
+
+        it('handleAskUserAnswer approves permission and sends answer message', async () => {
+            bridge.setActiveSession('sess-1');
+
+            await bridge.handleAskUserAnswer('sess-1', 'req-1', 'Database: PostgreSQL');
+
+            expect(happy.sessionRPC).toHaveBeenCalledWith('sess-1', 'permission', {
+                id: 'req-1',
+                approved: true,
+            });
+            expect(happy.request).toHaveBeenCalledWith(
+                expect.stringContaining('/messages'),
+                expect.any(Object),
+            );
+        });
+
+        it('toggleMultiSelect toggles option indices', () => {
+            const key = 'sess-1:req-1:0';
+            const result1 = bridge.toggleMultiSelect(key, 0);
+            expect(result1.has(0)).toBe(true);
+
+            const result2 = bridge.toggleMultiSelect(key, 1);
+            expect(result2.has(0)).toBe(true);
+            expect(result2.has(1)).toBe(true);
+
+            const result3 = bridge.toggleMultiSelect(key, 0);
+            expect(result3.has(0)).toBe(false);
+            expect(result3.has(1)).toBe(true);
+        });
+
+        it('clearMultiSelectState removes state for key', () => {
+            const key = 'sess-1:req-1:0';
+            bridge.toggleMultiSelect(key, 0);
+            bridge.clearMultiSelectState(key);
+            const state = bridge.getMultiSelectState(key);
+            expect(state.size).toBe(0);
+        });
+    });
+
     describe('response timeout', () => {
         it('sends warning to Discord when CLI does not respond within 30s', async () => {
             bridge.setActiveSession('sess-1');
