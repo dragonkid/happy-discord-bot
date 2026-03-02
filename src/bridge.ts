@@ -21,6 +21,8 @@ export class Bridge {
     private readonly multiSelectState = new Map<string, Set<number>>();
     private activeSessionId: string | null = null;
     private responseTimer: ReturnType<typeof setTimeout> | null = null;
+    private disconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    private initialConnectDone = false;
 
     constructor(
         happy: HappyClient,
@@ -95,6 +97,31 @@ export class Bridge {
             this.handlePermissionRequest(sessionId, request).catch((err) => {
                 console.error('[Bridge] Error handling permission request:', err);
             });
+        });
+
+        this.happy.on('disconnected', (reason) => {
+            this.cancelDisconnectTimer();
+            this.disconnectTimer = setTimeout(() => {
+                this.disconnectTimer = null;
+                this.discord.send(`⚠️ Happy relay disconnected: ${reason}`).catch((err) => {
+                    console.error('[Bridge] Failed to send disconnect notification:', err);
+                });
+            }, 5000);
+        });
+
+        this.happy.on('connected', () => {
+            const wasDisconnected = this.disconnectTimer !== null;
+            this.cancelDisconnectTimer();
+            if (!this.initialConnectDone) {
+                this.initialConnectDone = true;
+                return;
+            }
+            if (!wasDisconnected) {
+                this.discord.send('✅ Happy relay reconnected').catch((err) => {
+                    console.error('[Bridge] Failed to send reconnect notification:', err);
+                });
+            }
+            // If wasDisconnected is true, reconnect happened within 5s debounce — skip both messages
         });
 
         const sessions = await this.loadSessions();
@@ -217,6 +244,13 @@ export class Bridge {
         }
     }
 
+    private cancelDisconnectTimer(): void {
+        if (this.disconnectTimer) {
+            clearTimeout(this.disconnectTimer);
+            this.disconnectTimer = null;
+        }
+    }
+
     private async handleSessionUpdate(
         sessionId: string,
         encryptedState: { version: number; value: string },
@@ -327,6 +361,9 @@ export class Bridge {
                         await this.discord.send(text);
                     }
                 }
+            } else {
+                console.log(`[Bridge] Unhandled agent message type: ${agentContent?.type ?? 'unknown'}`,
+                    JSON.stringify(agentContent).slice(0, 200));
             }
         }
     }

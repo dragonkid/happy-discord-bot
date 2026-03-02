@@ -574,6 +574,93 @@ describe('Bridge', () => {
         });
     });
 
+    describe('disconnect notifications', () => {
+        it('sends disconnect warning to Discord after debounce period', async () => {
+            const handlers = new Map<string, Function>();
+            vi.mocked(happy.on).mockImplementation(((event: string, handler: Function) => {
+                handlers.set(event, handler);
+                return happy;
+            }) as any);
+
+            await bridge.start();
+
+            // Simulate disconnect
+            handlers.get('disconnected')?.('ping timeout');
+
+            // Not yet — debounce
+            expect(discord.send).not.toHaveBeenCalled();
+
+            // After debounce period
+            vi.advanceTimersByTime(5000);
+
+            expect(discord.send).toHaveBeenCalledWith(
+                expect.stringContaining('disconnected'),
+            );
+        });
+
+        it('cancels disconnect notification if reconnected within debounce', async () => {
+            const handlers = new Map<string, Function>();
+            vi.mocked(happy.on).mockImplementation(((event: string, handler: Function) => {
+                handlers.set(event, handler);
+                return happy;
+            }) as any);
+
+            await bridge.start();
+
+            // Mark initial connect done
+            handlers.get('connected')?.();
+
+            // Disconnect then quick reconnect
+            handlers.get('disconnected')?.('ping timeout');
+            vi.advanceTimersByTime(2000);
+            handlers.get('connected')?.();
+
+            // After debounce period — should NOT have sent disconnect warning
+            vi.advanceTimersByTime(5000);
+
+            const calls = vi.mocked(discord.send).mock.calls;
+            expect(calls.every(([msg]) => !msg.includes('disconnected'))).toBe(true);
+        });
+
+        it('sends reconnect notice after debounce already fired', async () => {
+            const handlers = new Map<string, Function>();
+            vi.mocked(happy.on).mockImplementation(((event: string, handler: Function) => {
+                handlers.set(event, handler);
+                return happy;
+            }) as any);
+
+            await bridge.start();
+
+            // Mark initial connect done
+            handlers.get('connected')?.();
+
+            // Disconnect and wait for debounce to fire
+            handlers.get('disconnected')?.('ping timeout');
+            vi.advanceTimersByTime(5000);
+
+            // Now reconnect — debounce already fired, so reconnect notice should be sent
+            handlers.get('connected')?.();
+
+            const calls = vi.mocked(discord.send).mock.calls;
+            expect(calls.some(([msg]) => msg.includes('reconnected'))).toBe(true);
+        });
+
+        it('does not send reconnect notice on initial connect', async () => {
+            const handlers = new Map<string, Function>();
+            vi.mocked(happy.on).mockImplementation(((event: string, handler: Function) => {
+                handlers.set(event, handler);
+                return happy;
+            }) as any);
+
+            await bridge.start();
+
+            // Initial connect
+            handlers.get('connected')?.();
+
+            expect(discord.send).not.toHaveBeenCalled();
+        });
+    });
+
     describe('response timeout', () => {
         it('sends warning to Discord when CLI does not respond within 30s', async () => {
             bridge.setActiveSession('sess-1');
