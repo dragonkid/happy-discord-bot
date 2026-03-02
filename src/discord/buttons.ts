@@ -170,7 +170,7 @@ function formatSessionLabel(session: Pick<DecryptedSession, 'id' | 'activeAt'>, 
 }
 
 function formatTimeAgo(timestamp: number): string {
-    const diffMs = Date.now() - timestamp;
+    const diffMs = Math.max(0, Date.now() - timestamp);
     const diffMin = Math.floor(diffMs / 60_000);
     if (diffMin < 1) return 'just now';
     if (diffMin < 60) return `${diffMin}m ago`;

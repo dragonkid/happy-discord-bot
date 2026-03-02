@@ -42,6 +42,7 @@ export class Bridge {
     setActiveSession(sessionId: string): void {
         this.activeSessionId = sessionId;
         this.permissionCache.reset();
+        this.multiSelectState.clear();
     }
 
     get activeSession(): string | null {
@@ -292,6 +293,9 @@ export class Bridge {
             const allRows = questions.flatMap((q, i) =>
                 buildAskButtons(sessionId, request.id, q.options, q.multiSelect, i),
             );
+            if (allRows.length > 5) {
+                console.warn(`[Bridge] AskUserQuestion has ${allRows.length} button rows, truncating to 5 (Discord limit)`);
+            }
             await this.discord.sendWithButtons(description, allRows.slice(0, 5));
             return;
         }
