@@ -299,7 +299,6 @@ describe('HappyClient', () => {
             });
 
             expect(result).toEqual(responseData);
-            expect(mockSocket.timeout).toHaveBeenCalledWith(30_000);
             expect(mockSocket.emitWithAck).toHaveBeenCalledWith('rpc-call', {
                 method: 'sess-1:permission',
                 params: expect.any(String),

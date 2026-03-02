@@ -201,8 +201,17 @@ export class Bridge {
     }
 
     async handleAskUserAnswer(sessionId: string, requestId: string, answerText: string): Promise<void> {
-        await this.approvePermission(sessionId, requestId);
+        console.log(`[Bridge] AskUserAnswer: approving permission ${requestId} for session ${sessionId.slice(0, 8)}`);
+        try {
+            await this.approvePermission(sessionId, requestId);
+            console.log(`[Bridge] AskUserAnswer: permission approved`);
+        } catch (err) {
+            console.error(`[Bridge] AskUserAnswer: approve failed:`, err);
+            throw err;
+        }
+        console.log(`[Bridge] AskUserAnswer: sending answer "${answerText}"`);
         await this.sendMessage(answerText);
+        console.log(`[Bridge] AskUserAnswer: answer sent`);
     }
 
     toggleMultiSelect(key: string, optionIndex: number): ReadonlySet<number> {

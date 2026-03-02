@@ -74,9 +74,14 @@ async function main(): Promise<void> {
                 try {
                     await handleAskButton(interaction, askParsed, bridge, stateTracker);
                 } catch (err) {
-                    console.error('[Discord] AskUserQuestion button error:', err);
+                    const msg = err instanceof Error ? err.message : String(err);
+                    const isTimeout = msg.includes('timed out') || msg.includes('not available');
+                    if (!isTimeout) {
+                        console.error('[Discord] AskUserQuestion button error:', err);
+                    }
+                    const label = isTimeout ? '*Request expired*' : '*Error processing answer*';
                     await interaction.editReply({
-                        content: `${interaction.message.content}\n\n*Error processing answer*`,
+                        content: `${interaction.message.content}\n\n${label}`,
                         components: [],
                     }).catch(() => {});
                 }

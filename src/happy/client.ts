@@ -154,8 +154,9 @@ export class HappyClient extends EventEmitter<HappyClientEvents> {
 
         const encrypted = encodeBase64(encrypt(key, variant, params));
         const payload: RpcCallPayload = { method, params: encrypted };
+        // No explicit timeout — matches happy-app behavior.
+        // Permission RPCs may wait indefinitely for user interaction.
         const result: RpcResult = await this.socket
-            .timeout(30_000)
             .emitWithAck('rpc-call', payload);
 
         if (!result.ok) {
