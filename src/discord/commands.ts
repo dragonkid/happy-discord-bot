@@ -4,6 +4,7 @@ import {
     type RESTPostAPIChatInputApplicationCommandsJSONBody,
 } from 'discord.js';
 import type { Bridge } from '../bridge.js';
+import type { PermissionMode } from '../happy/types.js';
 
 // --- Command definitions ---
 
@@ -63,7 +64,7 @@ export async function handleCommand(
         case 'compact':
             return handleCompact(interaction, bridge);
         case 'mode':
-            return handleMode(interaction);
+            return handleMode(interaction, bridge);
         default:
             await interaction.reply({ content: `Unknown command: ${interaction.commandName}`, ephemeral: true });
     }
@@ -128,9 +129,9 @@ async function handleCompact(interaction: ChatInputCommandInteraction, bridge: B
     }
 }
 
-async function handleMode(interaction: ChatInputCommandInteraction): Promise<void> {
-    const modeValue = interaction.options.getString('mode', true);
+async function handleMode(interaction: ChatInputCommandInteraction, bridge: Bridge): Promise<void> {
+    const modeValue = interaction.options.getString('mode', true) as PermissionMode;
     await interaction.deferReply();
-    // Phase 5: set permission mode on PermissionCache
-    await interaction.editReply(`Permission mode set to: ${modeValue} (Phase 5)`);
+    bridge.permissions.setMode(modeValue);
+    await interaction.editReply(`Permission mode set to: **${modeValue}**`);
 }

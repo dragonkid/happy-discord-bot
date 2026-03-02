@@ -2,6 +2,7 @@ import { loadBotConfig } from './config.js';
 import { HappyClient } from './happy/client.js';
 import { DiscordBot } from './discord/bot.js';
 import { handleCommand } from './discord/commands.js';
+import { parseButtonId } from './discord/buttons.js';
 import { Bridge } from './bridge.js';
 import { StateTracker } from './happy/state-tracker.js';
 import { PermissionCache } from './happy/permission-cache.js';
@@ -40,21 +41,80 @@ async function main(): Promise<void> {
     }
 
     discord.onInteraction(async (interaction) => {
-        if (!interaction.isChatInputCommand()) return;
-
-        if (interaction.user.id !== config.discord.userId) {
-            await interaction.reply({ content: 'Unauthorized.', ephemeral: true });
+        // Slash commands
+        if (interaction.isChatInputCommand()) {
+            if (interaction.user.id !== config.discord.userId) {
+                await interaction.reply({ content: 'Unauthorized.', ephemeral: true });
+                return;
+            }
+            try {
+                await handleCommand(interaction, bridge);
+            } catch (err) {
+                console.error('[Discord] Command error:', err);
+                const reply = interaction.deferred
+                    ? interaction.editReply('An error occurred.')
+                    : interaction.reply({ content: 'An error occurred.', ephemeral: true });
+                await reply.catch(() => {});
+            }
             return;
         }
 
-        try {
-            await handleCommand(interaction, bridge);
-        } catch (err) {
-            console.error('[Discord] Command error:', err);
-            const reply = interaction.deferred
-                ? interaction.editReply('An error occurred.')
-                : interaction.reply({ content: 'An error occurred.', ephemeral: true });
-            await reply.catch(() => {});
+        // Button interactions
+        if (interaction.isButton()) {
+            if (interaction.user.id !== config.discord.userId) {
+                await interaction.reply({ content: 'Unauthorized.', ephemeral: true });
+                return;
+            }
+
+            const parsed = parseButtonId(interaction.customId);
+            if (!parsed) return;
+
+            await interaction.deferUpdate();
+
+            try {
+                const { sessionId, requestId, action } = parsed;
+                const pending = stateTracker.getPendingRequests(sessionId);
+                const request = pending.find((r) => r.id === requestId);
+                const toolName = request?.tool ?? 'Unknown';
+                const toolInput = request?.arguments;
+
+                switch (action) {
+                    case 'yes':
+                        await bridge.approvePermission(sessionId, requestId);
+                        break;
+                    case 'allow-edits':
+                        await bridge.approvePermission(sessionId, requestId, 'acceptEdits');
+                        permissionCache.applyApproval([], 'acceptEdits');
+                        break;
+                    case 'for-tool': {
+                        let toolIdentifier = toolName;
+                        if (toolName === 'Bash' && toolInput && typeof toolInput === 'object' && 'command' in toolInput) {
+                            toolIdentifier = `Bash(${(toolInput as { command: string }).command})`;
+                        }
+                        await bridge.approvePermission(sessionId, requestId, undefined, [toolIdentifier]);
+                        permissionCache.applyApproval([toolIdentifier]);
+                        break;
+                    }
+                    case 'no':
+                        await bridge.denyPermission(sessionId, requestId);
+                        break;
+                }
+
+                const status = action === 'no' ? 'Denied' : 'Approved';
+                const label = action === 'allow-edits' ? ' (accept all edits)'
+                            : action === 'for-tool' ? ` (for ${toolName})`
+                            : '';
+                await interaction.editReply({
+                    content: `${interaction.message.content}\n\n*${status}${label}*`,
+                    components: [],
+                });
+            } catch (err) {
+                console.error('[Discord] Button error:', err);
+                await interaction.editReply({
+                    content: `${interaction.message.content}\n\n*Error processing approval*`,
+                    components: [],
+                }).catch(() => {});
+            }
         }
     });
 

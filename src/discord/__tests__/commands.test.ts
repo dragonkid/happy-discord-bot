@@ -23,6 +23,10 @@ function makeMockBridge(): Bridge {
         stopSession: vi.fn().mockResolvedValue(undefined),
         compactSession: vi.fn().mockResolvedValue(undefined),
         activeSession: null,
+        permissions: {
+            setMode: vi.fn(),
+            mode: 'default',
+        },
     } as unknown as Bridge;
 }
 
@@ -114,11 +118,12 @@ describe('commands', () => {
             expect(bridge.compactSession).toHaveBeenCalled();
         });
 
-        it('/mode replies with mode value (Phase 5 placeholder)', async () => {
+        it('/mode sets permission mode via bridge', async () => {
             const bridge = makeMockBridge();
             const interaction = mockInteraction('mode', { mode: 'acceptEdits' });
             await handleCommand(interaction as any, bridge);
 
+            expect(bridge.permissions.setMode).toHaveBeenCalledWith('acceptEdits');
             expect(interaction.editReply).toHaveBeenCalledWith(
                 expect.stringContaining('acceptEdits'),
             );
