@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { buildPermissionButtons, parseButtonId, BUTTON_PREFIX } from '../buttons.js';
+import {
+    buildPermissionButtons,
+    parseButtonId,
+    BUTTON_PREFIX,
+    buildAskButtons,
+    parseAskButtonId,
+    buildSessionButtons,
+    parseSessionButtonId,
+} from '../buttons.js';
 import { ButtonStyle, type APIButtonComponentWithCustomId } from 'discord.js';
 
 /** Helper to access button data with the correct type. */
@@ -54,6 +62,127 @@ describe('buttons', () => {
                 const result = parseButtonId(`${BUTTON_PREFIX}s:r:${action}`);
                 expect(result?.action).toBe(action);
             }
+        });
+    });
+});
+
+describe('AskUserQuestion buttons', () => {
+    describe('buildAskButtons (single select)', () => {
+        it('creates one button per option', () => {
+            const options = [
+                { label: 'PostgreSQL', description: 'Relational' },
+                { label: 'MongoDB', description: 'Document' },
+            ];
+            const rows = buildAskButtons('sess-1', 'req-1', options, false, 0);
+            const buttons = rows.flatMap(r => r.components);
+            expect(buttons).toHaveLength(2);
+            expect((buttons[0].data as any).label).toBe('PostgreSQL');
+            expect((buttons[1].data as any).label).toBe('MongoDB');
+        });
+
+        it('encodes ask: prefix in button IDs', () => {
+            const options = [{ label: 'A', description: 'a' }];
+            const rows = buildAskButtons('sess-1', 'req-1', options, false, 0);
+            expect((rows[0].components[0].data as any).custom_id).toBe('ask:sess-1:req-1:0');
+        });
+    });
+
+    describe('buildAskButtons (multi select)', () => {
+        it('creates toggle buttons + Submit button', () => {
+            const options = [
+                { label: 'A', description: 'a' },
+                { label: 'B', description: 'b' },
+            ];
+            const rows = buildAskButtons('sess-1', 'req-1', options, true, 0);
+            const allButtons = rows.flatMap(r => r.components);
+            expect(allButtons).toHaveLength(3);
+            expect((allButtons[2].data as any).label).toBe('Submit');
+            expect((allButtons[2].data as any).custom_id).toBe('asks:sess-1:req-1');
+        });
+
+        it('uses askt: prefix for toggle buttons', () => {
+            const options = [{ label: 'A', description: 'a' }];
+            const rows = buildAskButtons('sess-1', 'req-1', options, true, 0);
+            expect((rows[0].components[0].data as any).custom_id).toBe('askt:sess-1:req-1:0:0');
+        });
+    });
+
+    describe('parseAskButtonId', () => {
+        it('parses single select button', () => {
+            const result = parseAskButtonId('ask:sess-1:req-1:2');
+            expect(result).toEqual({
+                type: 'select',
+                sessionId: 'sess-1',
+                requestId: 'req-1',
+                optionIndex: 2,
+            });
+        });
+
+        it('parses multi-select toggle button', () => {
+            const result = parseAskButtonId('askt:sess-1:req-1:0:1');
+            expect(result).toEqual({
+                type: 'toggle',
+                sessionId: 'sess-1',
+                requestId: 'req-1',
+                questionIndex: 0,
+                optionIndex: 1,
+            });
+        });
+
+        it('parses multi-select submit button', () => {
+            const result = parseAskButtonId('asks:sess-1:req-1');
+            expect(result).toEqual({
+                type: 'submit',
+                sessionId: 'sess-1',
+                requestId: 'req-1',
+            });
+        });
+
+        it('returns null for unknown prefix', () => {
+            expect(parseAskButtonId('perm:sess-1:req-1:yes')).toBeNull();
+            expect(parseAskButtonId('unknown:foo')).toBeNull();
+        });
+    });
+});
+
+describe('session buttons', () => {
+    describe('buildSessionButtons', () => {
+        it('creates one button per session', () => {
+            const sessions = [
+                { id: 'sess-1', activeAt: 1000 },
+                { id: 'sess-2', activeAt: 2000 },
+            ];
+            const rows = buildSessionButtons(sessions as any, 'sess-1');
+            const buttons = rows.flatMap(r => r.components);
+            expect(buttons).toHaveLength(2);
+        });
+
+        it('disables current session button', () => {
+            const sessions = [
+                { id: 'sess-1', activeAt: 1000 },
+                { id: 'sess-2', activeAt: 2000 },
+            ];
+            const rows = buildSessionButtons(sessions as any, 'sess-1');
+            const btn1 = rows[0].components[0].data as any;
+            const btn2 = rows[0].components[1].data as any;
+            expect(btn1.disabled).toBe(true);
+            expect(btn2.disabled).toBeFalsy();
+        });
+
+        it('encodes sess: prefix in button IDs', () => {
+            const sessions = [{ id: 'sess-1', activeAt: 1000 }];
+            const rows = buildSessionButtons(sessions as any, null);
+            expect((rows[0].components[0].data as any).custom_id).toBe('sess:sess-1');
+        });
+    });
+
+    describe('parseSessionButtonId', () => {
+        it('parses valid session button', () => {
+            expect(parseSessionButtonId('sess:sess-1')).toEqual({ sessionId: 'sess-1' });
+        });
+
+        it('returns null for non-session button', () => {
+            expect(parseSessionButtonId('perm:sess-1:req-1:yes')).toBeNull();
         });
     });
 });
