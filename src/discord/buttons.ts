@@ -3,10 +3,9 @@ import {
     ButtonBuilder,
     ButtonStyle,
 } from 'discord.js';
+import { EDIT_TOOLS } from '../happy/types.js';
 
 export const BUTTON_PREFIX = 'perm:';
-
-const EDIT_TOOLS = new Set(['Edit', 'MultiEdit', 'Write', 'NotebookEdit']);
 
 export type PermissionAction = 'yes' | 'allow-edits' | 'for-tool' | 'no';
 

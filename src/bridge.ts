@@ -34,6 +34,7 @@ export class Bridge {
 
     setActiveSession(sessionId: string): void {
         this.activeSessionId = sessionId;
+        this.permissionCache.reset();
     }
 
     get activeSession(): string | null {

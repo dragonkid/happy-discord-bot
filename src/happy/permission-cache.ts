@@ -1,6 +1,4 @@
-import type { PermissionMode } from './types.js';
-
-const EDIT_TOOLS = new Set(['Edit', 'MultiEdit', 'Write', 'NotebookEdit']);
+import { EDIT_TOOLS, type PermissionMode } from './types.js';
 
 export class PermissionCache {
     private allowedTools = new Set<string>();

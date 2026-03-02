@@ -1,5 +1,7 @@
 // --- Permission types ---
 
+export const EDIT_TOOLS = new Set(['Edit', 'MultiEdit', 'Write', 'NotebookEdit']) as ReadonlySet<string>;
+
 export type PermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan';
 
 export type PermissionDecision = 'approved' | 'approved_for_session' | 'denied' | 'abort';

@@ -73,6 +73,16 @@ async function main(): Promise<void> {
 
             try {
                 const { sessionId, requestId, action } = parsed;
+
+                // Validate session is still active
+                if (sessionId !== bridge.activeSession) {
+                    await interaction.editReply({
+                        content: `${interaction.message.content}\n\n*Session no longer active*`,
+                        components: [],
+                    });
+                    return;
+                }
+
                 const pending = stateTracker.getPendingRequests(sessionId);
                 const request = pending.find((r) => r.id === requestId);
                 const toolName = request?.tool ?? 'Unknown';
