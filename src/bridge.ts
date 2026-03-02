@@ -47,6 +47,7 @@ export class Bridge {
 
     async sendMessage(text: string): Promise<void> {
         const sessionId = this.requireActiveSession();
+        console.log(`[Bridge] Sending message to ${sessionId.slice(0, 8)}, connected: ${this.happy.connected}`);
         const enc = this.happy.getSessionEncryption(sessionId);
         if (!enc) {
             throw new Error(`No encryption key for session ${sessionId}`);
@@ -73,8 +74,12 @@ export class Bridge {
         );
 
         if (!resp.ok) {
+            const body = await resp.text().catch(() => '');
+            console.error(`[Bridge] Send failed: ${resp.status} ${resp.statusText}`, body);
             throw new Error(`Failed to send message: ${resp.status} ${resp.statusText}`);
         }
+
+        console.log(`[Bridge] Message sent to session ${sessionId.slice(0, 8)} (localId: ${localId.slice(0, 8)})`);
     }
 
     async start(): Promise<void> {
