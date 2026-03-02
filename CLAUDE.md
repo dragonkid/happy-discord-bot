@@ -32,7 +32,8 @@ src/
 ├── discord/
 │   ├── bot.ts            # Discord client init + event routing
 │   ├── commands.ts       # Slash command handlers
-│   ├── buttons.ts        # Button builders (permission, AskUserQuestion)
+│   ├── buttons.ts        # Button builders (permission, AskUserQuestion, session)
+│   ├── interactions.ts   # Button interaction handlers (ask, session)
 │   ├── formatter.ts      # Message chunking, code blocks, diff formatting
 │   └── deploy-commands.ts  # One-time slash command deployment
 └── vendor/               # Vendored from happy-agent (~800 lines)
