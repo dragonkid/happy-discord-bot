@@ -22,6 +22,24 @@ export interface PermissionResponse {
     decision?: PermissionDecision;
 }
 
+// --- AskUserQuestion types ---
+
+export interface AskUserQuestionOption {
+    label: string;
+    description: string;
+}
+
+export interface AskUserQuestionItem {
+    question: string;
+    header: string;
+    options: AskUserQuestionOption[];
+    multiSelect: boolean;
+}
+
+export interface AskUserQuestionInput {
+    questions: AskUserQuestionItem[];
+}
+
 // --- Agent state ---
 
 export interface AgentState {
