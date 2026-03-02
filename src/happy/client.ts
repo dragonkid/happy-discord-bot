@@ -162,12 +162,14 @@ export class HappyClient extends EventEmitter<HappyClientEvents> {
             throw new Error(`RPC failed [${method}]: ${result.error ?? 'unknown error'}`);
         }
         if (!result.result) {
-            throw new Error(`RPC returned no result [${method}]`);
+            // Some RPC methods (e.g. permission) return void — no result to decrypt
+            return undefined as R;
         }
 
         const decrypted = decrypt(key, variant, decodeBase64(result.result));
         if (decrypted === null) {
-            throw new Error(`RPC decryption failed [${method}]`);
+            // CLI may encrypt undefined for void-returning handlers; treat as void
+            return undefined as R;
         }
         return decrypted as R;
     }

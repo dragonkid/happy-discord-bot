@@ -320,7 +320,7 @@ describe('HappyClient', () => {
             ).rejects.toThrow('RPC failed [sess-1:permission]: session not found');
         });
 
-        it('throws when RPC returns no result', async () => {
+        it('returns undefined when RPC returns no result (void handler)', async () => {
             client.connect();
             client.registerSessionKey(makeRawSession('sess-1'));
 
@@ -329,25 +329,23 @@ describe('HappyClient', () => {
                 result: undefined,
             });
 
-            await expect(
-                client.sessionRPC('sess-1', 'permission', {}),
-            ).rejects.toThrow('RPC returned no result [sess-1:permission]');
+            const result = await client.sessionRPC('sess-1', 'permission', {});
+            expect(result).toBeUndefined();
         });
 
-        it('throws when decryption fails', async () => {
+        it('returns undefined when decryption fails (void handler encrypted undefined)', async () => {
             client.connect();
             client.registerSessionKey(makeRawSession('sess-1'));
 
-            // Return invalid base64 that will fail JSON parse → decrypt returns null
+            // CLI encrypts undefined for void handlers; decrypt returns null
             const corruptData = Buffer.from('not-valid-json').toString('base64');
             mockSocket.emitWithAck.mockResolvedValueOnce({
                 ok: true,
                 result: corruptData,
             });
 
-            await expect(
-                client.sessionRPC('sess-1', 'permission', {}),
-            ).rejects.toThrow('RPC decryption failed [sess-1:permission]');
+            const result = await client.sessionRPC('sess-1', 'permission', {});
+            expect(result).toBeUndefined();
         });
     });
 
