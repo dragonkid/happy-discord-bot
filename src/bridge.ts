@@ -10,6 +10,8 @@ import { buildPermissionButtons } from './discord/buttons.js';
 import { formatPermissionRequest } from './discord/formatter.js';
 import type { PermissionRequest, PermissionResponse, PermissionMode, AgentState } from './happy/types.js';
 
+const RESPONSE_TIMEOUT_MS = 30_000;
+
 export class Bridge {
     private readonly happy: HappyClient;
     private readonly discord: DiscordBot;
@@ -17,6 +19,7 @@ export class Bridge {
     private readonly stateTracker: StateTracker;
     private readonly permissionCache: PermissionCache;
     private activeSessionId: string | null = null;
+    private responseTimer: ReturnType<typeof setTimeout> | null = null;
 
     constructor(
         happy: HappyClient,
@@ -80,6 +83,7 @@ export class Bridge {
         }
 
         console.log(`[Bridge] Message sent to session ${sessionId.slice(0, 8)} (localId: ${localId.slice(0, 8)})`);
+        this.startResponseTimer();
     }
 
     async start(): Promise<void> {
@@ -164,11 +168,34 @@ export class Bridge {
         await this.happy.sessionRPC(sessionId, 'permission', response);
     }
 
+    private startResponseTimer(): void {
+        this.cancelResponseTimer();
+        this.responseTimer = setTimeout(() => {
+            this.responseTimer = null;
+            console.warn('[Bridge] No CLI response within timeout');
+            this.discord.send(
+                '⚠️ CLI appears unresponsive — no activity detected within 30s.\n'
+                + 'Try pressing Enter in the CLI terminal to wake it.',
+            ).catch((err) => {
+                console.error('[Bridge] Failed to send timeout warning:', err);
+            });
+        }, RESPONSE_TIMEOUT_MS);
+    }
+
+    private cancelResponseTimer(): void {
+        if (this.responseTimer) {
+            clearTimeout(this.responseTimer);
+            this.responseTimer = null;
+        }
+    }
+
     private async handleSessionUpdate(
         sessionId: string,
         encryptedState: { version: number; value: string },
     ): Promise<void> {
         if (sessionId !== this.activeSessionId) return;
+
+        this.cancelResponseTimer();
 
         const enc = this.happy.getSessionEncryption(sessionId);
         if (!enc) {
@@ -210,6 +237,10 @@ export class Bridge {
     }
 
     private async handleNewMessage(sessionId: string, raw: unknown): Promise<void> {
+        if (sessionId === this.activeSessionId) {
+            this.cancelResponseTimer();
+        }
+
         const msg = raw as Record<string, unknown> | null;
         const content = (msg?.content as Record<string, unknown> | undefined);
         if (!content?.c || typeof content.c !== 'string') {

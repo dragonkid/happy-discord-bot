@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Bridge } from '../bridge.js';
 import type { HappyClient } from '../happy/client.js';
 import type { DiscordBot } from '../discord/bot.js';
@@ -73,6 +73,7 @@ describe('Bridge', () => {
     let permissionCache: PermissionCache;
 
     beforeEach(() => {
+        vi.useFakeTimers();
         vi.clearAllMocks();
         happy = makeMockHappy();
         discord = makeMockDiscord();
@@ -80,6 +81,10 @@ describe('Bridge', () => {
         stateTracker = new StateTracker();
         permissionCache = new PermissionCache();
         bridge = new Bridge(happy, discord, config, stateTracker, permissionCache);
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
     });
 
     describe('sendMessage', () => {
@@ -248,7 +253,7 @@ describe('Bridge', () => {
             };
 
             bridge.processUpdate(update);
-            await new Promise((r) => setTimeout(r, 50));
+            await vi.advanceTimersByTimeAsync(0);
 
             expect(discord.send).not.toHaveBeenCalled();
         });
@@ -278,7 +283,7 @@ describe('Bridge', () => {
             };
 
             bridge.processUpdate(update);
-            await new Promise((r) => setTimeout(r, 50));
+            await vi.advanceTimersByTimeAsync(0);
 
             expect(discord.send).not.toHaveBeenCalled();
         });
@@ -345,7 +350,7 @@ describe('Bridge', () => {
             };
 
             bridge.processUpdate(update);
-            await new Promise((r) => setTimeout(r, 50));
+            await vi.advanceTimersByTimeAsync(0);
 
             expect(discord.send).not.toHaveBeenCalled();
         });
@@ -410,7 +415,7 @@ describe('Bridge', () => {
             bridge.processUpdate({
                 body: { t: 'update-session', id: 'sess-1' },
             });
-            await new Promise((r) => setTimeout(r, 50));
+            await vi.advanceTimersByTimeAsync(0);
 
             expect(discord.sendWithButtons).not.toHaveBeenCalled();
         });
@@ -430,7 +435,7 @@ describe('Bridge', () => {
                     agentState: { version: 1, value: encrypted },
                 },
             });
-            await new Promise((r) => setTimeout(r, 50));
+            await vi.advanceTimersByTimeAsync(0);
 
             expect(discord.sendWithButtons).not.toHaveBeenCalled();
         });
@@ -484,6 +489,74 @@ describe('Bridge', () => {
             const sendSpy = vi.spyOn(bridge, 'sendMessage').mockResolvedValue();
             await bridge.compactSession();
             expect(sendSpy).toHaveBeenCalledWith('/compact');
+        });
+    });
+
+    describe('response timeout', () => {
+        it('sends warning to Discord when CLI does not respond within 30s', async () => {
+            bridge.setActiveSession('sess-1');
+
+            await bridge.sendMessage('hello');
+
+            // Not yet triggered
+            expect(discord.send).not.toHaveBeenCalled();
+
+            // Advance past timeout
+            vi.advanceTimersByTime(30_000);
+
+            expect(discord.send).toHaveBeenCalledWith(
+                expect.stringContaining('CLI appears unresponsive'),
+            );
+        });
+
+        it('cancels timeout when agentState update is received', async () => {
+            await bridge.start();
+            bridge.setActiveSession('sess-1');
+
+            await bridge.sendMessage('hello');
+
+            // Simulate agentState update before timeout
+            const agentState = { state: 'thinking' };
+            const encrypted = Buffer.from(JSON.stringify(agentState)).toString('base64');
+            bridge.processUpdate({
+                body: {
+                    t: 'update-session',
+                    id: 'sess-1',
+                    agentState: { version: 1, value: encrypted },
+                },
+            });
+
+            // Advance past timeout — should NOT trigger warning
+            vi.advanceTimersByTime(30_000);
+
+            expect(discord.send).not.toHaveBeenCalled();
+        });
+
+        it('cancels timeout when new message is received', async () => {
+            bridge.setActiveSession('sess-1');
+
+            await bridge.sendMessage('hello');
+
+            // Simulate incoming message before timeout
+            const msgContent = { role: 'agent', content: { type: 'output', data: { type: 'assistant', message: { content: [{ type: 'text', text: 'Hi' }] } } } };
+            const encrypted = Buffer.from(JSON.stringify(msgContent)).toString('base64');
+            bridge.processUpdate({
+                body: {
+                    t: 'new-message',
+                    sid: 'sess-1',
+                    message: { id: 'msg-1', seq: 1, content: { c: encrypted, t: 'encrypted' }, createdAt: Date.now(), updatedAt: Date.now() },
+                },
+            });
+
+            // Wait for async handleNewMessage
+            await vi.advanceTimersByTimeAsync(0);
+
+            // Advance past timeout — should NOT trigger warning
+            vi.advanceTimersByTime(30_000);
+
+            // discord.send was called with the message content, but not with the warning
+            const calls = vi.mocked(discord.send).mock.calls;
+            expect(calls.every(([msg]) => !msg.includes('unresponsive'))).toBe(true);
         });
     });
 });
