@@ -4,6 +4,8 @@ import type { HappyClient } from '../happy/client.js';
 import type { DiscordBot } from '../discord/bot.js';
 import type { BotConfig } from '../config.js';
 import type { DecryptedSession } from '../vendor/api.js';
+import { StateTracker } from '../happy/state-tracker.js';
+import { PermissionCache } from '../happy/permission-cache.js';
 
 // --- Mock factories ---
 
@@ -25,6 +27,7 @@ function makeMockHappy(): HappyClient {
 function makeMockDiscord(): DiscordBot {
     return {
         send: vi.fn().mockResolvedValue([]),
+        sendWithButtons: vi.fn().mockResolvedValue({}),
     } as unknown as DiscordBot;
 }
 
@@ -66,13 +69,17 @@ describe('Bridge', () => {
     let happy: HappyClient;
     let discord: DiscordBot;
     let config: BotConfig;
+    let stateTracker: StateTracker;
+    let permissionCache: PermissionCache;
 
     beforeEach(() => {
         vi.clearAllMocks();
         happy = makeMockHappy();
         discord = makeMockDiscord();
         config = makeMockConfig();
-        bridge = new Bridge(happy, discord, config);
+        stateTracker = new StateTracker();
+        permissionCache = new PermissionCache();
+        bridge = new Bridge(happy, discord, config, stateTracker, permissionCache);
     });
 
     describe('sendMessage', () => {
@@ -320,17 +327,6 @@ describe('Bridge', () => {
             });
         });
 
-        it('ignores update-session events (Phase 5)', async () => {
-            const update = {
-                body: { t: 'update-session', id: 'sess-1' },
-            };
-
-            bridge.processUpdate(update);
-            await new Promise((r) => setTimeout(r, 50));
-
-            expect(discord.send).not.toHaveBeenCalled();
-        });
-
         it('ignores messages from unknown sessions (no key)', async () => {
             vi.mocked(happy.getSessionEncryption).mockReturnValueOnce(undefined);
 
@@ -352,6 +348,121 @@ describe('Bridge', () => {
             await new Promise((r) => setTimeout(r, 50));
 
             expect(discord.send).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('handleUpdate (update-session)', () => {
+        it('decrypts agentState and shows permission buttons', async () => {
+            await bridge.start();
+            bridge.setActiveSession('sess-1');
+
+            const agentState = {
+                requests: {
+                    'req-1': { id: 'req-1', tool: 'Edit', arguments: { file_path: '/x' }, createdAt: 1000 },
+                },
+            };
+            const encrypted = Buffer.from(JSON.stringify(agentState)).toString('base64');
+
+            bridge.processUpdate({
+                body: {
+                    t: 'update-session',
+                    id: 'sess-1',
+                    agentState: { version: 1, value: encrypted },
+                },
+            });
+
+            await vi.waitFor(() => {
+                expect(discord.sendWithButtons).toHaveBeenCalled();
+            });
+        });
+
+        it('auto-approves when PermissionCache matches', async () => {
+            await bridge.start();
+            bridge.setActiveSession('sess-1');
+            permissionCache.applyApproval(['Edit']);
+
+            const agentState = {
+                requests: {
+                    'req-1': { id: 'req-1', tool: 'Edit', arguments: {}, createdAt: 1000 },
+                },
+            };
+            const encrypted = Buffer.from(JSON.stringify(agentState)).toString('base64');
+
+            bridge.processUpdate({
+                body: {
+                    t: 'update-session',
+                    id: 'sess-1',
+                    agentState: { version: 1, value: encrypted },
+                },
+            });
+
+            await vi.waitFor(() => {
+                expect(happy.sessionRPC).toHaveBeenCalledWith('sess-1', 'permission', expect.objectContaining({
+                    id: 'req-1',
+                    approved: true,
+                }));
+            });
+
+            expect(discord.sendWithButtons).not.toHaveBeenCalled();
+        });
+
+        it('ignores update-session without agentState', async () => {
+            bridge.processUpdate({
+                body: { t: 'update-session', id: 'sess-1' },
+            });
+            await new Promise((r) => setTimeout(r, 50));
+
+            expect(discord.sendWithButtons).not.toHaveBeenCalled();
+        });
+
+        it('ignores update-session for non-active session', async () => {
+            bridge.setActiveSession('sess-1');
+
+            const agentState = {
+                requests: { 'req-1': { id: 'req-1', tool: 'Edit', arguments: {}, createdAt: 1000 } },
+            };
+            const encrypted = Buffer.from(JSON.stringify(agentState)).toString('base64');
+
+            bridge.processUpdate({
+                body: {
+                    t: 'update-session',
+                    id: 'sess-other',
+                    agentState: { version: 1, value: encrypted },
+                },
+            });
+            await new Promise((r) => setTimeout(r, 50));
+
+            expect(discord.sendWithButtons).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('approvePermission', () => {
+        it('sends permission RPC with approved=true', async () => {
+            await bridge.approvePermission('sess-1', 'req-1');
+            expect(happy.sessionRPC).toHaveBeenCalledWith('sess-1', 'permission', {
+                id: 'req-1',
+                approved: true,
+            });
+        });
+
+        it('includes mode and allowTools when provided', async () => {
+            await bridge.approvePermission('sess-1', 'req-1', 'acceptEdits', ['Edit']);
+            expect(happy.sessionRPC).toHaveBeenCalledWith('sess-1', 'permission', {
+                id: 'req-1',
+                approved: true,
+                mode: 'acceptEdits',
+                allowTools: ['Edit'],
+            });
+        });
+    });
+
+    describe('denyPermission', () => {
+        it('sends permission RPC with approved=false', async () => {
+            await bridge.denyPermission('sess-1', 'req-1');
+            expect(happy.sessionRPC).toHaveBeenCalledWith('sess-1', 'permission', {
+                id: 'req-1',
+                approved: false,
+            });
         });
     });
 

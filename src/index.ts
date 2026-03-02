@@ -3,6 +3,8 @@ import { HappyClient } from './happy/client.js';
 import { DiscordBot } from './discord/bot.js';
 import { handleCommand } from './discord/commands.js';
 import { Bridge } from './bridge.js';
+import { StateTracker } from './happy/state-tracker.js';
+import { PermissionCache } from './happy/permission-cache.js';
 
 async function main(): Promise<void> {
     const config = loadBotConfig();
@@ -26,7 +28,9 @@ async function main(): Promise<void> {
     const discord = new DiscordBot(config.discord);
 
     // --- Bridge ---
-    const bridge = new Bridge(happy, discord, config);
+    const stateTracker = new StateTracker();
+    const permissionCache = new PermissionCache();
+    const bridge = new Bridge(happy, discord, config, stateTracker, permissionCache);
     await bridge.start();
 
     if (bridge.activeSession) {

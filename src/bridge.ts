@@ -4,17 +4,32 @@ import type { DiscordBot } from './discord/bot.js';
 import type { BotConfig } from './config.js';
 import { encrypt, encodeBase64, decrypt, decodeBase64 } from './vendor/encryption.js';
 import { listActiveSessions, type DecryptedSession } from './vendor/api.js';
+import { StateTracker } from './happy/state-tracker.js';
+import { PermissionCache } from './happy/permission-cache.js';
+import { buildPermissionButtons } from './discord/buttons.js';
+import { formatPermissionRequest } from './discord/formatter.js';
+import type { PermissionRequest, PermissionResponse, PermissionMode, AgentState } from './happy/types.js';
 
 export class Bridge {
     private readonly happy: HappyClient;
     private readonly discord: DiscordBot;
     private readonly config: BotConfig;
+    private readonly stateTracker: StateTracker;
+    private readonly permissionCache: PermissionCache;
     private activeSessionId: string | null = null;
 
-    constructor(happy: HappyClient, discord: DiscordBot, config: BotConfig) {
+    constructor(
+        happy: HappyClient,
+        discord: DiscordBot,
+        config: BotConfig,
+        stateTracker: StateTracker,
+        permissionCache: PermissionCache,
+    ) {
         this.happy = happy;
         this.discord = discord;
         this.config = config;
+        this.stateTracker = stateTracker;
+        this.permissionCache = permissionCache;
     }
 
     setActiveSession(sessionId: string): void {
@@ -23,6 +38,10 @@ export class Bridge {
 
     get activeSession(): string | null {
         return this.activeSessionId;
+    }
+
+    get permissions(): PermissionCache {
+        return this.permissionCache;
     }
 
     async sendMessage(text: string): Promise<void> {
@@ -61,6 +80,12 @@ export class Bridge {
         // Register listener before loading sessions to avoid missing events
         this.happy.on('update', (data) => this.processUpdate(data));
 
+        this.stateTracker.on('permission-request', (sessionId, request) => {
+            this.handlePermissionRequest(sessionId, request).catch((err) => {
+                console.error('[Bridge] Error handling permission request:', err);
+            });
+        });
+
         const sessions = await this.loadSessions();
 
         // Auto-select latest active session by activeAt
@@ -76,7 +101,15 @@ export class Bridge {
 
     /** Process a raw update from the Happy relay. Public for testing. */
     processUpdate(data: unknown): void {
-        const update = data as { body?: { t?: string; sid?: string; message?: unknown } };
+        const update = data as {
+            body?: {
+                t?: string;
+                sid?: string;
+                id?: string;
+                message?: unknown;
+                agentState?: { version: number; value: string };
+            };
+        };
         const body = update?.body;
         if (!body?.t) return;
 
@@ -85,7 +118,12 @@ export class Bridge {
                 console.error('[Bridge] Error handling new message:', err);
             });
         }
-        // update-session: Phase 5
+
+        if (body.t === 'update-session' && body.agentState) {
+            this.handleSessionUpdate(body.id!, body.agentState).catch((err) => {
+                console.error('[Bridge] Error handling session update:', err);
+            });
+        }
     }
 
     async stopSession(): Promise<void> {
@@ -95,6 +133,65 @@ export class Bridge {
 
     async compactSession(): Promise<void> {
         await this.sendMessage('/compact');
+    }
+
+    async approvePermission(
+        sessionId: string,
+        requestId: string,
+        mode?: PermissionMode,
+        allowTools?: string[],
+    ): Promise<void> {
+        const response: PermissionResponse = {
+            id: requestId,
+            approved: true,
+            ...(mode && { mode }),
+            ...(allowTools && { allowTools }),
+        };
+        await this.happy.sessionRPC(sessionId, 'permission', response);
+    }
+
+    async denyPermission(sessionId: string, requestId: string): Promise<void> {
+        const response: PermissionResponse = {
+            id: requestId,
+            approved: false,
+        };
+        await this.happy.sessionRPC(sessionId, 'permission', response);
+    }
+
+    private async handleSessionUpdate(
+        sessionId: string,
+        encryptedState: { version: number; value: string },
+    ): Promise<void> {
+        if (sessionId !== this.activeSessionId) return;
+
+        const enc = this.happy.getSessionEncryption(sessionId);
+        if (!enc) {
+            console.warn(`[Bridge] No key for session ${sessionId}, skipping state update`);
+            return;
+        }
+
+        const decrypted = decrypt(enc.key, enc.variant, decodeBase64(encryptedState.value));
+        if (!decrypted) {
+            console.error(`[Bridge] Failed to decrypt agentState for session ${sessionId}`);
+            return;
+        }
+
+        this.stateTracker.handleSessionUpdate(sessionId, decrypted as AgentState);
+    }
+
+    private async handlePermissionRequest(
+        sessionId: string,
+        request: PermissionRequest,
+    ): Promise<void> {
+        if (this.permissionCache.isAutoApproved(request.tool, request.arguments)) {
+            console.log(`[Bridge] Auto-approving ${request.tool} (${request.id})`);
+            await this.approvePermission(sessionId, request.id);
+            return;
+        }
+
+        const description = formatPermissionRequest(request.tool, request.arguments);
+        const buttons = buildPermissionButtons(sessionId, request.id, request.tool, request.arguments);
+        await this.discord.sendWithButtons(description, buttons);
     }
 
     private async loadSessions(): Promise<DecryptedSession[]> {
