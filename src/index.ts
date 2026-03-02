@@ -109,9 +109,14 @@ async function main(): Promise<void> {
                     components: [],
                 });
             } catch (err) {
-                console.error('[Discord] Button error:', err);
+                const msg = err instanceof Error ? err.message : String(err);
+                const isExpired = msg.includes('not available');
+                if (!isExpired) {
+                    console.error('[Discord] Button error:', err);
+                }
+                const label = isExpired ? '*Request expired*' : '*Error processing approval*';
                 await interaction.editReply({
-                    content: `${interaction.message.content}\n\n*Error processing approval*`,
+                    content: `${interaction.message.content}\n\n${label}`,
                     components: [],
                 }).catch(() => {});
             }
