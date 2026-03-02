@@ -2,7 +2,8 @@ import { loadBotConfig } from './config.js';
 import { HappyClient } from './happy/client.js';
 import { DiscordBot } from './discord/bot.js';
 import { handleCommand } from './discord/commands.js';
-import { parseButtonId } from './discord/buttons.js';
+import { parseButtonId, parseAskButtonId, parseSessionButtonId, buildAskButtons } from './discord/buttons.js';
+import type { AskUserQuestionInput } from './happy/types.js';
 import { Bridge } from './bridge.js';
 import { StateTracker } from './happy/state-tracker.js';
 import { PermissionCache } from './happy/permission-cache.js';
@@ -66,6 +67,109 @@ async function main(): Promise<void> {
                 return;
             }
 
+            // --- AskUserQuestion buttons ---
+            const askParsed = parseAskButtonId(interaction.customId);
+            if (askParsed) {
+                await interaction.deferUpdate();
+                try {
+                    if (askParsed.sessionId !== bridge.activeSession) {
+                        await interaction.editReply({
+                            content: `${interaction.message.content}\n\n*Session no longer active*`,
+                            components: [],
+                        });
+                        return;
+                    }
+
+                    const pending = stateTracker.getPendingRequests(askParsed.sessionId);
+                    const request = pending.find((r) => r.id === askParsed.requestId);
+                    const input = request?.arguments as AskUserQuestionInput | undefined;
+
+                    if (askParsed.type === 'select') {
+                        const question = input?.questions?.[0];
+                        const option = question?.options[askParsed.optionIndex];
+                        const header = question?.header ?? 'Answer';
+                        const label = option?.label ?? `Option ${askParsed.optionIndex}`;
+                        const answerText = `${header}: ${label}`;
+
+                        await bridge.handleAskUserAnswer(askParsed.sessionId, askParsed.requestId, answerText);
+
+                        await interaction.editReply({
+                            content: `${interaction.message.content}\n\n*Selected: ${label}*`,
+                            components: [],
+                        });
+                    } else if (askParsed.type === 'toggle') {
+                        const key = `${askParsed.sessionId}:${askParsed.requestId}:${askParsed.questionIndex}`;
+                        const selected = bridge.toggleMultiSelect(key, askParsed.optionIndex);
+                        const question = input?.questions?.[askParsed.questionIndex];
+
+                        if (question) {
+                            const rows = buildAskButtons(
+                                askParsed.sessionId,
+                                askParsed.requestId,
+                                question.options,
+                                true,
+                                askParsed.questionIndex,
+                                selected,
+                            );
+                            await interaction.editReply({ components: rows });
+                        }
+                    } else if (askParsed.type === 'submit') {
+                        const questions = input?.questions ?? [];
+                        const responseLines: string[] = [];
+
+                        for (let qi = 0; qi < questions.length; qi++) {
+                            const q = questions[qi];
+                            const key = `${askParsed.sessionId}:${askParsed.requestId}:${qi}`;
+                            const selected = bridge.getMultiSelectState(key);
+                            if (selected.size > 0) {
+                                const labels = Array.from(selected)
+                                    .map((i) => q.options[i]?.label)
+                                    .filter(Boolean)
+                                    .join(', ');
+                                responseLines.push(`${q.header}: ${labels}`);
+                            }
+                            bridge.clearMultiSelectState(key);
+                        }
+
+                        const answerText = responseLines.join('\n');
+                        await bridge.handleAskUserAnswer(askParsed.sessionId, askParsed.requestId, answerText);
+
+                        await interaction.editReply({
+                            content: `${interaction.message.content}\n\n*Selected: ${answerText}*`,
+                            components: [],
+                        });
+                    }
+                } catch (err) {
+                    console.error('[Discord] AskUserQuestion button error:', err);
+                    await interaction.editReply({
+                        content: `${interaction.message.content}\n\n*Error processing answer*`,
+                        components: [],
+                    }).catch(() => {});
+                }
+                return;
+            }
+
+            // --- Session buttons ---
+            const sessParsed = parseSessionButtonId(interaction.customId);
+            if (sessParsed) {
+                await interaction.deferUpdate();
+                try {
+                    bridge.setActiveSession(sessParsed.sessionId);
+                    await interaction.editReply({
+                        content: `Switched to \`${sessParsed.sessionId.slice(0, 8)}\``,
+                        components: [],
+                    });
+                } catch (err) {
+                    console.error('[Discord] Session switch error:', err);
+                    await interaction.editReply({
+                        content: `${interaction.message.content}\n\n*Error switching session*`,
+                        components: [],
+                    }).catch(() => {});
+                }
+                return;
+            }
+
+            // --- Permission buttons ---
             const parsed = parseButtonId(interaction.customId);
             if (!parsed) return;
 
