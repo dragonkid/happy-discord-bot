@@ -71,6 +71,15 @@ export class DiscordBot {
         return channel.send({ content: text, components });
     }
 
+    /** Edit an existing message's content and/or components. */
+    async editMessage(
+        message: Message,
+        content: string,
+        components: ActionRowBuilder<ButtonBuilder>[] = [],
+    ): Promise<Message> {
+        return message.edit({ content, components });
+    }
+
     destroy(): void {
         this.client.destroy();
         this.channel = null;
