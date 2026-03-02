@@ -107,5 +107,3 @@ Vendor source cannot be directly imported from happy-agent because its package.j
 - Obsidian: [[Happy-Discord-Bot-Plan]] — full implementation plan
 - Obsidian: [[Happy-Coder-Mobile-Architecture]] — mobile app architecture analysis
 - Obsidian: [[Claude-Code-Remote-Control-Research]] — five-route comparison
-
-<!-- Test change for commit workflow -->
