@@ -4,6 +4,7 @@ import {
     type RESTPostAPIChatInputApplicationCommandsJSONBody,
 } from 'discord.js';
 import type { Bridge } from '../bridge.js';
+import { buildSessionButtons } from './buttons.js';
 import type { PermissionMode } from '../happy/types.js';
 
 // --- Command definitions ---
@@ -87,7 +88,12 @@ async function handleSessions(interaction: ChatInputCommandInteraction, bridge: 
         return `• \`${s.id.slice(0, 8)}\` (active ${time})${marker}`;
     });
 
-    await interaction.editReply(lines.join('\n'));
+    const buttons = buildSessionButtons(sessions, bridge.activeSession);
+
+    await interaction.editReply({
+        content: lines.join('\n'),
+        components: buttons,
+    });
 }
 
 async function handleSend(interaction: ChatInputCommandInteraction, bridge: Bridge): Promise<void> {

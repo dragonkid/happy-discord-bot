@@ -67,7 +67,10 @@ describe('commands', () => {
             expect(interaction.deferReply).toHaveBeenCalled();
             expect(bridge.listSessions).toHaveBeenCalled();
             expect(interaction.editReply).toHaveBeenCalledWith(
-                expect.stringContaining('sess-1'),
+                expect.objectContaining({
+                    content: expect.stringContaining('sess-1'),
+                    components: expect.any(Array),
+                }),
             );
         });
 
