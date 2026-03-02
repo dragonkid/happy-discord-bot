@@ -169,6 +169,7 @@ export class HappyClient extends EventEmitter<HappyClientEvents> {
         const decrypted = decrypt(key, variant, decodeBase64(result.result));
         if (decrypted === null) {
             // CLI may encrypt undefined for void-returning handlers; treat as void
+            console.warn(`[HappyClient] Decryption returned null for [${method}], treating as void`);
             return undefined as R;
         }
         return decrypted as R;
