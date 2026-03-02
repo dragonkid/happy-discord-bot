@@ -1,35 +1,37 @@
 import { describe, it, expect } from 'vitest';
 import { buildPermissionButtons, parseButtonId, BUTTON_PREFIX } from '../buttons.js';
-import { ButtonStyle } from 'discord.js';
+import { ButtonStyle, type APIButtonComponentWithCustomId } from 'discord.js';
+
+/** Helper to access button data with the correct type. */
+function btnData(rows: ReturnType<typeof buildPermissionButtons>, index: number): APIButtonComponentWithCustomId {
+    return rows[0].components[index].data as APIButtonComponentWithCustomId;
+}
 
 describe('buttons', () => {
     describe('buildPermissionButtons', () => {
         it('returns Yes and No for edit tools', () => {
             const rows = buildPermissionButtons('sess-1', 'req-1', 'Edit', {});
-            const buttons = rows[0].components;
-            expect(buttons).toHaveLength(3);
+            expect(rows[0].components).toHaveLength(3);
             // Yes, Allow All Edits, No
-            expect(buttons[0].data.label).toBe('Yes');
-            expect(buttons[0].data.style).toBe(ButtonStyle.Success);
-            expect(buttons[1].data.label).toBe('Allow All Edits');
-            expect(buttons[1].data.style).toBe(ButtonStyle.Primary);
-            expect(buttons[2].data.label).toBe('No');
-            expect(buttons[2].data.style).toBe(ButtonStyle.Danger);
+            expect(btnData(rows, 0).label).toBe('Yes');
+            expect(btnData(rows, 0).style).toBe(ButtonStyle.Success);
+            expect(btnData(rows, 1).label).toBe('Allow All Edits');
+            expect(btnData(rows, 1).style).toBe(ButtonStyle.Primary);
+            expect(btnData(rows, 2).label).toBe('No');
+            expect(btnData(rows, 2).style).toBe(ButtonStyle.Danger);
         });
 
         it('returns Yes, For This Tool, and No for non-edit tools', () => {
             const rows = buildPermissionButtons('sess-1', 'req-1', 'Bash', { command: 'ls' });
-            const buttons = rows[0].components;
-            expect(buttons).toHaveLength(3);
-            expect(buttons[0].data.label).toBe('Yes');
-            expect(buttons[1].data.label).toBe('For This Tool');
-            expect(buttons[2].data.label).toBe('No');
+            expect(rows[0].components).toHaveLength(3);
+            expect(btnData(rows, 0).label).toBe('Yes');
+            expect(btnData(rows, 1).label).toBe('For This Tool');
+            expect(btnData(rows, 2).label).toBe('No');
         });
 
         it('encodes session, request, and action in button customId', () => {
             const rows = buildPermissionButtons('sess-1', 'req-1', 'Edit', {});
-            const yesId = rows[0].components[0].data.custom_id;
-            expect(yesId).toBe(`${BUTTON_PREFIX}sess-1:req-1:yes`);
+            expect(btnData(rows, 0).custom_id).toBe(`${BUTTON_PREFIX}sess-1:req-1:yes`);
         });
     });
 
