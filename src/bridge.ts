@@ -11,6 +11,7 @@ import { formatPermissionRequest, formatAskUserQuestion } from './discord/format
 import type { PermissionRequest, PermissionResponse, PermissionMode, AgentState, AskUserQuestionInput } from './happy/types.js';
 
 const RESPONSE_TIMEOUT_MS = 30_000;
+const DISCONNECT_DEBOUNCE_MS = 5_000;
 
 export class Bridge {
     private readonly happy: HappyClient;
@@ -106,22 +107,24 @@ export class Bridge {
                 this.discord.send(`⚠️ Happy relay disconnected: ${reason}`).catch((err) => {
                     console.error('[Bridge] Failed to send disconnect notification:', err);
                 });
-            }, 5000);
+            }, DISCONNECT_DEBOUNCE_MS);
         });
 
         this.happy.on('connected', () => {
-            const wasDisconnected = this.disconnectTimer !== null;
+            const debounceStillPending = this.disconnectTimer !== null;
             this.cancelDisconnectTimer();
             if (!this.initialConnectDone) {
                 this.initialConnectDone = true;
                 return;
             }
-            if (!wasDisconnected) {
-                this.discord.send('✅ Happy relay reconnected').catch((err) => {
-                    console.error('[Bridge] Failed to send reconnect notification:', err);
-                });
+            if (debounceStillPending) {
+                // Reconnected within debounce window — skip both messages
+                return;
             }
-            // If wasDisconnected is true, reconnect happened within 5s debounce — skip both messages
+            // Debounce already fired (user saw disconnect warning), notify reconnection
+            this.discord.send('✅ Happy relay reconnected').catch((err) => {
+                console.error('[Bridge] Failed to send reconnect notification:', err);
+            });
         });
 
         const sessions = await this.loadSessions();
@@ -202,17 +205,15 @@ export class Bridge {
     }
 
     toggleMultiSelect(key: string, optionIndex: number): ReadonlySet<number> {
-        let selected = this.multiSelectState.get(key);
-        if (!selected) {
-            selected = new Set();
-            this.multiSelectState.set(key, selected);
-        }
-        if (selected.has(optionIndex)) {
-            selected.delete(optionIndex);
+        const current = this.multiSelectState.get(key) ?? new Set<number>();
+        const next = new Set(current);
+        if (next.has(optionIndex)) {
+            next.delete(optionIndex);
         } else {
-            selected.add(optionIndex);
+            next.add(optionIndex);
         }
-        return selected;
+        this.multiSelectState.set(key, next);
+        return next;
     }
 
     getMultiSelectState(key: string): ReadonlySet<number> {

@@ -82,7 +82,14 @@ async function main(): Promise<void> {
 
                     const pending = stateTracker.getPendingRequests(askParsed.sessionId);
                     const request = pending.find((r) => r.id === askParsed.requestId);
-                    const input = request?.arguments as AskUserQuestionInput | undefined;
+                    if (!request) {
+                        await interaction.editReply({
+                            content: `${interaction.message.content}\n\n*Request expired*`,
+                            components: [],
+                        });
+                        return;
+                    }
+                    const input = request.arguments as AskUserQuestionInput;
 
                     if (askParsed.type === 'select') {
                         const question = input?.questions?.[0];
@@ -129,6 +136,13 @@ async function main(): Promise<void> {
                                 responseLines.push(`${q.header}: ${labels}`);
                             }
                             bridge.clearMultiSelectState(key);
+                        }
+
+                        if (responseLines.length === 0) {
+                            await interaction.editReply({
+                                content: `${interaction.message.content}\n\n*No options selected — please select at least one.*`,
+                            });
+                            return;
                         }
 
                         const answerText = responseLines.join('\n');
