@@ -46,3 +46,42 @@ export function truncate(text: string, maxLength: number): string {
     if (text.length <= maxLength) return text;
     return text.slice(0, maxLength - 1) + '…';
 }
+
+/** Format a tool permission request for Discord display. */
+export function formatPermissionRequest(toolName: string, input: unknown): string {
+    const args = (input ?? {}) as Record<string, unknown>;
+
+    switch (toolName) {
+        case 'Bash': {
+            const command = typeof args.command === 'string' ? args.command : '';
+            if (!command) return '**Bash**';
+            return `**Bash**\n${codeBlock(truncate(command, 400), 'bash')}`;
+        }
+
+        case 'Edit': {
+            const filePath = typeof args.file_path === 'string' ? args.file_path : '';
+            const header = `**Edit** \`${filePath}\``;
+            const oldStr = typeof args.old_string === 'string' ? args.old_string : '';
+            const newStr = typeof args.new_string === 'string' ? args.new_string : '';
+
+            if (!oldStr && !newStr) return header;
+
+            const diff = `- ${truncate(oldStr, 150)}\n+ ${truncate(newStr, 150)}`;
+            return `${header}\n${diffBlock(diff)}`;
+        }
+
+        case 'Write': {
+            const filePath = typeof args.file_path === 'string' ? args.file_path : '';
+            return `**Write** \`${filePath}\``;
+        }
+
+        default: {
+            const header = `**${toolName}**`;
+            const jsonStr = JSON.stringify(args);
+
+            if (!jsonStr || jsonStr === '{}') return header;
+
+            return `${header}\n${codeBlock(truncate(jsonStr, 200))}`;
+        }
+    }
+}

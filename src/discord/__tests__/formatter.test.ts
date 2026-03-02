@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { chunkMessage, codeBlock, diffBlock, truncate } from '../formatter.js';
+import { chunkMessage, codeBlock, diffBlock, truncate, formatPermissionRequest } from '../formatter.js';
 
 describe('formatter', () => {
     describe('chunkMessage', () => {
@@ -56,6 +56,69 @@ describe('formatter', () => {
             const result = truncate('a'.repeat(200), 100);
             expect(result).toHaveLength(100);
             expect(result.endsWith('…')).toBe(true);
+        });
+    });
+
+    describe('formatPermissionRequest', () => {
+        it('formats Edit tool with file path', () => {
+            const text = formatPermissionRequest('Edit', { file_path: '/src/index.ts', old_string: 'foo', new_string: 'bar' });
+            expect(text).toContain('Edit');
+            expect(text).toContain('/src/index.ts');
+        });
+
+        it('formats Edit tool with diff block showing old and new strings', () => {
+            const text = formatPermissionRequest('Edit', { file_path: '/src/index.ts', old_string: 'foo', new_string: 'bar' });
+            expect(text).toContain('- foo');
+            expect(text).toContain('+ bar');
+            expect(text).toContain('```diff');
+        });
+
+        it('formats Bash tool with command', () => {
+            const text = formatPermissionRequest('Bash', { command: 'npm test' });
+            expect(text).toContain('Bash');
+            expect(text).toContain('npm test');
+            expect(text).toContain('```bash');
+        });
+
+        it('formats Write tool with file path', () => {
+            const text = formatPermissionRequest('Write', { file_path: '/src/new.ts', content: 'const x = 1;' });
+            expect(text).toContain('Write');
+            expect(text).toContain('/src/new.ts');
+        });
+
+        it('truncates long command output', () => {
+            const longCommand = 'a'.repeat(500);
+            const text = formatPermissionRequest('Bash', { command: longCommand });
+            expect(text.length).toBeLessThan(600);
+        });
+
+        it('truncates long Edit old/new strings', () => {
+            const longStr = 'x'.repeat(300);
+            const text = formatPermissionRequest('Edit', { file_path: '/f.ts', old_string: longStr, new_string: longStr });
+            // Each side truncated to 150 chars, so combined diff should be well under 600
+            expect(text.length).toBeLessThan(600);
+        });
+
+        it('handles unknown tool gracefully', () => {
+            const text = formatPermissionRequest('CustomTool', { arg1: 'value' });
+            expect(text).toContain('CustomTool');
+        });
+
+        it('handles unknown tool with JSON args', () => {
+            const text = formatPermissionRequest('CustomTool', { arg1: 'value', nested: { key: 42 } });
+            expect(text).toContain('CustomTool');
+            expect(text).toContain('```');
+        });
+
+        it('handles Bash with no command', () => {
+            const text = formatPermissionRequest('Bash', {});
+            expect(text).toContain('Bash');
+        });
+
+        it('handles Edit with no old_string or new_string', () => {
+            const text = formatPermissionRequest('Edit', { file_path: '/src/index.ts' });
+            expect(text).toContain('Edit');
+            expect(text).toContain('/src/index.ts');
         });
     });
 });
