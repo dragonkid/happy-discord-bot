@@ -229,10 +229,10 @@ async function main(): Promise<void> {
                 await interaction.deferUpdate();
                 try {
                     const feedback = interaction.fields.getTextInputValue('feedback');
-                    const reason = feedback.trim() || 'Plan rejected';
+                    const reason = feedback.trim() || undefined;
                     await bridge.denyPermission(modalParsed.sessionId, modalParsed.requestId, reason);
                     await interaction.editReply({
-                        content: `${interaction.message?.content ?? ''}\n\n*Rejected: ${reason}*`,
+                        content: `${interaction.message?.content ?? ''}\n\n*Rejected${reason ? `: ${reason}` : ''}*`,
                         components: [],
                     });
                 } catch (err) {

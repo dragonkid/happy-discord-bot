@@ -170,9 +170,10 @@ describe('formatter', () => {
     });
 
     describe('formatExitPlanMode', () => {
-        it('inlines short plan text', () => {
+        it('inlines short plan text in code block', () => {
             const result = formatExitPlanMode('Step 1: Do thing');
             expect(result).toContain('Plan Proposal');
+            expect(result).toContain('```md');
             expect(result).toContain('Step 1: Do thing');
             expect(result).not.toContain('attached plan');
         });
