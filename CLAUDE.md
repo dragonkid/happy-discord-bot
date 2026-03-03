@@ -70,10 +70,13 @@ socket.emitWithAck('rpc-call', {
 
 ### ExitPlanMode Flow
 1. Claude calls `ExitPlanMode` (or `exit_plan_mode`) with `{ plan: "..." }`
-2. Bot detects via agentState, sends plan as `.md` file attachment with Approve/Approve+AllowEdits/Reject buttons
-3. Approve → `sessionRPC('permission', {id, approved: true, mode?})` → CLI injects PLAN_FAKE_RESTART
-4. Reject → Discord Modal for feedback → `sessionRPC('permission', {id, approved: false, reason})` → Claude sees feedback
-5. CLI always denies the tool call itself (PLAN_FAKE_REJECT), restarts with new mode
+2. Bot detects via agentState; short plans inline as ` ```md ` code block, long plans as `.md` file attachment
+3. Discord shows Approve / Approve+AllowEdits / Reject buttons
+4. Approve → `sessionRPC('permission', {id, approved: true, mode?})` → CLI injects PLAN_FAKE_RESTART
+5. Reject → Discord Modal for optional feedback → `sessionRPC('permission', {id, approved: false, reason?})`
+   - With feedback (`reason` present) → Claude continues with feedback, re-plans
+   - Without feedback (`reason` absent) → CLI aborts, waits for new user input
+6. CLI always denies the tool call itself (PLAN_FAKE_REJECT), restarts with new mode
 
 ### PermissionCache Logic (replicate from permissionHandler.ts:116-165)
 Check order: Bash literal → Bash prefix → tool whitelist → permissionMode
@@ -82,6 +85,9 @@ Check order: Bash literal → Bash prefix → tool whitelist → permissionMode
 - Cache accumulates at runtime via user approvals
 
 ### Key Source References
+
+> Line numbers may drift — search by function/variable name if they don't match.
+
 | Purpose | File | Lines |
 |---------|------|-------|
 | Socket.IO connection | happy-app/sync/apiSocket.ts | 58-69 |
@@ -95,6 +101,17 @@ Check order: Bash literal → Bash prefix → tool whitelist → permissionMode
 | Bash permission parse | happy-cli/claude/utils/permissionHandler.ts | 236-260 |
 | Approval button conditions | happy-app/components/tools/PermissionFooter.tsx | 389 |
 
+## Environment
+
+Required env vars (via `.env` or shell):
+- `DISCORD_TOKEN` — Bot token from Discord Developer Portal
+- `DISCORD_CHANNEL_ID` — Target channel for bot messages
+- `DISCORD_USER_ID` — Owner's Discord user ID (single-user access control)
+
+Happy credentials (one of):
+- `HAPPY_TOKEN` + `HAPPY_SECRET` env vars, or
+- `~/.happy/agent.key` file (created by `happy-agent auth login`)
+
 ## Commands
 
 ```bash
@@ -102,7 +119,18 @@ npm run dev              # Development (tsx)
 npm run build            # Compile TypeScript
 npm start                # Run compiled
 npm run deploy-commands  # Register Discord slash commands (once)
+npm run lint             # ESLint
+npm run lint:fix         # ESLint auto-fix
+npm test                 # Vitest (run once)
+npm run test:watch       # Vitest (watch mode)
 ```
+
+## Testing
+
+- Framework: Vitest
+- 10 test suites, 183 tests
+- Test files: `src/**/__tests__/*.test.ts`
+- All Happy/Discord dependencies mocked (no real connections needed)
 
 ## Vendor Modules
 
