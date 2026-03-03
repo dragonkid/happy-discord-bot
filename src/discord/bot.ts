@@ -2,6 +2,7 @@ import {
     Client,
     GatewayIntentBits,
     Events,
+    AttachmentBuilder,
     type TextChannel,
     type Interaction,
     type ActionRowBuilder,
@@ -69,6 +70,18 @@ export class DiscordBot {
     ): Promise<Message> {
         const channel = this.requireChannel();
         return channel.send({ content: text, components });
+    }
+
+    /** Send a message with a file attachment and button action rows. */
+    async sendWithAttachmentAndButtons(
+        text: string,
+        fileContent: Buffer,
+        fileName: string,
+        components: ActionRowBuilder<ButtonBuilder>[],
+    ): Promise<Message> {
+        const channel = this.requireChannel();
+        const attachment = new AttachmentBuilder(fileContent, { name: fileName });
+        return channel.send({ content: text, files: [attachment], components });
     }
 
     destroy(): void {

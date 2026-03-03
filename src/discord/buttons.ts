@@ -2,6 +2,9 @@ import {
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
+    ModalBuilder,
+    TextInputBuilder,
+    TextInputStyle,
 } from 'discord.js';
 import { EDIT_TOOLS } from '../happy/types.js';
 import type { AskUserQuestionOption } from '../happy/types.js';
@@ -201,4 +204,81 @@ export function parseSessionButtonId(customId: string): ParsedSessionButtonId | 
     const sessionId = customId.slice(SESSION_PREFIX.length);
     if (!sessionId) return null;
     return { sessionId };
+}
+
+// --- ExitPlanMode buttons ---
+
+const PLAN_PREFIX = 'plan:';
+export const PLAN_MODAL_PREFIX = 'plan-modal:';
+
+export type ExitPlanAction = 'approve' | 'approve-edits' | 'reject';
+
+export interface ParsedExitPlanButtonId {
+    sessionId: string;
+    requestId: string;
+    action: ExitPlanAction;
+}
+
+const VALID_PLAN_ACTIONS: ReadonlySet<string> = new Set(['approve', 'approve-edits', 'reject']);
+
+export function buildExitPlanButtons(
+    sessionId: string,
+    requestId: string,
+): ActionRowBuilder<ButtonBuilder>[] {
+    const approve = new ButtonBuilder()
+        .setCustomId(`${PLAN_PREFIX}${sessionId}:${requestId}:approve`)
+        .setLabel('Approve')
+        .setStyle(ButtonStyle.Success);
+
+    const approveEdits = new ButtonBuilder()
+        .setCustomId(`${PLAN_PREFIX}${sessionId}:${requestId}:approve-edits`)
+        .setLabel('Approve + Allow Edits')
+        .setStyle(ButtonStyle.Primary);
+
+    const reject = new ButtonBuilder()
+        .setCustomId(`${PLAN_PREFIX}${sessionId}:${requestId}:reject`)
+        .setLabel('Reject')
+        .setStyle(ButtonStyle.Danger);
+
+    return [new ActionRowBuilder<ButtonBuilder>().addComponents(approve, approveEdits, reject)];
+}
+
+export function parseExitPlanButtonId(customId: string): ParsedExitPlanButtonId | null {
+    if (!customId.startsWith(PLAN_PREFIX)) return null;
+
+    const rest = customId.slice(PLAN_PREFIX.length);
+    const parts = rest.split(':');
+    if (parts.length !== 3) return null;
+
+    const [sessionId, requestId, action] = parts;
+    if (!VALID_PLAN_ACTIONS.has(action)) return null;
+
+    return { sessionId, requestId, action: action as ExitPlanAction };
+}
+
+export function buildRejectPlanModal(
+    sessionId: string,
+    requestId: string,
+): ModalBuilder {
+    const input = new TextInputBuilder()
+        .setCustomId('feedback')
+        .setLabel('What should Claude change?')
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(false)
+        .setPlaceholder('Describe your modifications (leave empty for generic rejection)');
+
+    const row = new ActionRowBuilder<TextInputBuilder>().addComponents(input);
+
+    return new ModalBuilder()
+        .setCustomId(`${PLAN_MODAL_PREFIX}${sessionId}:${requestId}`)
+        .setTitle('Reject Plan')
+        .addComponents(row);
+}
+
+export function parsePlanModalId(customId: string): { sessionId: string; requestId: string } | null {
+    if (!customId.startsWith(PLAN_MODAL_PREFIX)) return null;
+    const rest = customId.slice(PLAN_MODAL_PREFIX.length);
+    const parts = rest.split(':');
+    if (parts.length !== 2) return null;
+    return { sessionId: parts[0], requestId: parts[1] };
 }

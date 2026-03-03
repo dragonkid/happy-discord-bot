@@ -2,6 +2,12 @@
 
 export const EDIT_TOOLS = new Set(['Edit', 'MultiEdit', 'Write', 'NotebookEdit']) as ReadonlySet<string>;
 
+const EXIT_PLAN_TOOLS: ReadonlySet<string> = new Set(['ExitPlanMode', 'exit_plan_mode']);
+
+export function isExitPlanMode(toolName: string): boolean {
+    return EXIT_PLAN_TOOLS.has(toolName);
+}
+
 export type PermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan';
 
 export type PermissionDecision = 'approved' | 'approved_for_session' | 'denied' | 'abort';

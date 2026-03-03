@@ -7,6 +7,11 @@ import {
     parseAskButtonId,
     buildSessionButtons,
     parseSessionButtonId,
+    buildExitPlanButtons,
+    parseExitPlanButtonId,
+    buildRejectPlanModal,
+    parsePlanModalId,
+    PLAN_MODAL_PREFIX,
 } from '../buttons.js';
 import { ButtonStyle, type APIButtonComponentWithCustomId } from 'discord.js';
 
@@ -183,6 +188,102 @@ describe('session buttons', () => {
 
         it('returns null for non-session button', () => {
             expect(parseSessionButtonId('perm:sess-1:req-1:yes')).toBeNull();
+        });
+    });
+});
+
+describe('ExitPlanMode buttons', () => {
+    describe('buildExitPlanButtons', () => {
+        it('returns one row with three buttons', () => {
+            const rows = buildExitPlanButtons('sess-1', 'req-1');
+            expect(rows).toHaveLength(1);
+            expect(rows[0].components).toHaveLength(3);
+        });
+
+        it('buttons have correct custom IDs', () => {
+            const rows = buildExitPlanButtons('sess-1', 'req-1');
+            const ids = rows[0].components.map((b: any) => b.data.custom_id);
+            expect(ids).toEqual([
+                'plan:sess-1:req-1:approve',
+                'plan:sess-1:req-1:approve-edits',
+                'plan:sess-1:req-1:reject',
+            ]);
+        });
+
+        it('buttons have correct labels and styles', () => {
+            const rows = buildExitPlanButtons('sess-1', 'req-1');
+            const btns = rows[0].components.map((b: any) => b.data);
+            expect(btns[0].label).toBe('Approve');
+            expect(btns[0].style).toBe(ButtonStyle.Success);
+            expect(btns[1].label).toBe('Approve + Allow Edits');
+            expect(btns[1].style).toBe(ButtonStyle.Primary);
+            expect(btns[2].label).toBe('Reject');
+            expect(btns[2].style).toBe(ButtonStyle.Danger);
+        });
+    });
+
+    describe('parseExitPlanButtonId', () => {
+        it('parses approve button', () => {
+            expect(parseExitPlanButtonId('plan:sess-1:req-1:approve')).toEqual({
+                sessionId: 'sess-1', requestId: 'req-1', action: 'approve',
+            });
+        });
+
+        it('parses approve-edits button', () => {
+            expect(parseExitPlanButtonId('plan:sess-1:req-1:approve-edits')).toEqual({
+                sessionId: 'sess-1', requestId: 'req-1', action: 'approve-edits',
+            });
+        });
+
+        it('parses reject button', () => {
+            expect(parseExitPlanButtonId('plan:sess-1:req-1:reject')).toEqual({
+                sessionId: 'sess-1', requestId: 'req-1', action: 'reject',
+            });
+        });
+
+        it('returns null for non-plan buttons', () => {
+            expect(parseExitPlanButtonId('perm:sess-1:req-1:yes')).toBeNull();
+        });
+
+        it('returns null for invalid action', () => {
+            expect(parseExitPlanButtonId('plan:sess-1:req-1:invalid')).toBeNull();
+        });
+
+        it('returns null for malformed button', () => {
+            expect(parseExitPlanButtonId('plan:incomplete')).toBeNull();
+        });
+    });
+
+    describe('buildRejectPlanModal', () => {
+        it('creates modal with correct custom ID', () => {
+            const modal = buildRejectPlanModal('sess-1', 'req-1');
+            expect(modal.data.custom_id).toBe(`${PLAN_MODAL_PREFIX}sess-1:req-1`);
+        });
+
+        it('has title "Reject Plan"', () => {
+            const modal = buildRejectPlanModal('sess-1', 'req-1');
+            expect(modal.data.title).toBe('Reject Plan');
+        });
+
+        it('has one component row', () => {
+            const modal = buildRejectPlanModal('sess-1', 'req-1');
+            expect(modal.components).toHaveLength(1);
+        });
+    });
+
+    describe('parsePlanModalId', () => {
+        it('parses valid modal ID', () => {
+            expect(parsePlanModalId('plan-modal:sess-1:req-1')).toEqual({
+                sessionId: 'sess-1', requestId: 'req-1',
+            });
+        });
+
+        it('returns null for non-modal ID', () => {
+            expect(parsePlanModalId('plan:sess-1:req-1:approve')).toBeNull();
+        });
+
+        it('returns null for malformed modal ID', () => {
+            expect(parsePlanModalId('plan-modal:incomplete')).toBeNull();
         });
     });
 });

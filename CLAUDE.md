@@ -33,7 +33,7 @@ src/
 │   ├── bot.ts            # Discord client init + event routing
 │   ├── commands.ts       # Slash command handlers
 │   ├── buttons.ts        # Button builders (permission, AskUserQuestion, session)
-│   ├── interactions.ts   # Button interaction handlers (ask, session)
+│   ├── interactions.ts   # Button interaction handlers (ask, session, ExitPlanMode)
 │   ├── formatter.ts      # Message chunking, code blocks, diff formatting
 │   └── deploy-commands.ts  # One-time slash command deployment
 └── vendor/               # Vendored from happy-agent (~800 lines)
@@ -67,6 +67,13 @@ socket.emitWithAck('rpc-call', {
 4. Bot checks PermissionCache → auto-approve or show Discord buttons
 5. User clicks → `sessionRPC('permission', {id, approved, mode?, allowTools?})`
 6. PermissionHandler resolves → `control_response` to Claude Code
+
+### ExitPlanMode Flow
+1. Claude calls `ExitPlanMode` (or `exit_plan_mode`) with `{ plan: "..." }`
+2. Bot detects via agentState, sends plan as `.md` file attachment with Approve/Approve+AllowEdits/Reject buttons
+3. Approve → `sessionRPC('permission', {id, approved: true, mode?})` → CLI injects PLAN_FAKE_RESTART
+4. Reject → Discord Modal for feedback → `sessionRPC('permission', {id, approved: false, reason})` → Claude sees feedback
+5. CLI always denies the tool call itself (PLAN_FAKE_REJECT), restarts with new mode
 
 ### PermissionCache Logic (replicate from permissionHandler.ts:116-165)
 Check order: Bash literal → Bash prefix → tool whitelist → permissionMode

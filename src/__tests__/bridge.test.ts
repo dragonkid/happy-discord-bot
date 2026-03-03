@@ -28,6 +28,7 @@ function makeMockDiscord(): DiscordBot {
     return {
         send: vi.fn().mockResolvedValue([]),
         sendWithButtons: vi.fn().mockResolvedValue({}),
+        sendWithAttachmentAndButtons: vi.fn().mockResolvedValue({}),
     } as unknown as DiscordBot;
 }
 
@@ -577,6 +578,124 @@ describe('Bridge', () => {
             bridge.clearMultiSelectState(key);
             const state = bridge.getMultiSelectState(key);
             expect(state.size).toBe(0);
+        });
+    });
+
+    describe('ExitPlanMode handling', () => {
+        it('sends plan as file attachment with ExitPlan buttons for ExitPlanMode', async () => {
+            await bridge.start();
+            bridge.setActiveSession('sess-1');
+
+            const agentState = {
+                requests: {
+                    'req-plan': {
+                        id: 'req-plan',
+                        tool: 'ExitPlanMode',
+                        arguments: { plan: 'Step 1: Do thing\nStep 2: Do other' },
+                        createdAt: 1000,
+                    },
+                },
+            };
+            const encrypted = Buffer.from(JSON.stringify(agentState)).toString('base64');
+
+            bridge.processUpdate({
+                body: {
+                    t: 'update-session',
+                    id: 'sess-1',
+                    agentState: { version: 1, value: encrypted },
+                },
+            });
+
+            await vi.waitFor(() => {
+                expect(discord.sendWithAttachmentAndButtons).toHaveBeenCalled();
+            });
+
+            const call = vi.mocked(discord.sendWithAttachmentAndButtons).mock.calls[0];
+            expect(call[0]).toContain('Plan Proposal');
+            expect(call[1]).toEqual(Buffer.from('Step 1: Do thing\nStep 2: Do other', 'utf-8'));
+            expect(call[2]).toBe('plan.md');
+        });
+
+        it('handles exit_plan_mode tool name too', async () => {
+            await bridge.start();
+            bridge.setActiveSession('sess-1');
+
+            const agentState = {
+                requests: {
+                    'req-plan-2': {
+                        id: 'req-plan-2',
+                        tool: 'exit_plan_mode',
+                        arguments: { plan: 'My plan' },
+                        createdAt: 1000,
+                    },
+                },
+            };
+            const encrypted = Buffer.from(JSON.stringify(agentState)).toString('base64');
+
+            bridge.processUpdate({
+                body: {
+                    t: 'update-session',
+                    id: 'sess-1',
+                    agentState: { version: 1, value: encrypted },
+                },
+            });
+
+            await vi.waitFor(() => {
+                expect(discord.sendWithAttachmentAndButtons).toHaveBeenCalled();
+            });
+        });
+
+        it('sends (empty plan) when plan text is missing', async () => {
+            await bridge.start();
+            bridge.setActiveSession('sess-1');
+
+            const agentState = {
+                requests: {
+                    'req-plan-3': {
+                        id: 'req-plan-3',
+                        tool: 'ExitPlanMode',
+                        arguments: {},
+                        createdAt: 1000,
+                    },
+                },
+            };
+            const encrypted = Buffer.from(JSON.stringify(agentState)).toString('base64');
+
+            bridge.processUpdate({
+                body: {
+                    t: 'update-session',
+                    id: 'sess-1',
+                    agentState: { version: 1, value: encrypted },
+                },
+            });
+
+            await vi.waitFor(() => {
+                expect(discord.sendWithAttachmentAndButtons).toHaveBeenCalled();
+            });
+
+            const call = vi.mocked(discord.sendWithAttachmentAndButtons).mock.calls[0];
+            expect(call[1]).toEqual(Buffer.from('(empty plan)', 'utf-8'));
+        });
+
+        it('denyPermission passes reason when provided', async () => {
+            bridge.setActiveSession('sess-1');
+            await bridge.denyPermission('sess-1', 'req-1', 'Please add error handling');
+
+            expect(happy.sessionRPC).toHaveBeenCalledWith('sess-1', 'permission', {
+                id: 'req-1',
+                approved: false,
+                reason: 'Please add error handling',
+            });
+        });
+
+        it('denyPermission omits reason when not provided', async () => {
+            bridge.setActiveSession('sess-1');
+            await bridge.denyPermission('sess-1', 'req-1');
+
+            expect(happy.sessionRPC).toHaveBeenCalledWith('sess-1', 'permission', {
+                id: 'req-1',
+                approved: false,
+            });
         });
     });
 

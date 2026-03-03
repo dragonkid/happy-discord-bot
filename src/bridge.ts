@@ -6,8 +6,9 @@ import { encrypt, encodeBase64, decrypt, decodeBase64 } from './vendor/encryptio
 import { listActiveSessions, type DecryptedSession } from './vendor/api.js';
 import type { StateTracker } from './happy/state-tracker.js';
 import type { PermissionCache } from './happy/permission-cache.js';
-import { buildPermissionButtons, buildAskButtons } from './discord/buttons.js';
-import { formatPermissionRequest, formatAskUserQuestion } from './discord/formatter.js';
+import { buildPermissionButtons, buildAskButtons, buildExitPlanButtons } from './discord/buttons.js';
+import { formatPermissionRequest, formatAskUserQuestion, formatExitPlanMode } from './discord/formatter.js';
+import { isExitPlanMode } from './happy/types.js';
 import type { PermissionRequest, PermissionResponse, PermissionMode, AgentState, AskUserQuestionInput } from './happy/types.js';
 
 const RESPONSE_TIMEOUT_MS = 30_000;
@@ -199,10 +200,11 @@ export class Bridge {
         await this.happy.sessionRPC(sessionId, 'permission', response);
     }
 
-    async denyPermission(sessionId: string, requestId: string): Promise<void> {
+    async denyPermission(sessionId: string, requestId: string, reason?: string): Promise<void> {
         const response: PermissionResponse = {
             id: requestId,
             approved: false,
+            ...(reason && { reason }),
         };
         await this.happy.sessionRPC(sessionId, 'permission', response);
     }
@@ -305,6 +307,17 @@ export class Bridge {
                 console.warn(`[Bridge] AskUserQuestion has ${allRows.length} button rows, truncating to 5 (Discord limit)`);
             }
             await this.discord.sendWithButtons(description, allRows.slice(0, 5));
+            return;
+        }
+
+        // ExitPlanMode gets plan attachment + special buttons
+        if (isExitPlanMode(request.tool)) {
+            const args = (request.arguments ?? {}) as Record<string, unknown>;
+            const planText = typeof args.plan === 'string' ? args.plan : '';
+            const description = formatExitPlanMode(planText);
+            const buttons = buildExitPlanButtons(sessionId, request.id);
+            const fileContent = Buffer.from(planText || '(empty plan)', 'utf-8');
+            await this.discord.sendWithAttachmentAndButtons(description, fileContent, 'plan.md', buttons);
             return;
         }
 
