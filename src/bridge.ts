@@ -153,7 +153,12 @@ export class Bridge {
             };
         };
         const body = update?.body;
-        if (!body?.t) return;
+        if (!body?.t) {
+            console.log('[Bridge] processUpdate: no body.t, skipping', JSON.stringify(data).slice(0, 200));
+            return;
+        }
+
+        console.log(`[Bridge] processUpdate: type=${body.t} sid=${body.sid ?? body.id ?? '?'}`);
 
         if (body.t === 'new-message' && body.sid && body.message) {
             this.handleNewMessage(body.sid, body.message).catch((err) => {
@@ -182,12 +187,14 @@ export class Bridge {
         requestId: string,
         mode?: PermissionMode,
         allowTools?: string[],
+        answers?: Record<string, string>,
     ): Promise<void> {
         const response: PermissionResponse = {
             id: requestId,
             approved: true,
             ...(mode && { mode }),
             ...(allowTools && { allowTools }),
+            ...(answers && { answers }),
         };
         await this.happy.sessionRPC(sessionId, 'permission', response);
     }
@@ -200,18 +207,10 @@ export class Bridge {
         await this.happy.sessionRPC(sessionId, 'permission', response);
     }
 
-    async handleAskUserAnswer(sessionId: string, requestId: string, answerText: string): Promise<void> {
-        console.log(`[Bridge] AskUserAnswer: approving permission ${requestId} for session ${sessionId.slice(0, 8)}`);
-        try {
-            await this.approvePermission(sessionId, requestId);
-            console.log(`[Bridge] AskUserAnswer: permission approved`);
-        } catch (err) {
-            console.error(`[Bridge] AskUserAnswer: approve failed:`, err);
-            throw err;
-        }
-        console.log(`[Bridge] AskUserAnswer: sending answer "${answerText}"`);
-        await this.sendMessage(answerText);
-        console.log(`[Bridge] AskUserAnswer: answer sent`);
+    async handleAskUserAnswer(sessionId: string, requestId: string, answers: Record<string, string>): Promise<void> {
+        console.log(`[Bridge] AskUserAnswer: approving with answers for session ${sessionId.slice(0, 8)}`);
+        await this.approvePermission(sessionId, requestId, undefined, undefined, answers);
+        console.log(`[Bridge] AskUserAnswer: permission approved with answers`);
     }
 
     toggleMultiSelect(key: string, optionIndex: number): ReadonlySet<number> {
@@ -354,11 +353,13 @@ export class Bridge {
         }
 
         const record = decrypted as { role?: string; content?: unknown };
+        console.log(`[Bridge] handleNewMessage: role=${record.role}`,
+            JSON.stringify(record).slice(0, 300));
 
         // Skip user messages (own echoes)
         if (record.role === 'user') return;
 
-        // Handle agent output
+        // Handle agent output (legacy format)
         if (record.role === 'agent') {
             const agentContent = record.content as { type?: string; data?: unknown };
             if (agentContent?.type === 'output') {
@@ -378,6 +379,18 @@ export class Bridge {
             } else {
                 console.log(`[Bridge] Unhandled agent message type: ${agentContent?.type ?? 'unknown'}`,
                     JSON.stringify(agentContent).slice(0, 200));
+            }
+        }
+
+        // Handle session protocol messages (new format)
+        if (record.role === 'session') {
+            const envelope = record.content as {
+                role?: string;
+                ev?: { t?: string; text?: string; thinking?: boolean };
+            };
+            // Forward agent text messages to Discord (skip thinking/reasoning)
+            if (envelope?.role === 'agent' && envelope.ev?.t === 'text' && envelope.ev.text && !envelope.ev.thinking) {
+                await this.discord.send(envelope.ev.text);
             }
         }
     }

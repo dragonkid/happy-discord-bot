@@ -536,19 +536,25 @@ describe('Bridge', () => {
             expect(text).toContain('PostgreSQL');
         });
 
-        it('handleAskUserAnswer approves permission and sends answer message', async () => {
+        it('handleAskUserAnswer passes answers in permission RPC', async () => {
             bridge.setActiveSession('sess-1');
 
-            await bridge.handleAskUserAnswer('sess-1', 'req-1', 'Database: PostgreSQL');
+            const answers = { 'Database': 'PostgreSQL' };
+            await bridge.handleAskUserAnswer('sess-1', 'req-1', answers);
 
             expect(happy.sessionRPC).toHaveBeenCalledWith('sess-1', 'permission', {
                 id: 'req-1',
                 approved: true,
+                answers,
             });
-            expect(happy.request).toHaveBeenCalledWith(
-                expect.stringContaining('/messages'),
-                expect.any(Object),
-            );
+        });
+
+        it('handleAskUserAnswer does not call sendMessage', async () => {
+            bridge.setActiveSession('sess-1');
+
+            await bridge.handleAskUserAnswer('sess-1', 'req-1', { 'DB': 'PostgreSQL' });
+
+            expect(happy.request).not.toHaveBeenCalled();
         });
 
         it('toggleMultiSelect toggles option indices', () => {

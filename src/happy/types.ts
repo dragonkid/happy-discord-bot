@@ -20,6 +20,7 @@ export interface PermissionResponse {
     mode?: PermissionMode;
     allowTools?: string[];
     decision?: PermissionDecision;
+    answers?: Record<string, string>;
 }
 
 // --- AskUserQuestion types ---

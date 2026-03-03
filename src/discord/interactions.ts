@@ -35,9 +35,9 @@ export async function handleAskButton(
         const option = question?.options[askParsed.optionIndex];
         const header = question?.header ?? 'Answer';
         const label = option?.label ?? `Option ${askParsed.optionIndex}`;
-        const answerText = `${header}: ${label}`;
 
-        await bridge.handleAskUserAnswer(askParsed.sessionId, askParsed.requestId, answerText);
+        const answers: Record<string, string> = { [header]: label };
+        await bridge.handleAskUserAnswer(askParsed.sessionId, askParsed.requestId, answers);
 
         await interaction.editReply({
             content: `${interaction.message.content}\n\n*Selected: ${label}*`,
@@ -61,7 +61,7 @@ export async function handleAskButton(
         }
     } else if (askParsed.type === 'submit') {
         const questions = input?.questions ?? [];
-        const responseLines: string[] = [];
+        const answers: Record<string, string> = {};
 
         for (let qi = 0; qi < questions.length; qi++) {
             const q = questions[qi];
@@ -72,23 +72,23 @@ export async function handleAskButton(
                     .map((i) => q.options[i]?.label)
                     .filter(Boolean)
                     .join(', ');
-                responseLines.push(`${q.header}: ${labels}`);
+                answers[q.header] = labels;
             }
             bridge.clearMultiSelectState(key);
         }
 
-        if (responseLines.length === 0) {
+        if (Object.keys(answers).length === 0) {
             await interaction.editReply({
                 content: `${interaction.message.content}\n\n*No options selected — please select at least one.*`,
             });
             return;
         }
 
-        const answerText = responseLines.join('\n');
-        await bridge.handleAskUserAnswer(askParsed.sessionId, askParsed.requestId, answerText);
+        await bridge.handleAskUserAnswer(askParsed.sessionId, askParsed.requestId, answers);
 
+        const displayText = Object.entries(answers).map(([h, l]) => `${h}: ${l}`).join('\n');
         await interaction.editReply({
-            content: `${interaction.message.content}\n\n*Selected: ${answerText}*`,
+            content: `${interaction.message.content}\n\n*Selected: ${displayText}*`,
             components: [],
         });
     }
