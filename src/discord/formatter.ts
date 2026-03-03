@@ -105,7 +105,7 @@ const PLAN_INLINE_LIMIT = 1500;
 /** Format ExitPlanMode message. Inlines short plans, shows header-only for long ones. */
 export function formatExitPlanMode(planText: string): string {
     if (planText && planText.length <= PLAN_INLINE_LIMIT) {
-        return `**Plan Proposal**\n${planText}`;
+        return `**Plan Proposal**\n${codeBlock(planText, 'md')}`;
     }
     return '**Plan Proposal**\nSee attached plan. Choose how to proceed:';
 }
