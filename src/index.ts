@@ -8,6 +8,13 @@ import { Bridge } from './bridge.js';
 import { StateTracker } from './happy/state-tracker.js';
 import { PermissionCache } from './happy/permission-cache.js';
 
+// Patch console to prepend timestamps
+const origLog = console.log;
+const origError = console.error;
+const ts = () => new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 });
+console.log = (...args: unknown[]) => origLog(ts(), ...args);
+console.error = (...args: unknown[]) => origError(ts(), ...args);
+
 async function main(): Promise<void> {
     const config = loadBotConfig();
     console.log(`Happy server: ${config.happy.serverUrl}`);
