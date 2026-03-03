@@ -1,6 +1,6 @@
 import type { ButtonInteraction } from 'discord.js';
-import { parseAskButtonId, parseSessionButtonId, buildAskButtons } from './buttons.js';
-import type { AskButtonAction, ParsedSessionButtonId } from './buttons.js';
+import { parseAskButtonId, parseSessionButtonId, buildAskButtons, buildRejectPlanModal } from './buttons.js';
+import type { AskButtonAction, ParsedSessionButtonId, ParsedExitPlanButtonId } from './buttons.js';
 import type { AskUserQuestionInput } from '../happy/types.js';
 import type { Bridge } from '../bridge.js';
 import type { StateTracker } from '../happy/state-tracker.js';
@@ -104,6 +104,56 @@ export async function handleSessionButton(
         content: `Switched to \`${sessParsed.sessionId.slice(0, 8)}\``,
         components: [],
     });
+}
+
+export async function handleExitPlanButton(
+    interaction: ButtonInteraction,
+    parsed: ParsedExitPlanButtonId,
+    bridge: Bridge,
+    stateTracker: StateTracker,
+): Promise<void> {
+    if (parsed.sessionId !== bridge.activeSession) {
+        await interaction.editReply({
+            content: `${interaction.message.content}\n\n*Session no longer active*`,
+            components: [],
+        });
+        return;
+    }
+
+    const pending = stateTracker.getPendingRequests(parsed.sessionId);
+    const request = pending.find((r) => r.id === parsed.requestId);
+    if (!request) {
+        await interaction.editReply({
+            content: `${interaction.message.content}\n\n*Request expired*`,
+            components: [],
+        });
+        return;
+    }
+
+    switch (parsed.action) {
+        case 'approve':
+            await bridge.approvePermission(parsed.sessionId, parsed.requestId);
+            await interaction.editReply({
+                content: `${interaction.message.content}\n\n*Approved*`,
+                components: [],
+            });
+            break;
+
+        case 'approve-edits':
+            await bridge.approvePermission(parsed.sessionId, parsed.requestId, 'acceptEdits');
+            bridge.permissions.applyApproval([], 'acceptEdits');
+            await interaction.editReply({
+                content: `${interaction.message.content}\n\n*Approved (allow all edits)*`,
+                components: [],
+            });
+            break;
+
+        case 'reject': {
+            const modal = buildRejectPlanModal(parsed.sessionId, parsed.requestId);
+            await interaction.showModal(modal);
+            break;
+        }
+    }
 }
 
 export { parseAskButtonId, parseSessionButtonId };

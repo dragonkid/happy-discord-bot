@@ -2,8 +2,8 @@ import { loadBotConfig } from './config.js';
 import { HappyClient } from './happy/client.js';
 import { DiscordBot } from './discord/bot.js';
 import { handleCommand } from './discord/commands.js';
-import { parseButtonId } from './discord/buttons.js';
-import { parseAskButtonId, parseSessionButtonId, handleAskButton, handleSessionButton } from './discord/interactions.js';
+import { parseButtonId, parseExitPlanButtonId, parsePlanModalId } from './discord/buttons.js';
+import { parseAskButtonId, parseSessionButtonId, handleAskButton, handleSessionButton, handleExitPlanButton } from './discord/interactions.js';
 import { Bridge } from './bridge.js';
 import { StateTracker } from './happy/state-tracker.js';
 import { PermissionCache } from './happy/permission-cache.js';
@@ -111,6 +111,46 @@ async function main(): Promise<void> {
                 return;
             }
 
+            // --- ExitPlanMode buttons ---
+            const planParsed = parseExitPlanButtonId(interaction.customId);
+            if (planParsed) {
+                if (planParsed.action === 'reject') {
+                    // showModal requires un-deferred interaction — validate guards first
+                    const isActive = planParsed.sessionId === bridge.activeSession;
+                    const pending = stateTracker.getPendingRequests(planParsed.sessionId);
+                    const hasRequest = pending.some((r) => r.id === planParsed.requestId);
+
+                    if (!isActive || !hasRequest) {
+                        await interaction.update({
+                            content: `${interaction.message.content}\n\n*${!isActive ? 'Session no longer active' : 'Request expired'}*`,
+                            components: [],
+                        });
+                        return;
+                    }
+                    try {
+                        await handleExitPlanButton(interaction, planParsed, bridge, stateTracker);
+                    } catch (err) {
+                        console.error('[Discord] ExitPlanMode button error:', err);
+                        await interaction.reply({
+                            content: 'Error showing rejection form.',
+                            ephemeral: true,
+                        }).catch(() => {});
+                    }
+                } else {
+                    await interaction.deferUpdate();
+                    try {
+                        await handleExitPlanButton(interaction, planParsed, bridge, stateTracker);
+                    } catch (err) {
+                        console.error('[Discord] ExitPlanMode button error:', err);
+                        await interaction.editReply({
+                            content: `${interaction.message.content}\n\n*Error processing plan approval*`,
+                            components: [],
+                        }).catch(() => {});
+                    }
+                }
+                return;
+            }
+
             // --- Permission buttons ---
             const parsed = parseButtonId(interaction.customId);
             if (!parsed) return;
@@ -175,6 +215,33 @@ async function main(): Promise<void> {
                     content: `${interaction.message.content}\n\n${label}`,
                     components: [],
                 }).catch(() => {});
+            }
+        }
+        // Modal submissions (ExitPlanMode reject feedback)
+        if (interaction.isModalSubmit()) {
+            if (interaction.user.id !== config.discord.userId) {
+                await interaction.reply({ content: 'Unauthorized.', ephemeral: true });
+                return;
+            }
+
+            const modalParsed = parsePlanModalId(interaction.customId);
+            if (modalParsed) {
+                await interaction.deferUpdate();
+                try {
+                    const feedback = interaction.fields.getTextInputValue('feedback');
+                    const reason = feedback.trim() || 'Plan rejected';
+                    await bridge.denyPermission(modalParsed.sessionId, modalParsed.requestId, reason);
+                    await interaction.editReply({
+                        content: `${interaction.message?.content ?? ''}\n\n*Rejected: ${reason}*`,
+                        components: [],
+                    });
+                } catch (err) {
+                    console.error('[Discord] Plan reject modal error:', err);
+                    await interaction.editReply({
+                        content: `${interaction.message?.content ?? ''}\n\n*Error processing rejection*`,
+                        components: [],
+                    }).catch(() => {});
+                }
             }
         }
     });

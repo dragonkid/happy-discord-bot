@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { chunkMessage, codeBlock, diffBlock, truncate, formatPermissionRequest, formatAskUserQuestion } from '../formatter.js';
+import { chunkMessage, codeBlock, diffBlock, truncate, formatPermissionRequest, formatAskUserQuestion, formatExitPlanMode } from '../formatter.js';
 
 describe('formatter', () => {
     describe('chunkMessage', () => {
@@ -166,6 +166,29 @@ describe('formatter', () => {
             };
             const result = formatAskUserQuestion([question]);
             expect(result).toContain('(select multiple)');
+        });
+    });
+
+    describe('formatExitPlanMode', () => {
+        it('inlines short plan text', () => {
+            const result = formatExitPlanMode('Step 1: Do thing');
+            expect(result).toContain('Plan Proposal');
+            expect(result).toContain('Step 1: Do thing');
+            expect(result).not.toContain('attached plan');
+        });
+
+        it('shows attachment header for long plan', () => {
+            const longPlan = 'x'.repeat(1600);
+            const result = formatExitPlanMode(longPlan);
+            expect(result).toContain('Plan Proposal');
+            expect(result).toContain('attached plan');
+            expect(result).not.toContain(longPlan);
+        });
+
+        it('shows attachment header for empty plan', () => {
+            const result = formatExitPlanMode('');
+            expect(result).toContain('Plan Proposal');
+            expect(result).toContain('attached plan');
         });
     });
 });

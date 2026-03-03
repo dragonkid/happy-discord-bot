@@ -25,6 +25,10 @@ vi.mock('discord.js', () => ({
         InteractionCreate: 'interactionCreate',
     },
     ChannelType: { GuildText: 0 },
+    AttachmentBuilder: vi.fn(function (this: any, content: any, opts: any) {
+        this.content = content;
+        this.name = opts?.name;
+    }),
 }));
 
 describe('DiscordBot', () => {
@@ -78,6 +82,20 @@ describe('DiscordBot', () => {
             await bot.sendWithButtons('Pick one', rows as any);
             expect(mockChannel.send).toHaveBeenCalledWith({
                 content: 'Pick one',
+                components: rows,
+            });
+        });
+    });
+
+    describe('sendWithAttachmentAndButtons', () => {
+        it('sends message with file attachment and components', async () => {
+            await bot.start();
+            const rows = [{ type: 'row' }];
+            const fileContent = Buffer.from('file data');
+            await bot.sendWithAttachmentAndButtons('See attached', fileContent, 'log.txt', rows as any);
+            expect(mockChannel.send).toHaveBeenCalledWith({
+                content: 'See attached',
+                files: [expect.objectContaining({ content: fileContent, name: 'log.txt' })],
                 components: rows,
             });
         });
