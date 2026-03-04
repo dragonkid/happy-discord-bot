@@ -8,6 +8,7 @@ export interface BotConfig {
         token: string;
         channelId: string;
         userId: string;
+        requireMention: boolean;
     };
     happy: HappyConfig;
     credentials: Credentials;
@@ -50,6 +51,7 @@ export function loadBotConfig(): BotConfig {
             token: requiredEnv('DISCORD_TOKEN'),
             channelId: requiredEnv('DISCORD_CHANNEL_ID'),
             userId: requiredEnv('DISCORD_USER_ID'),
+            requireMention: process.env.DISCORD_REQUIRE_MENTION === 'true',
         },
         happy,
         credentials,

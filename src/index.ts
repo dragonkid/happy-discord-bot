@@ -49,9 +49,25 @@ async function main(): Promise<void> {
     }
 
     discord.onMessage((message) => {
-        if (message.author.id === config.discord.userId && message.channelId === config.discord.channelId) {
-            bridge.setLastUserMessageId(message.id);
+        if (message.author.id !== config.discord.userId || message.channelId !== config.discord.channelId) return;
+
+        let text = message.content;
+
+        // If requireMention is enabled, only forward messages that @ the bot
+        if (config.discord.requireMention) {
+            const botId = message.client.user?.id;
+            const mentionPrefix = botId ? `<@${botId}>` : null;
+            if (!mentionPrefix || !text.includes(mentionPrefix)) return;
+            text = text.replaceAll(mentionPrefix, '').trim();
         }
+
+        if (!text) return;
+
+        bridge.setLastUserMessageId(message.id);
+        bridge.sendMessage(text).catch((err) => {
+            console.error('[Bridge] Failed to forward message:', err);
+            discord.send('⚠️ Failed to send message to CLI.').catch(() => {});
+        });
     });
 
     discord.onInteraction(async (interaction) => {

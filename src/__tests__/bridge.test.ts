@@ -37,7 +37,7 @@ function makeMockDiscord(): DiscordBot {
 
 function makeMockConfig(): BotConfig {
     return {
-        discord: { token: 't', channelId: 'ch-1', userId: 'u-1' },
+        discord: { token: 't', channelId: 'ch-1', userId: 'u-1', requireMention: false },
         happy: { serverUrl: 'https://test.example.com', homeDir: '/tmp', credentialPath: '/tmp/k' },
         credentials: {
             token: 'test-token',

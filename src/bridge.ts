@@ -15,6 +15,7 @@ const RESPONSE_TIMEOUT_MS = 30_000;
 const DISCONNECT_DEBOUNCE_MS = 5_000;
 const TYPING_INTERVAL_MS = 8_000;
 const THINKING_EMOJI = '🤔';
+const TOOL_USE_EMOJI = '🔧';
 
 export class Bridge {
     private readonly happy: HappyClient;
@@ -29,6 +30,7 @@ export class Bridge {
     private initialConnectDone = false;
     private typingInterval: ReturnType<typeof setInterval> | null = null;
     private thinkingEmoji = false;
+    private toolUseEmoji = false;
     private lastUserMsgId: string | null = null;
     private isThinking = false;
 
@@ -49,6 +51,7 @@ export class Bridge {
     setActiveSession(sessionId: string): void {
         this.stopTypingLoop();
         this.updateThinkingEmoji(false);
+        this.updateToolUseEmoji(false);
         this.isThinking = false;
         this.lastUserMsgId = null;
         this.activeSessionId = sessionId;
@@ -135,6 +138,7 @@ export class Bridge {
         this.stateTracker.on('permission-request', (sessionId, request) => {
             this.stopTypingLoop();
             this.updateThinkingEmoji(false);
+            this.updateToolUseEmoji(false);
             this.isThinking = false;
             this.handlePermissionRequest(sessionId, request).catch((err) => {
                 console.error('[Bridge] Error handling permission request:', err);
@@ -333,6 +337,20 @@ export class Bridge {
         this.thinkingEmoji = thinking;
     }
 
+    private updateToolUseEmoji(active: boolean): void {
+        if (active === this.toolUseEmoji) return;
+
+        if (this.lastUserMsgId && this.toolUseEmoji) {
+            this.discord.removeReaction(this.lastUserMsgId, TOOL_USE_EMOJI).catch((err) =>
+                console.error('[Bridge] removeReaction failed:', err));
+        }
+        if (this.lastUserMsgId && active) {
+            this.discord.reactToMessage(this.lastUserMsgId, TOOL_USE_EMOJI).catch((err) =>
+                console.error('[Bridge] reactToMessage failed:', err));
+        }
+        this.toolUseEmoji = active;
+    }
+
     private async handleSessionUpdate(
         sessionId: string,
         encryptedState: { version: number; value: string },
@@ -471,9 +489,18 @@ export class Bridge {
                 role?: string;
                 ev?: { t?: string; text?: string; thinking?: boolean };
             };
+            if (envelope?.role !== 'agent') return;
+
             // Forward agent text messages to Discord (skip thinking/reasoning)
-            if (envelope?.role === 'agent' && envelope.ev?.t === 'text' && envelope.ev.text && !envelope.ev.thinking) {
+            if (envelope.ev?.t === 'text' && envelope.ev.text && !envelope.ev.thinking) {
                 await this.discord.send(envelope.ev.text);
+            }
+
+            // Tool use emoji tracking
+            if (envelope.ev?.t === 'tool-call-start') {
+                this.updateToolUseEmoji(true);
+            } else if (envelope.ev?.t === 'tool-call-end') {
+                this.updateToolUseEmoji(false);
             }
         }
     }
