@@ -29,6 +29,55 @@ describe('formatter', () => {
         it('returns empty array for empty string', () => {
             expect(chunkMessage('')).toEqual([]);
         });
+
+        it('closes and reopens code fence when splitting inside a code block', () => {
+            const code = 'line\n'.repeat(600); // ~3000 chars, forces split
+            const text = `Before\n\`\`\`typescript\n${code}\`\`\`\nAfter`;
+            const chunks = chunkMessage(text, 2000);
+            expect(chunks.length).toBeGreaterThanOrEqual(2);
+            // Every chunk should have balanced code fences
+            for (const chunk of chunks) {
+                const fenceCount = (chunk.match(/^```/gm) || []).length;
+                expect(fenceCount % 2).toBe(0);
+            }
+            // Second chunk should reopen with same language
+            expect(chunks[1]).toMatch(/^```typescript\n/);
+        });
+
+        it('closes and reopens diff code fence when splitting', () => {
+            const diffLines = Array.from({ length: 200 }, (_, i) =>
+                i % 2 === 0 ? `- old line ${i}` : `+ new line ${i}`,
+            ).join('\n');
+            const text = `Header\n\`\`\`diff\n${diffLines}\n\`\`\``;
+            const chunks = chunkMessage(text, 2000);
+            expect(chunks.length).toBeGreaterThanOrEqual(2);
+            for (const chunk of chunks) {
+                const fenceCount = (chunk.match(/^```/gm) || []).length;
+                expect(fenceCount % 2).toBe(0);
+            }
+            expect(chunks[1]).toMatch(/^```diff\n/);
+        });
+
+        it('handles code fence without language specifier', () => {
+            const code = 'x\n'.repeat(1500);
+            const text = `\`\`\`\n${code}\`\`\``;
+            const chunks = chunkMessage(text, 2000);
+            expect(chunks.length).toBeGreaterThanOrEqual(2);
+            for (const chunk of chunks) {
+                const fenceCount = (chunk.match(/^```/gm) || []).length;
+                expect(fenceCount % 2).toBe(0);
+            }
+            expect(chunks[1]).toMatch(/^```\n/);
+        });
+
+        it('does not modify chunks that have no open code fence', () => {
+            const line = 'x'.repeat(1500);
+            const text = `${line}\n${'y'.repeat(1500)}`;
+            const chunks = chunkMessage(text, 2000);
+            expect(chunks).toHaveLength(2);
+            expect(chunks[0]).toBe(line);
+            expect(chunks[1]).toBe('y'.repeat(1500));
+        });
     });
 
     describe('codeBlock', () => {

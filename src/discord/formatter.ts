@@ -2,31 +2,63 @@ import type { AskUserQuestionItem } from '../happy/types.js';
 
 const DISCORD_MAX = 2000;
 
-/** Split text into chunks that fit within Discord's message limit. */
+/** Detect if a chunk has an unclosed code fence. Returns the fence header (e.g. "```diff") or null. */
+function findOpenFence(text: string): string | null {
+    const fenceRegex = /^(`{3,})(.*)/gm;
+    let open: string | null = null;
+    let match: RegExpExecArray | null;
+    while ((match = fenceRegex.exec(text)) !== null) {
+        if (open) {
+            open = null;
+        } else {
+            const backticks = match[1];
+            const lang = match[2].trim();
+            open = lang ? `${backticks}${lang}` : backticks;
+        }
+    }
+    return open;
+}
+
+/** Split text into chunks that fit within Discord's message limit, preserving code fences. */
 export function chunkMessage(text: string, limit = DISCORD_MAX): string[] {
     if (!text) return [];
     if (text.length <= limit) return [text];
 
-    const chunks: string[] = [];
+    // First pass: split by size
+    const rawChunks: string[] = [];
     let remaining = text;
 
     while (remaining.length > 0) {
         if (remaining.length <= limit) {
-            chunks.push(remaining);
+            rawChunks.push(remaining);
             break;
         }
 
-        // Try to split at last newline within limit
         const slice = remaining.slice(0, limit);
         const newlineIdx = slice.lastIndexOf('\n');
 
         if (newlineIdx > 0) {
-            chunks.push(remaining.slice(0, newlineIdx));
+            rawChunks.push(remaining.slice(0, newlineIdx));
             remaining = remaining.slice(newlineIdx + 1);
         } else {
-            // Hard split
-            chunks.push(slice);
+            rawChunks.push(slice);
             remaining = remaining.slice(limit);
+        }
+    }
+
+    // Second pass: fix unclosed code fences
+    const chunks: string[] = [];
+    let pendingFence: string | null = null;
+
+    for (const raw of rawChunks) {
+        const chunk = pendingFence ? `${pendingFence}\n${raw}` : raw;
+        const openFence = findOpenFence(chunk);
+        if (openFence) {
+            chunks.push(`${chunk}\n\`\`\``);
+            pendingFence = openFence;
+        } else {
+            chunks.push(chunk);
+            pendingFence = null;
         }
     }
 
