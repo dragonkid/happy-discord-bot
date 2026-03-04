@@ -2,31 +2,67 @@ import type { AskUserQuestionItem } from '../happy/types.js';
 
 const DISCORD_MAX = 2000;
 
-/** Split text into chunks that fit within Discord's message limit. */
+/** Detect if a chunk has an unclosed code fence. Returns the fence header (e.g. "```diff") or null. */
+function findOpenFence(text: string): string | null {
+    const fenceRegex = /^(`{3,})(.*)/gm;
+    let open: string | null = null;
+    let match: RegExpExecArray | null;
+    while ((match = fenceRegex.exec(text)) !== null) {
+        if (open) {
+            open = null;
+        } else {
+            const backticks = match[1];
+            const lang = match[2].trim();
+            open = lang ? `${backticks}${lang}` : backticks;
+        }
+    }
+    return open;
+}
+
+/** Split text into chunks that fit within Discord's message limit, preserving code fences. */
 export function chunkMessage(text: string, limit = DISCORD_MAX): string[] {
     if (!text) return [];
     if (text.length <= limit) return [text];
 
-    const chunks: string[] = [];
+    // Reserve space for fence overhead: closing "\n```" (4) + reopening "```language\n" (up to ~20)
+    const FENCE_RESERVE = 24;
+    const splitLimit = limit - FENCE_RESERVE;
+
+    // First pass: split by size (with reserve for fence fixup)
+    const rawChunks: string[] = [];
     let remaining = text;
 
     while (remaining.length > 0) {
         if (remaining.length <= limit) {
-            chunks.push(remaining);
+            rawChunks.push(remaining);
             break;
         }
 
-        // Try to split at last newline within limit
-        const slice = remaining.slice(0, limit);
+        const slice = remaining.slice(0, splitLimit);
         const newlineIdx = slice.lastIndexOf('\n');
 
         if (newlineIdx > 0) {
-            chunks.push(remaining.slice(0, newlineIdx));
+            rawChunks.push(remaining.slice(0, newlineIdx));
             remaining = remaining.slice(newlineIdx + 1);
         } else {
-            // Hard split
-            chunks.push(slice);
-            remaining = remaining.slice(limit);
+            rawChunks.push(slice);
+            remaining = remaining.slice(splitLimit);
+        }
+    }
+
+    // Second pass: fix unclosed code fences
+    const chunks: string[] = [];
+    let pendingFence: string | null = null;
+
+    for (const raw of rawChunks) {
+        const chunk = pendingFence ? `${pendingFence}\n${raw}` : raw;
+        const openFence = findOpenFence(chunk);
+        if (openFence) {
+            chunks.push(`${chunk}\n\`\`\``);
+            pendingFence = openFence;
+        } else {
+            chunks.push(chunk);
+            pendingFence = null;
         }
     }
 
@@ -68,7 +104,7 @@ export function formatPermissionRequest(toolName: string, input: unknown): strin
 
             if (!oldStr && !newStr) return header;
 
-            const diff = `- ${truncate(oldStr, 150)}\n+ ${truncate(newStr, 150)}`;
+            const diff = `- ${truncate(oldStr, 200)}\n+ ${truncate(newStr, 200)}`;
             return `${header}\n${diffBlock(diff)}`;
         }
 

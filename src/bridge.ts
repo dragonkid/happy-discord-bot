@@ -13,6 +13,9 @@ import type { PermissionRequest, PermissionResponse, PermissionMode, AgentState,
 
 const RESPONSE_TIMEOUT_MS = 30_000;
 const DISCONNECT_DEBOUNCE_MS = 5_000;
+const TYPING_INTERVAL_MS = 8_000;
+const THINKING_EMOJI = '🤔';
+const TOOL_USE_EMOJI = '🔧';
 
 export class Bridge {
     private readonly happy: HappyClient;
@@ -25,6 +28,11 @@ export class Bridge {
     private responseTimer: ReturnType<typeof setTimeout> | null = null;
     private disconnectTimer: ReturnType<typeof setTimeout> | null = null;
     private initialConnectDone = false;
+    private typingInterval: ReturnType<typeof setInterval> | null = null;
+    private thinkingEmoji = false;
+    private toolUseEmoji = false;
+    private lastUserMsgId: string | null = null;
+    private isThinking = false;
 
     constructor(
         happy: HappyClient,
@@ -41,6 +49,11 @@ export class Bridge {
     }
 
     setActiveSession(sessionId: string): void {
+        this.stopTypingLoop();
+        this.updateThinkingEmoji(false);
+        this.updateToolUseEmoji(false);
+        this.isThinking = false;
+        this.lastUserMsgId = null;
         this.activeSessionId = sessionId;
         this.permissionCache.reset();
         this.multiSelectState.clear();
@@ -52,6 +65,25 @@ export class Bridge {
 
     get permissions(): PermissionCache {
         return this.permissionCache;
+    }
+
+    setLastUserMessageId(messageId: string): void {
+        this.lastUserMsgId = messageId;
+    }
+
+    /** Handle ephemeral activity update (session-alive keepalive). */
+    handleEphemeralActivity(sessionId: string, thinking: boolean): void {
+        if (sessionId !== this.activeSessionId) return;
+        if (thinking === this.isThinking) return;
+
+        if (thinking) {
+            this.startTypingLoop();
+            this.updateThinkingEmoji(true);
+        } else {
+            this.stopTypingLoop();
+            this.updateThinkingEmoji(false);
+        }
+        this.isThinking = thinking;
     }
 
     async sendMessage(text: string): Promise<void> {
@@ -96,7 +128,18 @@ export class Bridge {
         // Register listener before loading sessions to avoid missing events
         this.happy.on('update', (data) => this.processUpdate(data));
 
+        this.happy.on('ephemeral', (data) => {
+            const update = data as { type?: string; id?: string; thinking?: boolean };
+            if (update?.type === 'activity' && update.id && typeof update.thinking === 'boolean') {
+                this.handleEphemeralActivity(update.id, update.thinking);
+            }
+        });
+
         this.stateTracker.on('permission-request', (sessionId, request) => {
+            this.stopTypingLoop();
+            this.updateThinkingEmoji(false);
+            this.updateToolUseEmoji(false);
+            this.isThinking = false;
             this.handlePermissionRequest(sessionId, request).catch((err) => {
                 console.error('[Bridge] Error handling permission request:', err);
             });
@@ -263,6 +306,51 @@ export class Bridge {
         }
     }
 
+    private startTypingLoop(): void {
+        this.stopTypingLoop();
+        this.discord.sendTyping().catch((err) =>
+            console.error('[Bridge] sendTyping failed:', err));
+        this.typingInterval = setInterval(() => {
+            this.discord.sendTyping().catch((err) =>
+                console.error('[Bridge] sendTyping failed:', err));
+        }, TYPING_INTERVAL_MS);
+    }
+
+    private stopTypingLoop(): void {
+        if (this.typingInterval) {
+            clearInterval(this.typingInterval);
+            this.typingInterval = null;
+        }
+    }
+
+    private updateThinkingEmoji(thinking: boolean): void {
+        if (thinking === this.thinkingEmoji) return;
+
+        if (this.lastUserMsgId && this.thinkingEmoji) {
+            this.discord.removeReaction(this.lastUserMsgId, THINKING_EMOJI).catch((err) =>
+                console.error('[Bridge] removeReaction failed:', err));
+        }
+        if (this.lastUserMsgId && thinking) {
+            this.discord.reactToMessage(this.lastUserMsgId, THINKING_EMOJI).catch((err) =>
+                console.error('[Bridge] reactToMessage failed:', err));
+        }
+        this.thinkingEmoji = thinking;
+    }
+
+    private updateToolUseEmoji(active: boolean): void {
+        if (active === this.toolUseEmoji) return;
+
+        if (this.lastUserMsgId && this.toolUseEmoji) {
+            this.discord.removeReaction(this.lastUserMsgId, TOOL_USE_EMOJI).catch((err) =>
+                console.error('[Bridge] removeReaction failed:', err));
+        }
+        if (this.lastUserMsgId && active) {
+            this.discord.reactToMessage(this.lastUserMsgId, TOOL_USE_EMOJI).catch((err) =>
+                console.error('[Bridge] reactToMessage failed:', err));
+        }
+        this.toolUseEmoji = active;
+    }
+
     private async handleSessionUpdate(
         sessionId: string,
         encryptedState: { version: number; value: string },
@@ -401,9 +489,18 @@ export class Bridge {
                 role?: string;
                 ev?: { t?: string; text?: string; thinking?: boolean };
             };
+            if (envelope?.role !== 'agent') return;
+
             // Forward agent text messages to Discord (skip thinking/reasoning)
-            if (envelope?.role === 'agent' && envelope.ev?.t === 'text' && envelope.ev.text && !envelope.ev.thinking) {
+            if (envelope.ev?.t === 'text' && envelope.ev.text && !envelope.ev.thinking) {
                 await this.discord.send(envelope.ev.text);
+            }
+
+            // Tool use emoji tracking
+            if (envelope.ev?.t === 'tool-call-start') {
+                this.updateToolUseEmoji(true);
+            } else if (envelope.ev?.t === 'tool-call-end') {
+                this.updateToolUseEmoji(false);
             }
         }
     }

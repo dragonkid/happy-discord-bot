@@ -70,7 +70,7 @@ describe('StateTracker', () => {
             const handler = vi.fn();
             tracker.on('permission-request', handler);
 
-            tracker.handleSessionUpdate('sess-1', { state: 'thinking' });
+            tracker.handleSessionUpdate('sess-1', { controlledByUser: false });
 
             expect(handler).not.toHaveBeenCalled();
         });

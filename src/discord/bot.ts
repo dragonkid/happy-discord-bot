@@ -22,6 +22,7 @@ export class DiscordBot {
     private readonly client: Client;
     private channel: TextChannel | null = null;
     private interactionHandler: ((interaction: Interaction) => void) | null = null;
+    private messageHandler: ((message: Message) => void) | null = null;
 
     constructor(config: DiscordConfig) {
         this.config = config;
@@ -39,9 +40,18 @@ export class DiscordBot {
         this.interactionHandler = handler;
     }
 
+    /** Set a handler for incoming messages. */
+    onMessage(handler: (message: Message) => void): void {
+        this.messageHandler = handler;
+    }
+
     async start(): Promise<void> {
         this.client.on(Events.InteractionCreate, (interaction) => {
             this.interactionHandler?.(interaction);
+        });
+
+        this.client.on(Events.MessageCreate, (message) => {
+            this.messageHandler?.(message);
         });
 
         await this.client.login(this.config.token);
@@ -82,6 +92,29 @@ export class DiscordBot {
         const channel = this.requireChannel();
         const attachment = new AttachmentBuilder(fileContent, { name: fileName });
         return channel.send({ content: text, files: [attachment], components });
+    }
+
+    /** Send typing indicator to the target channel. */
+    async sendTyping(): Promise<void> {
+        const channel = this.requireChannel();
+        await channel.sendTyping();
+    }
+
+    /** Add an emoji reaction to a specific message. */
+    async reactToMessage(messageId: string, emoji: string): Promise<void> {
+        const channel = this.requireChannel();
+        const message = await channel.messages.fetch(messageId);
+        await message.react(emoji);
+    }
+
+    /** Remove the bot's emoji reaction from a specific message. */
+    async removeReaction(messageId: string, emoji: string): Promise<void> {
+        const channel = this.requireChannel();
+        const message = await channel.messages.fetch(messageId);
+        const reaction = message.reactions.resolve(emoji);
+        if (reaction) {
+            await reaction.users.remove(this.client.user?.id);
+        }
     }
 
     destroy(): void {

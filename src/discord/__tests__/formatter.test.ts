@@ -20,14 +20,74 @@ describe('formatter', () => {
         it('hard-splits lines exceeding limit', () => {
             const text = 'a'.repeat(5000);
             const chunks = chunkMessage(text, 2000);
-            expect(chunks).toHaveLength(3);
-            expect(chunks[0]).toHaveLength(2000);
-            expect(chunks[1]).toHaveLength(2000);
-            expect(chunks[2]).toHaveLength(1000);
+            // All chunks must be within limit
+            for (const chunk of chunks) {
+                expect(chunk.length).toBeLessThanOrEqual(2000);
+            }
+            // All content preserved
+            expect(chunks.join('')).toBe(text);
         });
 
         it('returns empty array for empty string', () => {
             expect(chunkMessage('')).toEqual([]);
+        });
+
+        it('closes and reopens code fence when splitting inside a code block', () => {
+            const code = 'line\n'.repeat(600); // ~3000 chars, forces split
+            const text = `Before\n\`\`\`typescript\n${code}\`\`\`\nAfter`;
+            const chunks = chunkMessage(text, 2000);
+            expect(chunks.length).toBeGreaterThanOrEqual(2);
+            // Every chunk should have balanced code fences
+            for (const chunk of chunks) {
+                const fenceCount = (chunk.match(/^```/gm) || []).length;
+                expect(fenceCount % 2).toBe(0);
+            }
+            // Second chunk should reopen with same language
+            expect(chunks[1]).toMatch(/^```typescript\n/);
+        });
+
+        it('closes and reopens diff code fence when splitting', () => {
+            const diffLines = Array.from({ length: 200 }, (_, i) =>
+                i % 2 === 0 ? `- old line ${i}` : `+ new line ${i}`,
+            ).join('\n');
+            const text = `Header\n\`\`\`diff\n${diffLines}\n\`\`\``;
+            const chunks = chunkMessage(text, 2000);
+            expect(chunks.length).toBeGreaterThanOrEqual(2);
+            for (const chunk of chunks) {
+                const fenceCount = (chunk.match(/^```/gm) || []).length;
+                expect(fenceCount % 2).toBe(0);
+            }
+            expect(chunks[1]).toMatch(/^```diff\n/);
+        });
+
+        it('handles code fence without language specifier', () => {
+            const code = 'x\n'.repeat(1500);
+            const text = `\`\`\`\n${code}\`\`\``;
+            const chunks = chunkMessage(text, 2000);
+            expect(chunks.length).toBeGreaterThanOrEqual(2);
+            for (const chunk of chunks) {
+                const fenceCount = (chunk.match(/^```/gm) || []).length;
+                expect(fenceCount % 2).toBe(0);
+            }
+            expect(chunks[1]).toMatch(/^```\n/);
+        });
+
+        it('does not modify chunks that have no open code fence', () => {
+            const line = 'x'.repeat(1500);
+            const text = `${line}\n${'y'.repeat(1500)}`;
+            const chunks = chunkMessage(text, 2000);
+            expect(chunks).toHaveLength(2);
+            // Content is preserved (though split point may shift due to fence reserve)
+            expect(chunks[0] + '\n' + chunks[1]).toBe(text);
+        });
+
+        it('never produces chunks exceeding the limit', () => {
+            const code = 'line of code here\n'.repeat(200);
+            const text = `Header\n\`\`\`typescript\n${code}\`\`\`\nFooter`;
+            const chunks = chunkMessage(text, 2000);
+            for (const chunk of chunks) {
+                expect(chunk.length).toBeLessThanOrEqual(2000);
+            }
         });
     });
 
