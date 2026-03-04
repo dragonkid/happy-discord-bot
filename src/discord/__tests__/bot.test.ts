@@ -2,8 +2,18 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DiscordBot } from '../bot.js';
 
 // --- Mock discord.js ---
+const mockReactionUsers = { remove: vi.fn().mockResolvedValue(undefined) };
+const mockReaction = { users: mockReactionUsers };
+const mockReactions = { resolve: vi.fn().mockReturnValue(mockReaction) };
+const mockFetchedMessage = {
+    react: vi.fn().mockResolvedValue(undefined),
+    reactions: mockReactions,
+};
+
 const mockChannel = {
     send: vi.fn().mockResolvedValue({ id: 'msg-1' }),
+    sendTyping: vi.fn().mockResolvedValue(undefined),
+    messages: { fetch: vi.fn().mockResolvedValue(mockFetchedMessage) },
     isTextBased: vi.fn().mockReturnValue(true),
 };
 
@@ -14,7 +24,7 @@ const mockClient = {
     channels: {
         fetch: vi.fn().mockResolvedValue(mockChannel),
     },
-    user: { tag: 'TestBot#1234' },
+    user: { tag: 'TestBot#1234', id: 'bot-user-id' },
 };
 
 vi.mock('discord.js', () => ({
@@ -106,6 +116,36 @@ describe('DiscordBot', () => {
             await bot.start();
             bot.destroy();
             expect(mockClient.destroy).toHaveBeenCalledOnce();
+        });
+    });
+
+    describe('sendTyping', () => {
+        it('calls channel.sendTyping()', async () => {
+            await bot.start();
+            await bot.sendTyping();
+            expect(mockChannel.sendTyping).toHaveBeenCalledOnce();
+        });
+
+        it('throws if not started', async () => {
+            await expect(bot.sendTyping()).rejects.toThrow('Bot not started');
+        });
+    });
+
+    describe('reactToMessage', () => {
+        it('fetches message and adds reaction', async () => {
+            await bot.start();
+            await bot.reactToMessage('msg-123', '🤔');
+            expect(mockChannel.messages.fetch).toHaveBeenCalledWith('msg-123');
+            expect(mockFetchedMessage.react).toHaveBeenCalledWith('🤔');
+        });
+    });
+
+    describe('removeReaction', () => {
+        it('fetches message and removes bot reaction', async () => {
+            await bot.start();
+            await bot.removeReaction('msg-123', '🤔');
+            expect(mockChannel.messages.fetch).toHaveBeenCalledWith('msg-123');
+            expect(mockReactionUsers.remove).toHaveBeenCalledWith(mockClient.user.id);
         });
     });
 });

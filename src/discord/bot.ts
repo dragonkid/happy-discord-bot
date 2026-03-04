@@ -84,6 +84,29 @@ export class DiscordBot {
         return channel.send({ content: text, files: [attachment], components });
     }
 
+    /** Send typing indicator to the target channel. */
+    async sendTyping(): Promise<void> {
+        const channel = this.requireChannel();
+        await channel.sendTyping();
+    }
+
+    /** Add an emoji reaction to a specific message. */
+    async reactToMessage(messageId: string, emoji: string): Promise<void> {
+        const channel = this.requireChannel();
+        const message = await channel.messages.fetch(messageId);
+        await message.react(emoji);
+    }
+
+    /** Remove the bot's emoji reaction from a specific message. */
+    async removeReaction(messageId: string, emoji: string): Promise<void> {
+        const channel = this.requireChannel();
+        const message = await channel.messages.fetch(messageId);
+        const reaction = message.reactions.resolve(emoji);
+        if (reaction) {
+            await reaction.users.remove(this.client.user?.id);
+        }
+    }
+
     destroy(): void {
         this.client.destroy();
         this.channel = null;
