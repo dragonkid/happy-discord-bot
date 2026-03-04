@@ -21,20 +21,20 @@ Bot connects as `user-scoped` client (monitors all sessions), unlike `session-sc
 
 ```
 src/
-├── index.ts              # Entry point
-├── config.ts             # Env var loading
-├── bridge.ts             # Glue: Happy events ↔ Discord messages/buttons
+├── index.ts              # Entry point, message forwarding + mention filtering
+├── config.ts             # Env var loading (incl. requireMention)
+├── bridge.ts             # Glue: Happy events ↔ Discord messages/buttons + typing/emoji
 ├── happy/
 │   ├── client.ts         # HappyClient: Socket.IO + sessionRPC + HTTP
 │   ├── permission-cache.ts  # Tool approval caching (allowedTools, BashLiterals)
 │   ├── state-tracker.ts  # agentState monitoring, permission request detection
 │   └── types.ts          # RPC request/response types
 ├── discord/
-│   ├── bot.ts            # Discord client init + event routing
+│   ├── bot.ts            # Discord client init + event routing + typing/reaction methods
 │   ├── commands.ts       # Slash command handlers
-│   ├── buttons.ts        # Button builders (permission, AskUserQuestion, session)
+│   ├── buttons.ts        # Button builders (permission, AskUserQuestion, session, ExitPlanMode)
 │   ├── interactions.ts   # Button interaction handlers (ask, session, ExitPlanMode)
-│   ├── formatter.ts      # Message chunking, code blocks, diff formatting
+│   ├── formatter.ts      # Code fence-aware message chunking, code blocks, diff formatting
 │   └── deploy-commands.ts  # One-time slash command deployment
 └── vendor/               # Vendored from happy-agent (~800 lines)
     ├── encryption.ts     # AES-256-GCM + XSalsa20 + key derivation
@@ -78,6 +78,16 @@ socket.emitWithAck('rpc-call', {
    - Without feedback (`reason` absent) → CLI aborts, waits for new user input
 6. CLI always denies the tool call itself (PLAN_FAKE_REJECT), restarts with new mode
 
+### Typing Indicator + Emoji Reactions
+Two independent signal sources:
+- **Ephemeral activity** (`ephemeral` Socket.IO event, `{ type: 'activity', thinking: boolean }`) → typing loop (8s interval) + 🤔 emoji
+- **Session protocol** (`new-message` with `role: 'session'`, `ev.t: 'tool-call-start'`/`'tool-call-end'`) → 🔧 emoji
+
+Both react on user's last Discord message (`lastUserMsgId`). `/send` commands have no message ID — typing only.
+
+### Direct Message Forwarding
+User messages in the configured channel auto-forward to CLI via `bridge.sendMessage()`. Optional `DISCORD_REQUIRE_MENTION=true` requires @bot mention (strips mention text before forwarding).
+
 ### PermissionCache Logic (replicate from permissionHandler.ts:116-165)
 Check order: Bash literal → Bash prefix → tool whitelist → permissionMode
 - `bypassPermissions` → approve all
@@ -107,6 +117,7 @@ Required env vars (via `.env` or shell):
 - `DISCORD_TOKEN` — Bot token from Discord Developer Portal
 - `DISCORD_CHANNEL_ID` — Target channel for bot messages
 - `DISCORD_USER_ID` — Owner's Discord user ID (single-user access control)
+- `DISCORD_REQUIRE_MENTION` — (optional, default `false`) Require @bot mention to forward messages
 
 Happy credentials (one of):
 - `HAPPY_TOKEN` + `HAPPY_SECRET` env vars, or
@@ -131,6 +142,12 @@ npm run test:watch       # Vitest (watch mode)
 - 10 test suites, 203 tests
 - Test files: `src/**/__tests__/*.test.ts`
 - All Happy/Discord dependencies mocked (no real connections needed)
+
+## Gotchas
+
+- **`agentState` has no `state` field** — only `controlledByUser`, `requests`, `completedRequests`. Thinking status comes from `ephemeral` Socket.IO events, not agentState.
+- **`chunkMessage` reserves 24 chars** — for code fence close/reopen overhead when splitting. Final chunks may be slightly under 2000 chars.
+- **Discord `sendTyping()` has no stop API** — typing disappears on timeout (~10s) or when bot sends a message.
 
 ## Vendor Modules
 
