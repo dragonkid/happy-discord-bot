@@ -110,4 +110,42 @@ describe('PermissionCache', () => {
             expect(cache.mode).toBe('plan');
         });
     });
+
+    describe('per-session mode persistence', () => {
+        it('saveSessionMode stores mode for a session', () => {
+            cache.saveSessionMode('sess-1', 'acceptEdits');
+            expect(cache.getSessionMode('sess-1')).toBe('acceptEdits');
+        });
+
+        it('getSessionMode returns default for unknown session', () => {
+            expect(cache.getSessionMode('unknown')).toBe('default');
+        });
+
+        it('restoreSession resets cache then restores saved mode', () => {
+            cache.applyApproval(['Edit']);
+            cache.saveSessionMode('sess-1', 'bypassPermissions');
+            cache.restoreSession('sess-1');
+            expect(cache.mode).toBe('bypassPermissions');
+            expect(cache.isAutoApproved('Edit', {})).toBe(true); // bypassPermissions approves all
+        });
+
+        it('restoreSession with no saved mode resets to default', () => {
+            cache.setMode('acceptEdits');
+            cache.restoreSession('unknown-session');
+            expect(cache.mode).toBe('default');
+        });
+
+        it('loadSessionModes bulk-loads from persisted data', () => {
+            cache.loadSessionModes({ s1: 'acceptEdits', s2: 'plan' });
+            expect(cache.getSessionMode('s1')).toBe('acceptEdits');
+            expect(cache.getSessionMode('s2')).toBe('plan');
+        });
+
+        it('getAllSessionModes returns current map', () => {
+            cache.saveSessionMode('s1', 'acceptEdits');
+            cache.saveSessionMode('s2', 'plan');
+            const modes = cache.getAllSessionModes();
+            expect(modes).toEqual({ s1: 'acceptEdits', s2: 'plan' });
+        });
+    });
 });

@@ -5,6 +5,7 @@ export class PermissionCache {
     private bashLiterals = new Set<string>();
     private bashPrefixes = new Set<string>();
     private _mode: PermissionMode = 'default';
+    private sessionModes = new Map<string, PermissionMode>();
 
     get mode(): PermissionMode {
         return this._mode;
@@ -50,6 +51,29 @@ export class PermissionCache {
         this.bashLiterals.clear();
         this.bashPrefixes.clear();
         this._mode = 'default';
+    }
+
+    saveSessionMode(sessionId: string, mode: PermissionMode): void {
+        this.sessionModes.set(sessionId, mode);
+    }
+
+    getSessionMode(sessionId: string): PermissionMode {
+        return this.sessionModes.get(sessionId) ?? 'default';
+    }
+
+    restoreSession(sessionId: string): void {
+        this.reset();
+        this._mode = this.sessionModes.get(sessionId) ?? 'default';
+    }
+
+    loadSessionModes(modes: Record<string, PermissionMode>): void {
+        for (const [id, mode] of Object.entries(modes)) {
+            this.sessionModes.set(id, mode);
+        }
+    }
+
+    getAllSessionModes(): Record<string, PermissionMode> {
+        return Object.fromEntries(this.sessionModes);
     }
 
     private parseTool(permission: string): void {
