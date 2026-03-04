@@ -14,6 +14,7 @@ interface HappyClientEvents {
     disconnected: [reason: string];
     connect_error: [error: Error];
     update: [data: unknown];
+    ephemeral: [data: unknown];
 }
 
 // --- HappyClient ---
@@ -54,6 +55,9 @@ export class HappyClient extends EventEmitter<HappyClientEvents> {
         this.socket.onAny((event: string, data: unknown) => {
             if (event === 'update') {
                 this.emit('update', data);
+            }
+            if (event === 'ephemeral') {
+                this.emit('ephemeral', data);
             }
         });
     }

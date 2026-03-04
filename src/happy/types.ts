@@ -50,7 +50,7 @@ export interface AskUserQuestionInput {
 // --- Agent state ---
 
 export interface AgentState {
-    state?: 'idle' | 'thinking' | 'tool_use';
+    controlledByUser?: boolean | null;
     requests?: Record<string, PermissionRequest>;
     completedRequests?: Record<string, unknown>;
 }

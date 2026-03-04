@@ -789,61 +789,41 @@ describe('Bridge', () => {
         });
     });
 
-    describe('typing indicator + emoji reactions', () => {
-        function sendStateUpdate(state: string | undefined) {
-            const agentState = { state, requests: {} };
-            const encrypted = Buffer.from(JSON.stringify(agentState)).toString('base64');
-            bridge.processUpdate({
-                body: {
-                    t: 'update-session',
-                    id: 'sess-1',
-                    agentState: { version: 1, value: encrypted },
-                },
-            });
+    describe('typing indicator + emoji reactions (ephemeral)', () => {
+        function sendEphemeral(sessionId: string, thinking: boolean) {
+            bridge.handleEphemeralActivity(sessionId, thinking);
         }
 
-        it('starts typing loop when state changes to thinking', async () => {
+        it('starts typing loop when thinking becomes true', async () => {
             await bridge.start();
             bridge.setActiveSession('sess-1');
-            sendStateUpdate('thinking');
+            sendEphemeral('sess-1', true);
             expect(discord.sendTyping).toHaveBeenCalledOnce();
         });
 
-        it('adds emoji when state is thinking', async () => {
+        it('adds 🤔 emoji when thinking', async () => {
             await bridge.start();
             bridge.setActiveSession('sess-1');
             bridge.setLastUserMessageId('msg-u1');
-            sendStateUpdate('thinking');
-            expect(discord.reactToMessage).toHaveBeenCalledWith('msg-u1', '\u{1F914}');
+            sendEphemeral('sess-1', true);
+            expect(discord.reactToMessage).toHaveBeenCalledWith('msg-u1', '🤔');
         });
 
-        it('switches emoji from thinking to tool_use', async () => {
+        it('removes emoji and stops typing when thinking stops', async () => {
             await bridge.start();
             bridge.setActiveSession('sess-1');
             bridge.setLastUserMessageId('msg-u1');
-            sendStateUpdate('thinking');
+            sendEphemeral('sess-1', true);
             vi.clearAllMocks();
-            sendStateUpdate('tool_use');
-            expect(discord.removeReaction).toHaveBeenCalledWith('msg-u1', '\u{1F914}');
-            expect(discord.reactToMessage).toHaveBeenCalledWith('msg-u1', '\u{1F527}');
-        });
-
-        it('removes emoji and stops typing on idle', async () => {
-            await bridge.start();
-            bridge.setActiveSession('sess-1');
-            bridge.setLastUserMessageId('msg-u1');
-            sendStateUpdate('thinking');
-            vi.clearAllMocks();
-            sendStateUpdate('idle');
-            expect(discord.removeReaction).toHaveBeenCalledWith('msg-u1', '\u{1F914}');
-            // No new sendTyping after idle
+            sendEphemeral('sess-1', false);
+            expect(discord.removeReaction).toHaveBeenCalledWith('msg-u1', '🤔');
             expect(discord.sendTyping).not.toHaveBeenCalled();
         });
 
-        it('repeats sendTyping every 8s while active', async () => {
+        it('repeats sendTyping every 8s while thinking', async () => {
             await bridge.start();
             bridge.setActiveSession('sess-1');
-            sendStateUpdate('thinking');
+            sendEphemeral('sess-1', true);
             expect(discord.sendTyping).toHaveBeenCalledTimes(1);
             vi.advanceTimersByTime(8_000);
             expect(discord.sendTyping).toHaveBeenCalledTimes(2);
@@ -851,12 +831,12 @@ describe('Bridge', () => {
             expect(discord.sendTyping).toHaveBeenCalledTimes(3);
         });
 
-        it('stops typing loop on idle', async () => {
+        it('stops typing loop when thinking stops', async () => {
             await bridge.start();
             bridge.setActiveSession('sess-1');
-            sendStateUpdate('thinking');
+            sendEphemeral('sess-1', true);
             expect(discord.sendTyping).toHaveBeenCalledTimes(1);
-            sendStateUpdate('idle');
+            sendEphemeral('sess-1', false);
             (discord.sendTyping as any).mockClear();
             vi.advanceTimersByTime(16_000);
             expect(discord.sendTyping).not.toHaveBeenCalled();
@@ -865,8 +845,7 @@ describe('Bridge', () => {
         it('skips emoji when no lastUserMessageId', async () => {
             await bridge.start();
             bridge.setActiveSession('sess-1');
-            // No setLastUserMessageId call
-            sendStateUpdate('thinking');
+            sendEphemeral('sess-1', true);
             expect(discord.sendTyping).toHaveBeenCalled();
             expect(discord.reactToMessage).not.toHaveBeenCalled();
         });
@@ -875,11 +854,10 @@ describe('Bridge', () => {
             await bridge.start();
             bridge.setActiveSession('sess-1');
             bridge.setLastUserMessageId('msg-u1');
-            sendStateUpdate('thinking');
+            sendEphemeral('sess-1', true);
             vi.clearAllMocks();
             bridge.setActiveSession('sess-2');
-            // Should have removed emoji and stopped loop
-            expect(discord.removeReaction).toHaveBeenCalledWith('msg-u1', '\u{1F914}');
+            expect(discord.removeReaction).toHaveBeenCalledWith('msg-u1', '🤔');
             vi.advanceTimersByTime(16_000);
             expect(discord.sendTyping).not.toHaveBeenCalled();
         });
@@ -888,11 +866,10 @@ describe('Bridge', () => {
             await bridge.start();
             bridge.setActiveSession('sess-1');
             bridge.setLastUserMessageId('msg-u1');
-            sendStateUpdate('thinking');
+            sendEphemeral('sess-1', true);
             vi.clearAllMocks();
-            // Send a state update with a permission request
+            // Permission request arrives via agentState
             const agentState = {
-                state: 'thinking',
                 requests: { 'req-1': { tool: 'Bash', arguments: { command: 'ls' }, createdAt: Date.now() } },
             };
             const encrypted = Buffer.from(JSON.stringify(agentState)).toString('base64');
@@ -903,20 +880,25 @@ describe('Bridge', () => {
                     agentState: { version: 1, value: encrypted },
                 },
             });
-            // Permission request should stop typing + remove emoji
-            expect(discord.removeReaction).toHaveBeenCalledWith('msg-u1', '\u{1F914}');
-            // Typing should NOT have restarted despite state still being 'thinking'
+            expect(discord.removeReaction).toHaveBeenCalledWith('msg-u1', '🤔');
             expect(discord.sendTyping).not.toHaveBeenCalled();
         });
 
-        it('does not duplicate state on same state', async () => {
+        it('ignores ephemeral for non-active session', async () => {
             await bridge.start();
             bridge.setActiveSession('sess-1');
-            sendStateUpdate('thinking');
+            sendEphemeral('sess-other', true);
+            expect(discord.sendTyping).not.toHaveBeenCalled();
+        });
+
+        it('deduplicates same thinking state', async () => {
+            await bridge.start();
+            bridge.setActiveSession('sess-1');
+            sendEphemeral('sess-1', true);
             vi.clearAllMocks();
-            sendStateUpdate('thinking');
-            // No duplicate sendTyping start or emoji add
+            sendEphemeral('sess-1', true);
             expect(discord.reactToMessage).not.toHaveBeenCalled();
+            expect(discord.sendTyping).not.toHaveBeenCalled();
         });
     });
 
@@ -944,7 +926,7 @@ describe('Bridge', () => {
             await bridge.sendMessage('hello');
 
             // Simulate agentState update before timeout
-            const agentState = { state: 'thinking' };
+            const agentState = { controlledByUser: false };
             const encrypted = Buffer.from(JSON.stringify(agentState)).toString('base64');
             bridge.processUpdate({
                 body: {

@@ -14,7 +14,7 @@ import type { PermissionRequest, PermissionResponse, PermissionMode, AgentState,
 const RESPONSE_TIMEOUT_MS = 30_000;
 const DISCONNECT_DEBOUNCE_MS = 5_000;
 const TYPING_INTERVAL_MS = 8_000;
-const STATE_EMOJI: Record<string, string> = { thinking: '\u{1F914}', tool_use: '\u{1F527}' };
+const THINKING_EMOJI = '🤔';
 
 export class Bridge {
     private readonly happy: HappyClient;
@@ -28,9 +28,9 @@ export class Bridge {
     private disconnectTimer: ReturnType<typeof setTimeout> | null = null;
     private initialConnectDone = false;
     private typingInterval: ReturnType<typeof setInterval> | null = null;
-    private currentStateEmoji: string | null = null;
+    private thinkingEmoji = false;
     private lastUserMsgId: string | null = null;
-    private previousAgentState: string = 'idle';
+    private isThinking = false;
 
     constructor(
         happy: HappyClient,
@@ -48,8 +48,8 @@ export class Bridge {
 
     setActiveSession(sessionId: string): void {
         this.stopTypingLoop();
-        this.updateStateEmoji(null);
-        this.previousAgentState = 'idle';
+        this.updateThinkingEmoji(false);
+        this.isThinking = false;
         this.lastUserMsgId = null;
         this.activeSessionId = sessionId;
         this.permissionCache.reset();
@@ -66,6 +66,21 @@ export class Bridge {
 
     setLastUserMessageId(messageId: string): void {
         this.lastUserMsgId = messageId;
+    }
+
+    /** Handle ephemeral activity update (session-alive keepalive). */
+    handleEphemeralActivity(sessionId: string, thinking: boolean): void {
+        if (sessionId !== this.activeSessionId) return;
+        if (thinking === this.isThinking) return;
+
+        if (thinking) {
+            this.startTypingLoop();
+            this.updateThinkingEmoji(true);
+        } else {
+            this.stopTypingLoop();
+            this.updateThinkingEmoji(false);
+        }
+        this.isThinking = thinking;
     }
 
     async sendMessage(text: string): Promise<void> {
@@ -110,10 +125,17 @@ export class Bridge {
         // Register listener before loading sessions to avoid missing events
         this.happy.on('update', (data) => this.processUpdate(data));
 
+        this.happy.on('ephemeral', (data) => {
+            const update = data as { type?: string; id?: string; thinking?: boolean };
+            if (update?.type === 'activity' && update.id && typeof update.thinking === 'boolean') {
+                this.handleEphemeralActivity(update.id, update.thinking);
+            }
+        });
+
         this.stateTracker.on('permission-request', (sessionId, request) => {
             this.stopTypingLoop();
-            this.updateStateEmoji(null);
-            this.previousAgentState = 'idle';
+            this.updateThinkingEmoji(false);
+            this.isThinking = false;
             this.handlePermissionRequest(sessionId, request).catch((err) => {
                 console.error('[Bridge] Error handling permission request:', err);
             });
@@ -297,19 +319,18 @@ export class Bridge {
         }
     }
 
-    private updateStateEmoji(state: string | null): void {
-        const newEmoji = state ? (STATE_EMOJI[state] ?? null) : null;
-        if (newEmoji === this.currentStateEmoji) return;
+    private updateThinkingEmoji(thinking: boolean): void {
+        if (thinking === this.thinkingEmoji) return;
 
-        if (this.lastUserMsgId && this.currentStateEmoji) {
-            this.discord.removeReaction(this.lastUserMsgId, this.currentStateEmoji).catch((err) =>
+        if (this.lastUserMsgId && this.thinkingEmoji) {
+            this.discord.removeReaction(this.lastUserMsgId, THINKING_EMOJI).catch((err) =>
                 console.error('[Bridge] removeReaction failed:', err));
         }
-        if (this.lastUserMsgId && newEmoji) {
-            this.discord.reactToMessage(this.lastUserMsgId, newEmoji).catch((err) =>
+        if (this.lastUserMsgId && thinking) {
+            this.discord.reactToMessage(this.lastUserMsgId, THINKING_EMOJI).catch((err) =>
                 console.error('[Bridge] reactToMessage failed:', err));
         }
-        this.currentStateEmoji = newEmoji;
+        this.thinkingEmoji = thinking;
     }
 
     private async handleSessionUpdate(
@@ -333,28 +354,6 @@ export class Bridge {
         }
 
         this.stateTracker.handleSessionUpdate(sessionId, decrypted as AgentState);
-
-        // --- Typing indicator + emoji ---
-        // Skip if permission requests present (stateTracker listener already stopped typing)
-        const agentState = decrypted as AgentState;
-        const hasPermissionRequests = Object.keys(agentState.requests ?? {}).length > 0;
-        const newState = agentState.state ?? 'idle';
-        if (newState !== this.previousAgentState && !hasPermissionRequests) {
-            const wasActive = this.previousAgentState !== 'idle';
-            const isActive = newState !== 'idle';
-
-            if (!wasActive && isActive) {
-                this.startTypingLoop();
-            }
-            if (wasActive && !isActive) {
-                this.stopTypingLoop();
-                this.updateStateEmoji(null);
-            }
-            if (isActive) {
-                this.updateStateEmoji(newState);
-            }
-            this.previousAgentState = newState;
-        }
     }
 
     private async handlePermissionRequest(
