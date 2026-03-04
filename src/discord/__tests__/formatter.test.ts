@@ -20,10 +20,12 @@ describe('formatter', () => {
         it('hard-splits lines exceeding limit', () => {
             const text = 'a'.repeat(5000);
             const chunks = chunkMessage(text, 2000);
-            expect(chunks).toHaveLength(3);
-            expect(chunks[0]).toHaveLength(2000);
-            expect(chunks[1]).toHaveLength(2000);
-            expect(chunks[2]).toHaveLength(1000);
+            // All chunks must be within limit
+            for (const chunk of chunks) {
+                expect(chunk.length).toBeLessThanOrEqual(2000);
+            }
+            // All content preserved
+            expect(chunks.join('')).toBe(text);
         });
 
         it('returns empty array for empty string', () => {
@@ -75,8 +77,17 @@ describe('formatter', () => {
             const text = `${line}\n${'y'.repeat(1500)}`;
             const chunks = chunkMessage(text, 2000);
             expect(chunks).toHaveLength(2);
-            expect(chunks[0]).toBe(line);
-            expect(chunks[1]).toBe('y'.repeat(1500));
+            // Content is preserved (though split point may shift due to fence reserve)
+            expect(chunks[0] + '\n' + chunks[1]).toBe(text);
+        });
+
+        it('never produces chunks exceeding the limit', () => {
+            const code = 'line of code here\n'.repeat(200);
+            const text = `Header\n\`\`\`typescript\n${code}\`\`\`\nFooter`;
+            const chunks = chunkMessage(text, 2000);
+            for (const chunk of chunks) {
+                expect(chunk.length).toBeLessThanOrEqual(2000);
+            }
         });
     });
 

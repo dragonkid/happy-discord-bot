@@ -24,7 +24,11 @@ export function chunkMessage(text: string, limit = DISCORD_MAX): string[] {
     if (!text) return [];
     if (text.length <= limit) return [text];
 
-    // First pass: split by size
+    // Reserve space for fence overhead: closing "\n```" (4) + reopening "```language\n" (up to ~20)
+    const FENCE_RESERVE = 24;
+    const splitLimit = limit - FENCE_RESERVE;
+
+    // First pass: split by size (with reserve for fence fixup)
     const rawChunks: string[] = [];
     let remaining = text;
 
@@ -34,7 +38,7 @@ export function chunkMessage(text: string, limit = DISCORD_MAX): string[] {
             break;
         }
 
-        const slice = remaining.slice(0, limit);
+        const slice = remaining.slice(0, splitLimit);
         const newlineIdx = slice.lastIndexOf('\n');
 
         if (newlineIdx > 0) {
@@ -42,7 +46,7 @@ export function chunkMessage(text: string, limit = DISCORD_MAX): string[] {
             remaining = remaining.slice(newlineIdx + 1);
         } else {
             rawChunks.push(slice);
-            remaining = remaining.slice(limit);
+            remaining = remaining.slice(splitLimit);
         }
     }
 
