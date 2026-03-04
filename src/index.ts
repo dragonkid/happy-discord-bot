@@ -48,6 +48,12 @@ async function main(): Promise<void> {
         console.log('[Bridge] No active sessions found');
     }
 
+    discord.onMessage((message) => {
+        if (message.author.id === config.discord.userId && message.channelId === config.discord.channelId) {
+            bridge.setLastUserMessageId(message.id);
+        }
+    });
+
     discord.onInteraction(async (interaction) => {
         // Slash commands
         if (interaction.isChatInputCommand()) {

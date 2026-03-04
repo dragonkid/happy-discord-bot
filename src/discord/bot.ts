@@ -22,6 +22,7 @@ export class DiscordBot {
     private readonly client: Client;
     private channel: TextChannel | null = null;
     private interactionHandler: ((interaction: Interaction) => void) | null = null;
+    private messageHandler: ((message: Message) => void) | null = null;
 
     constructor(config: DiscordConfig) {
         this.config = config;
@@ -39,9 +40,18 @@ export class DiscordBot {
         this.interactionHandler = handler;
     }
 
+    /** Set a handler for incoming messages. */
+    onMessage(handler: (message: Message) => void): void {
+        this.messageHandler = handler;
+    }
+
     async start(): Promise<void> {
         this.client.on(Events.InteractionCreate, (interaction) => {
             this.interactionHandler?.(interaction);
+        });
+
+        this.client.on(Events.MessageCreate, (message) => {
+            this.messageHandler?.(message);
         });
 
         await this.client.login(this.config.token);

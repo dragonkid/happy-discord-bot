@@ -33,6 +33,7 @@ vi.mock('discord.js', () => ({
     Events: {
         ClientReady: 'ready',
         InteractionCreate: 'interactionCreate',
+        MessageCreate: 'messageCreate',
     },
     ChannelType: { GuildText: 0 },
     AttachmentBuilder: vi.fn(function (this: any, content: any, opts: any) {
@@ -63,6 +64,11 @@ describe('DiscordBot', () => {
         it('registers interaction handler', async () => {
             await bot.start();
             expect(mockClient.on).toHaveBeenCalledWith('interactionCreate', expect.any(Function));
+        });
+
+        it('registers message handler', async () => {
+            await bot.start();
+            expect(mockClient.on).toHaveBeenCalledWith('messageCreate', expect.any(Function));
         });
     });
 
