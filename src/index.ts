@@ -44,8 +44,8 @@ async function main(): Promise<void> {
     const permissionCache = new PermissionCache();
     const store = new Store(join(homedir(), '.happy-discord-bot'));
     const savedState = await store.load();
-    permissionCache.loadSessionModes(savedState.sessionModes);
-    console.log(`[Store] Loaded ${Object.keys(savedState.sessionModes).length} saved session mode(s)`);
+    permissionCache.loadSessions(savedState.sessions);
+    console.log(`[Store] Loaded ${Object.keys(savedState.sessions).length} saved session(s)`);
     const bridge = new Bridge(happy, discord, config, stateTracker, permissionCache);
     bridge.setStore(store);
     await bridge.start();
@@ -220,6 +220,7 @@ async function main(): Promise<void> {
                         }
                         await bridge.approvePermission(sessionId, requestId, undefined, [toolIdentifier]);
                         permissionCache.applyApproval([toolIdentifier]);
+                        bridge.persistModes();
                         break;
                     }
                     case 'no':

@@ -111,41 +111,61 @@ describe('PermissionCache', () => {
         });
     });
 
-    describe('per-session mode persistence', () => {
-        it('saveSessionMode stores mode for a session', () => {
-            cache.saveSessionMode('sess-1', 'acceptEdits');
-            expect(cache.getSessionMode('sess-1')).toBe('acceptEdits');
-        });
-
-        it('getSessionMode returns default for unknown session', () => {
-            expect(cache.getSessionMode('unknown')).toBe('default');
-        });
-
-        it('restoreSession resets cache then restores saved mode', () => {
-            cache.applyApproval(['Edit']);
-            cache.saveSessionMode('sess-1', 'bypassPermissions');
+    describe('per-session persistence', () => {
+        it('saveSession + restoreSession round-trips mode', () => {
+            cache.setMode('acceptEdits');
+            cache.saveSession('sess-1');
+            cache.reset();
             cache.restoreSession('sess-1');
-            expect(cache.mode).toBe('bypassPermissions');
-            expect(cache.isAutoApproved('Edit', {})).toBe(true); // bypassPermissions approves all
+            expect(cache.mode).toBe('acceptEdits');
         });
 
-        it('restoreSession with no saved mode resets to default', () => {
+        it('saveSession + restoreSession round-trips allowedTools', () => {
+            cache.applyApproval(['Edit', 'Glob']);
+            cache.saveSession('sess-1');
+            cache.reset();
+            cache.restoreSession('sess-1');
+            expect(cache.isAutoApproved('Edit', {})).toBe(true);
+            expect(cache.isAutoApproved('Glob', {})).toBe(true);
+        });
+
+        it('saveSession + restoreSession round-trips bash permissions', () => {
+            cache.applyApproval(['Bash(git status)', 'Bash(npm:*)']);
+            cache.saveSession('sess-1');
+            cache.reset();
+            cache.restoreSession('sess-1');
+            expect(cache.isAutoApproved('Bash', { command: 'git status' })).toBe(true);
+            expect(cache.isAutoApproved('Bash', { command: 'npm test' })).toBe(true);
+            expect(cache.isAutoApproved('Bash', { command: 'rm -rf' })).toBe(false);
+        });
+
+        it('restoreSession with no saved state resets to default', () => {
             cache.setMode('acceptEdits');
             cache.restoreSession('unknown-session');
             expect(cache.mode).toBe('default');
         });
 
-        it('loadSessionModes bulk-loads from persisted data', () => {
-            cache.loadSessionModes({ s1: 'acceptEdits', s2: 'plan' });
-            expect(cache.getSessionMode('s1')).toBe('acceptEdits');
-            expect(cache.getSessionMode('s2')).toBe('plan');
+        it('loadSessions bulk-loads from persisted data', () => {
+            cache.loadSessions({
+                s1: { mode: 'acceptEdits', allowedTools: ['Edit'], bashLiterals: [], bashPrefixes: [] },
+                s2: { mode: 'plan', allowedTools: [], bashLiterals: [], bashPrefixes: [] },
+            });
+            cache.restoreSession('s1');
+            expect(cache.mode).toBe('acceptEdits');
+            expect(cache.isAutoApproved('Edit', {})).toBe(true);
         });
 
-        it('getAllSessionModes returns current map', () => {
-            cache.saveSessionMode('s1', 'acceptEdits');
-            cache.saveSessionMode('s2', 'plan');
-            const modes = cache.getAllSessionModes();
-            expect(modes).toEqual({ s1: 'acceptEdits', s2: 'plan' });
+        it('getAllSessions returns all saved session states', () => {
+            cache.setMode('acceptEdits');
+            cache.applyApproval(['Edit']);
+            cache.saveSession('s1');
+            cache.reset();
+            cache.setMode('plan');
+            cache.saveSession('s2');
+            const all = cache.getAllSessions();
+            expect(all.s1.mode).toBe('acceptEdits');
+            expect(all.s1.allowedTools).toContain('Edit');
+            expect(all.s2.mode).toBe('plan');
         });
     });
 });

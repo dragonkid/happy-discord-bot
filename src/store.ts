@@ -2,8 +2,15 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { PermissionMode } from './happy/types.js';
 
+export interface SessionPermissions {
+    mode: PermissionMode;
+    allowedTools: string[];
+    bashLiterals: string[];
+    bashPrefixes: string[];
+}
+
 export interface BotState {
-    sessionModes: Record<string, PermissionMode>;
+    sessions: Record<string, SessionPermissions>;
 }
 
 const STATE_FILE = 'state.json';
@@ -21,9 +28,9 @@ export class Store {
         try {
             const raw = await readFile(this.filePath, 'utf-8');
             const parsed = JSON.parse(raw) as Partial<BotState>;
-            return { sessionModes: parsed.sessionModes ?? {} };
+            return { sessions: parsed.sessions ?? {} };
         } catch {
-            return { sessionModes: {} };
+            return { sessions: {} };
         }
     }
 

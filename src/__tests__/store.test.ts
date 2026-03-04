@@ -19,34 +19,55 @@ describe('Store', () => {
 
     it('load returns empty state when file does not exist', async () => {
         const state = await store.load();
-        expect(state).toEqual({ sessionModes: {} });
+        expect(state).toEqual({ sessions: {} });
     });
 
-    it('save then load round-trips sessionModes', async () => {
-        await store.save({ sessionModes: { s1: 'acceptEdits' } });
+    it('save then load round-trips session permissions', async () => {
+        await store.save({
+            sessions: {
+                s1: { mode: 'acceptEdits', allowedTools: ['Edit'], bashLiterals: [], bashPrefixes: [] },
+            },
+        });
         const state = await store.load();
-        expect(state.sessionModes).toEqual({ s1: 'acceptEdits' });
+        expect(state.sessions.s1).toEqual({
+            mode: 'acceptEdits',
+            allowedTools: ['Edit'],
+            bashLiterals: [],
+            bashPrefixes: [],
+        });
     });
 
     it('save creates directory if missing', async () => {
         const nested = join(dir, 'sub', 'deep');
         const nestedStore = new Store(nested);
-        await nestedStore.save({ sessionModes: { s1: 'plan' } });
+        await nestedStore.save({
+            sessions: { s1: { mode: 'plan', allowedTools: [], bashLiterals: [], bashPrefixes: [] } },
+        });
         const state = await nestedStore.load();
-        expect(state.sessionModes.s1).toBe('plan');
+        expect(state.sessions.s1.mode).toBe('plan');
     });
 
     it('load ignores corrupted file', async () => {
         await mkdir(dir, { recursive: true });
         await writeFile(join(dir, 'state.json'), 'not json');
         const state = await store.load();
-        expect(state).toEqual({ sessionModes: {} });
+        expect(state).toEqual({ sessions: {} });
     });
 
     it('save overwrites previous state', async () => {
-        await store.save({ sessionModes: { s1: 'acceptEdits' } });
-        await store.save({ sessionModes: { s2: 'bypassPermissions' } });
+        await store.save({
+            sessions: { s1: { mode: 'acceptEdits', allowedTools: [], bashLiterals: [], bashPrefixes: [] } },
+        });
+        await store.save({
+            sessions: { s2: { mode: 'bypassPermissions', allowedTools: ['Glob'], bashLiterals: ['git status'], bashPrefixes: ['npm'] } },
+        });
         const state = await store.load();
-        expect(state.sessionModes).toEqual({ s2: 'bypassPermissions' });
+        expect(state.sessions.s1).toBeUndefined();
+        expect(state.sessions.s2).toEqual({
+            mode: 'bypassPermissions',
+            allowedTools: ['Glob'],
+            bashLiterals: ['git status'],
+            bashPrefixes: ['npm'],
+        });
     });
 });

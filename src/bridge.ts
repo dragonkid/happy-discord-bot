@@ -57,7 +57,7 @@ export class Bridge {
         this.isThinking = false;
         this.lastUserMsgId = null;
         if (this.activeSessionId) {
-            this.permissionCache.saveSessionMode(this.activeSessionId, this.permissionCache.mode);
+            this.permissionCache.saveSession(this.activeSessionId);
         }
         this.activeSessionId = sessionId;
         this.permissionCache.restoreSession(sessionId);
@@ -79,9 +79,9 @@ export class Bridge {
     persistModes(): void {
         if (!this.store) return;
         if (this.activeSessionId) {
-            this.permissionCache.saveSessionMode(this.activeSessionId, this.permissionCache.mode);
+            this.permissionCache.saveSession(this.activeSessionId);
         }
-        this.store.save({ sessionModes: this.permissionCache.getAllSessionModes() }).catch((err) => {
+        this.store.save({ sessions: this.permissionCache.getAllSessions() }).catch((err) => {
             console.error('[Bridge] Failed to persist modes:', err);
         });
     }

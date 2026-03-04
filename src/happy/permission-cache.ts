@@ -1,11 +1,12 @@
 import { EDIT_TOOLS, type PermissionMode } from './types.js';
+import type { SessionPermissions } from '../store.js';
 
 export class PermissionCache {
     private allowedTools = new Set<string>();
     private bashLiterals = new Set<string>();
     private bashPrefixes = new Set<string>();
     private _mode: PermissionMode = 'default';
-    private sessionModes = new Map<string, PermissionMode>();
+    private sessionStates = new Map<string, SessionPermissions>();
 
     get mode(): PermissionMode {
         return this._mode;
@@ -53,27 +54,37 @@ export class PermissionCache {
         this._mode = 'default';
     }
 
-    saveSessionMode(sessionId: string, mode: PermissionMode): void {
-        this.sessionModes.set(sessionId, mode);
+    /** Save current permission state for a session. */
+    saveSession(sessionId: string): void {
+        this.sessionStates.set(sessionId, {
+            mode: this._mode,
+            allowedTools: [...this.allowedTools],
+            bashLiterals: [...this.bashLiterals],
+            bashPrefixes: [...this.bashPrefixes],
+        });
     }
 
-    getSessionMode(sessionId: string): PermissionMode {
-        return this.sessionModes.get(sessionId) ?? 'default';
-    }
-
+    /** Restore permission state for a session (resets first). */
     restoreSession(sessionId: string): void {
         this.reset();
-        this._mode = this.sessionModes.get(sessionId) ?? 'default';
+        const saved = this.sessionStates.get(sessionId);
+        if (!saved) return;
+        this._mode = saved.mode;
+        for (const tool of saved.allowedTools) this.allowedTools.add(tool);
+        for (const literal of saved.bashLiterals) this.bashLiterals.add(literal);
+        for (const prefix of saved.bashPrefixes) this.bashPrefixes.add(prefix);
     }
 
-    loadSessionModes(modes: Record<string, PermissionMode>): void {
-        for (const [id, mode] of Object.entries(modes)) {
-            this.sessionModes.set(id, mode);
+    /** Bulk-load session states from persisted data. */
+    loadSessions(sessions: Record<string, SessionPermissions>): void {
+        for (const [id, state] of Object.entries(sessions)) {
+            this.sessionStates.set(id, state);
         }
     }
 
-    getAllSessionModes(): Record<string, PermissionMode> {
-        return Object.fromEntries(this.sessionModes);
+    /** Export all session states for persistence. */
+    getAllSessions(): Record<string, SessionPermissions> {
+        return Object.fromEntries(this.sessionStates);
     }
 
     private parseTool(permission: string): void {
