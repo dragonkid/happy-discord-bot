@@ -969,4 +969,46 @@ describe('Bridge', () => {
             expect(calls.every(([msg]) => !msg.includes('unresponsive'))).toBe(true);
         });
     });
+
+    describe('permission mode persistence', () => {
+        it('setActiveSession restores saved mode for the new session', () => {
+            permissionCache.saveSessionMode('sess-new', 'acceptEdits');
+            bridge.setActiveSession('sess-new');
+            expect(permissionCache.mode).toBe('acceptEdits');
+        });
+
+        it('setActiveSession saves current mode before switching', () => {
+            bridge.setActiveSession('sess-1');
+            permissionCache.setMode('bypassPermissions');
+            bridge.setActiveSession('sess-2');
+            // Switching back to sess-1 should restore bypassPermissions
+            bridge.setActiveSession('sess-1');
+            expect(permissionCache.mode).toBe('bypassPermissions');
+        });
+
+        it('setActiveSession resets to default for session with no saved mode', () => {
+            bridge.setActiveSession('sess-1');
+            permissionCache.setMode('acceptEdits');
+            bridge.setActiveSession('sess-unknown');
+            expect(permissionCache.mode).toBe('default');
+        });
+
+        it('persistModes calls store.save with all session modes', async () => {
+            const mockStore = { save: vi.fn().mockResolvedValue(undefined), load: vi.fn() };
+            bridge.setStore(mockStore as any);
+            bridge.setActiveSession('sess-1');
+            permissionCache.setMode('acceptEdits');
+            bridge.persistModes();
+            expect(mockStore.save).toHaveBeenCalledWith({
+                sessionModes: expect.objectContaining({ 'sess-1': 'acceptEdits' }),
+            });
+        });
+
+        it('persistModes is no-op without store', () => {
+            // No store set — should not throw
+            bridge.setActiveSession('sess-1');
+            permissionCache.setMode('acceptEdits');
+            expect(() => bridge.persistModes()).not.toThrow();
+        });
+    });
 });

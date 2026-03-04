@@ -22,6 +22,7 @@ function makeMockBridge(): Bridge {
         sendMessage: vi.fn().mockResolvedValue(undefined),
         stopSession: vi.fn().mockResolvedValue(undefined),
         compactSession: vi.fn().mockResolvedValue(undefined),
+        persistModes: vi.fn(),
         activeSession: null,
         permissions: {
             setMode: vi.fn(),

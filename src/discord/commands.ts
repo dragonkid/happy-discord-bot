@@ -139,5 +139,6 @@ async function handleMode(interaction: ChatInputCommandInteraction, bridge: Brid
     const modeValue = interaction.options.getString('mode', true) as PermissionMode;
     await interaction.deferReply();
     bridge.permissions.setMode(modeValue);
+    bridge.persistModes();
     await interaction.editReply(`Permission mode set to: **${modeValue}**`);
 }

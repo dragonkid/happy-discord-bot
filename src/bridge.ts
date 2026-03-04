@@ -6,6 +6,7 @@ import { encrypt, encodeBase64, decrypt, decodeBase64 } from './vendor/encryptio
 import { listActiveSessions, type DecryptedSession } from './vendor/api.js';
 import type { StateTracker } from './happy/state-tracker.js';
 import type { PermissionCache } from './happy/permission-cache.js';
+import type { Store } from './store.js';
 import { buildPermissionButtons, buildAskButtons, buildExitPlanButtons } from './discord/buttons.js';
 import { formatPermissionRequest, formatAskUserQuestion, formatExitPlanMode } from './discord/formatter.js';
 import { isExitPlanMode } from './happy/types.js';
@@ -25,6 +26,7 @@ export class Bridge {
     private readonly permissionCache: PermissionCache;
     private readonly multiSelectState = new Map<string, Set<number>>();
     private activeSessionId: string | null = null;
+    private store: Store | null = null;
     private responseTimer: ReturnType<typeof setTimeout> | null = null;
     private disconnectTimer: ReturnType<typeof setTimeout> | null = null;
     private initialConnectDone = false;
@@ -54,8 +56,11 @@ export class Bridge {
         this.updateToolUseEmoji(false);
         this.isThinking = false;
         this.lastUserMsgId = null;
+        if (this.activeSessionId) {
+            this.permissionCache.saveSessionMode(this.activeSessionId, this.permissionCache.mode);
+        }
         this.activeSessionId = sessionId;
-        this.permissionCache.reset();
+        this.permissionCache.restoreSession(sessionId);
         this.multiSelectState.clear();
     }
 
@@ -65,6 +70,20 @@ export class Bridge {
 
     get permissions(): PermissionCache {
         return this.permissionCache;
+    }
+
+    setStore(store: Store): void {
+        this.store = store;
+    }
+
+    persistModes(): void {
+        if (!this.store) return;
+        if (this.activeSessionId) {
+            this.permissionCache.saveSessionMode(this.activeSessionId, this.permissionCache.mode);
+        }
+        this.store.save({ sessionModes: this.permissionCache.getAllSessionModes() }).catch((err) => {
+            console.error('[Bridge] Failed to persist modes:', err);
+        });
     }
 
     setLastUserMessageId(messageId: string): void {
