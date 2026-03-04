@@ -100,7 +100,7 @@ export function formatPermissionRequest(toolName: string, input: unknown): strin
 
             if (!oldStr && !newStr) return header;
 
-            const diff = `- ${truncate(oldStr, 150)}\n+ ${truncate(newStr, 150)}`;
+            const diff = `- ${truncate(oldStr, 200)}\n+ ${truncate(newStr, 200)}`;
             return `${header}\n${diffBlock(diff)}`;
         }
 
