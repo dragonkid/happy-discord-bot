@@ -905,6 +905,8 @@ describe('Bridge', () => {
             });
             // Permission request should stop typing + remove emoji
             expect(discord.removeReaction).toHaveBeenCalledWith('msg-u1', '\u{1F914}');
+            // Typing should NOT have restarted despite state still being 'thinking'
+            expect(discord.sendTyping).not.toHaveBeenCalled();
         });
 
         it('does not duplicate state on same state', async () => {

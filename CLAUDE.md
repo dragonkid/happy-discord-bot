@@ -128,7 +128,7 @@ npm run test:watch       # Vitest (watch mode)
 ## Testing
 
 - Framework: Vitest
-- 10 test suites, 183 tests
+- 10 test suites, 198 tests
 - Test files: `src/**/__tests__/*.test.ts`
 - All Happy/Discord dependencies mocked (no real connections needed)
 

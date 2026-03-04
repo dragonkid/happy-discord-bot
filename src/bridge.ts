@@ -335,8 +335,11 @@ export class Bridge {
         this.stateTracker.handleSessionUpdate(sessionId, decrypted as AgentState);
 
         // --- Typing indicator + emoji ---
-        const newState = (decrypted as AgentState).state ?? 'idle';
-        if (newState !== this.previousAgentState) {
+        // Skip if permission requests present (stateTracker listener already stopped typing)
+        const agentState = decrypted as AgentState;
+        const hasPermissionRequests = Object.keys(agentState.requests ?? {}).length > 0;
+        const newState = agentState.state ?? 'idle';
+        if (newState !== this.previousAgentState && !hasPermissionRequests) {
             const wasActive = this.previousAgentState !== 'idle';
             const isActive = newState !== 'idle';
 
