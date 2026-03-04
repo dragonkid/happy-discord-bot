@@ -13,6 +13,8 @@ import type { PermissionRequest, PermissionResponse, PermissionMode, AgentState,
 
 const RESPONSE_TIMEOUT_MS = 30_000;
 const DISCONNECT_DEBOUNCE_MS = 5_000;
+const TYPING_INTERVAL_MS = 8_000;
+const STATE_EMOJI: Record<string, string> = { thinking: '\u{1F914}', tool_use: '\u{1F527}' };
 
 export class Bridge {
     private readonly happy: HappyClient;
@@ -25,6 +27,10 @@ export class Bridge {
     private responseTimer: ReturnType<typeof setTimeout> | null = null;
     private disconnectTimer: ReturnType<typeof setTimeout> | null = null;
     private initialConnectDone = false;
+    private typingInterval: ReturnType<typeof setInterval> | null = null;
+    private currentStateEmoji: string | null = null;
+    private lastUserMsgId: string | null = null;
+    private previousAgentState: string = 'idle';
 
     constructor(
         happy: HappyClient,
@@ -41,6 +47,10 @@ export class Bridge {
     }
 
     setActiveSession(sessionId: string): void {
+        this.stopTypingLoop();
+        this.updateStateEmoji(null);
+        this.previousAgentState = 'idle';
+        this.lastUserMsgId = null;
         this.activeSessionId = sessionId;
         this.permissionCache.reset();
         this.multiSelectState.clear();
@@ -52,6 +62,10 @@ export class Bridge {
 
     get permissions(): PermissionCache {
         return this.permissionCache;
+    }
+
+    setLastUserMessageId(messageId: string): void {
+        this.lastUserMsgId = messageId;
     }
 
     async sendMessage(text: string): Promise<void> {
@@ -97,6 +111,9 @@ export class Bridge {
         this.happy.on('update', (data) => this.processUpdate(data));
 
         this.stateTracker.on('permission-request', (sessionId, request) => {
+            this.stopTypingLoop();
+            this.updateStateEmoji(null);
+            this.previousAgentState = 'idle';
             this.handlePermissionRequest(sessionId, request).catch((err) => {
                 console.error('[Bridge] Error handling permission request:', err);
             });
@@ -263,6 +280,38 @@ export class Bridge {
         }
     }
 
+    private startTypingLoop(): void {
+        this.stopTypingLoop();
+        this.discord.sendTyping().catch((err) =>
+            console.error('[Bridge] sendTyping failed:', err));
+        this.typingInterval = setInterval(() => {
+            this.discord.sendTyping().catch((err) =>
+                console.error('[Bridge] sendTyping failed:', err));
+        }, TYPING_INTERVAL_MS);
+    }
+
+    private stopTypingLoop(): void {
+        if (this.typingInterval) {
+            clearInterval(this.typingInterval);
+            this.typingInterval = null;
+        }
+    }
+
+    private updateStateEmoji(state: string | null): void {
+        const newEmoji = state ? (STATE_EMOJI[state] ?? null) : null;
+        if (newEmoji === this.currentStateEmoji) return;
+
+        if (this.lastUserMsgId && this.currentStateEmoji) {
+            this.discord.removeReaction(this.lastUserMsgId, this.currentStateEmoji).catch((err) =>
+                console.error('[Bridge] removeReaction failed:', err));
+        }
+        if (this.lastUserMsgId && newEmoji) {
+            this.discord.reactToMessage(this.lastUserMsgId, newEmoji).catch((err) =>
+                console.error('[Bridge] reactToMessage failed:', err));
+        }
+        this.currentStateEmoji = newEmoji;
+    }
+
     private async handleSessionUpdate(
         sessionId: string,
         encryptedState: { version: number; value: string },
@@ -284,6 +333,25 @@ export class Bridge {
         }
 
         this.stateTracker.handleSessionUpdate(sessionId, decrypted as AgentState);
+
+        // --- Typing indicator + emoji ---
+        const newState = (decrypted as AgentState).state ?? 'idle';
+        if (newState !== this.previousAgentState) {
+            const wasActive = this.previousAgentState !== 'idle';
+            const isActive = newState !== 'idle';
+
+            if (!wasActive && isActive) {
+                this.startTypingLoop();
+            }
+            if (wasActive && !isActive) {
+                this.stopTypingLoop();
+                this.updateStateEmoji(null);
+            }
+            if (isActive) {
+                this.updateStateEmoji(newState);
+            }
+            this.previousAgentState = newState;
+        }
     }
 
     private async handlePermissionRequest(

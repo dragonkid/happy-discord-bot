@@ -29,6 +29,9 @@ function makeMockDiscord(): DiscordBot {
         send: vi.fn().mockResolvedValue([]),
         sendWithButtons: vi.fn().mockResolvedValue({}),
         sendWithAttachmentAndButtons: vi.fn().mockResolvedValue({}),
+        sendTyping: vi.fn().mockResolvedValue(undefined),
+        reactToMessage: vi.fn().mockResolvedValue(undefined),
+        removeReaction: vi.fn().mockResolvedValue(undefined),
     } as unknown as DiscordBot;
 }
 
@@ -783,6 +786,135 @@ describe('Bridge', () => {
             handlers.get('connected')?.();
 
             expect(discord.send).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('typing indicator + emoji reactions', () => {
+        function sendStateUpdate(state: string | undefined) {
+            const agentState = { state, requests: {} };
+            const encrypted = Buffer.from(JSON.stringify(agentState)).toString('base64');
+            bridge.processUpdate({
+                body: {
+                    t: 'update-session',
+                    id: 'sess-1',
+                    agentState: { version: 1, value: encrypted },
+                },
+            });
+        }
+
+        it('starts typing loop when state changes to thinking', async () => {
+            await bridge.start();
+            bridge.setActiveSession('sess-1');
+            sendStateUpdate('thinking');
+            expect(discord.sendTyping).toHaveBeenCalledOnce();
+        });
+
+        it('adds emoji when state is thinking', async () => {
+            await bridge.start();
+            bridge.setActiveSession('sess-1');
+            bridge.setLastUserMessageId('msg-u1');
+            sendStateUpdate('thinking');
+            expect(discord.reactToMessage).toHaveBeenCalledWith('msg-u1', '\u{1F914}');
+        });
+
+        it('switches emoji from thinking to tool_use', async () => {
+            await bridge.start();
+            bridge.setActiveSession('sess-1');
+            bridge.setLastUserMessageId('msg-u1');
+            sendStateUpdate('thinking');
+            vi.clearAllMocks();
+            sendStateUpdate('tool_use');
+            expect(discord.removeReaction).toHaveBeenCalledWith('msg-u1', '\u{1F914}');
+            expect(discord.reactToMessage).toHaveBeenCalledWith('msg-u1', '\u{1F527}');
+        });
+
+        it('removes emoji and stops typing on idle', async () => {
+            await bridge.start();
+            bridge.setActiveSession('sess-1');
+            bridge.setLastUserMessageId('msg-u1');
+            sendStateUpdate('thinking');
+            vi.clearAllMocks();
+            sendStateUpdate('idle');
+            expect(discord.removeReaction).toHaveBeenCalledWith('msg-u1', '\u{1F914}');
+            // No new sendTyping after idle
+            expect(discord.sendTyping).not.toHaveBeenCalled();
+        });
+
+        it('repeats sendTyping every 8s while active', async () => {
+            await bridge.start();
+            bridge.setActiveSession('sess-1');
+            sendStateUpdate('thinking');
+            expect(discord.sendTyping).toHaveBeenCalledTimes(1);
+            vi.advanceTimersByTime(8_000);
+            expect(discord.sendTyping).toHaveBeenCalledTimes(2);
+            vi.advanceTimersByTime(8_000);
+            expect(discord.sendTyping).toHaveBeenCalledTimes(3);
+        });
+
+        it('stops typing loop on idle', async () => {
+            await bridge.start();
+            bridge.setActiveSession('sess-1');
+            sendStateUpdate('thinking');
+            expect(discord.sendTyping).toHaveBeenCalledTimes(1);
+            sendStateUpdate('idle');
+            (discord.sendTyping as any).mockClear();
+            vi.advanceTimersByTime(16_000);
+            expect(discord.sendTyping).not.toHaveBeenCalled();
+        });
+
+        it('skips emoji when no lastUserMessageId', async () => {
+            await bridge.start();
+            bridge.setActiveSession('sess-1');
+            // No setLastUserMessageId call
+            sendStateUpdate('thinking');
+            expect(discord.sendTyping).toHaveBeenCalled();
+            expect(discord.reactToMessage).not.toHaveBeenCalled();
+        });
+
+        it('clears state on session switch', async () => {
+            await bridge.start();
+            bridge.setActiveSession('sess-1');
+            bridge.setLastUserMessageId('msg-u1');
+            sendStateUpdate('thinking');
+            vi.clearAllMocks();
+            bridge.setActiveSession('sess-2');
+            // Should have removed emoji and stopped loop
+            expect(discord.removeReaction).toHaveBeenCalledWith('msg-u1', '\u{1F914}');
+            vi.advanceTimersByTime(16_000);
+            expect(discord.sendTyping).not.toHaveBeenCalled();
+        });
+
+        it('stops typing on permission request', async () => {
+            await bridge.start();
+            bridge.setActiveSession('sess-1');
+            bridge.setLastUserMessageId('msg-u1');
+            sendStateUpdate('thinking');
+            vi.clearAllMocks();
+            // Send a state update with a permission request
+            const agentState = {
+                state: 'thinking',
+                requests: { 'req-1': { tool: 'Bash', arguments: { command: 'ls' }, createdAt: Date.now() } },
+            };
+            const encrypted = Buffer.from(JSON.stringify(agentState)).toString('base64');
+            bridge.processUpdate({
+                body: {
+                    t: 'update-session',
+                    id: 'sess-1',
+                    agentState: { version: 1, value: encrypted },
+                },
+            });
+            // Permission request should stop typing + remove emoji
+            expect(discord.removeReaction).toHaveBeenCalledWith('msg-u1', '\u{1F914}');
+        });
+
+        it('does not duplicate state on same state', async () => {
+            await bridge.start();
+            bridge.setActiveSession('sess-1');
+            sendStateUpdate('thinking');
+            vi.clearAllMocks();
+            sendStateUpdate('thinking');
+            // No duplicate sendTyping start or emoji add
+            expect(discord.reactToMessage).not.toHaveBeenCalled();
         });
     });
 
