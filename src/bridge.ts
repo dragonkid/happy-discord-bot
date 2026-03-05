@@ -8,7 +8,8 @@ import type { StateTracker } from './happy/state-tracker.js';
 import type { PermissionCache } from './happy/permission-cache.js';
 import type { Store } from './store.js';
 import { buildPermissionButtons, buildAskButtons, buildExitPlanButtons } from './discord/buttons.js';
-import { formatPermissionRequest, formatAskUserQuestion, formatExitPlanMode } from './discord/formatter.js';
+import { formatPermissionRequest, formatAskUserQuestion, formatExitPlanMode, formatTodoWrite } from './discord/formatter.js';
+import type { TodoItem } from './discord/formatter.js';
 import { isExitPlanMode } from './happy/types.js';
 import type { PermissionRequest, PermissionResponse, PermissionMode, AgentState, AskUserQuestionInput } from './happy/types.js';
 
@@ -33,6 +34,7 @@ export class Bridge {
     private toolUseEmoji = false;
     private lastUserMsgId: string | null = null;
     private isThinking = false;
+    private todoMessageId: string | null = null;
 
     constructor(
         happy: HappyClient,
@@ -54,6 +56,7 @@ export class Bridge {
         this.updateToolUseEmoji(false);
         this.isThinking = false;
         this.lastUserMsgId = null;
+        this.todoMessageId = null;
         if (this.activeSessionId) {
             this.permissionCache.saveSession(this.activeSessionId);
         }
@@ -476,7 +479,7 @@ export class Bridge {
         if (record.role === 'session') {
             const envelope = record.content as {
                 role?: string;
-                ev?: { t?: string; text?: string; thinking?: boolean };
+                ev?: { t?: string; text?: string; thinking?: boolean; name?: string; args?: Record<string, unknown> };
             };
             if (envelope?.role !== 'agent') return;
 
@@ -485,11 +488,44 @@ export class Bridge {
                 await this.discord.send(envelope.ev.text);
             }
 
-            // Tool use emoji tracking
+            // Tool use emoji tracking + TodoWrite interception
             if (envelope.ev?.t === 'tool-call-start') {
                 this.updateToolUseEmoji(true);
+
+                if (envelope.ev.name === 'TodoWrite' && sessionId === this.activeSessionId) {
+                    const todos = Array.isArray(envelope.ev.args?.todos) ? envelope.ev.args.todos as TodoItem[] : [];
+                    if (todos.length > 0) {
+                        await this.handleTodoWrite(todos);
+                    }
+                }
             } else if (envelope.ev?.t === 'tool-call-end') {
                 this.updateToolUseEmoji(false);
+            }
+        }
+    }
+
+    private async handleTodoWrite(todos: readonly TodoItem[]): Promise<void> {
+        const text = formatTodoWrite(todos);
+        if (!text) return;
+
+        const allCompleted = todos.every((t) => t.status === 'completed');
+
+        if (this.todoMessageId) {
+            await this.discord.editMessage(this.todoMessageId, text);
+            if (allCompleted) {
+                await this.discord.unpinMessage(this.todoMessageId);
+                this.todoMessageId = null;
+            }
+        } else {
+            const messages = await this.discord.send(text);
+            const msg = messages[0];
+            if (msg) {
+                if (allCompleted) {
+                    // Already all done — show once, don't pin
+                } else {
+                    this.todoMessageId = msg.id;
+                    await this.discord.pinMessage(msg.id);
+                }
             }
         }
     }
