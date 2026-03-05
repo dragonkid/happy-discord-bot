@@ -149,24 +149,49 @@ npm run test:e2e         # E2E smoke tests (requires .env.e2e, real services)
 
 ## E2E Smoke Tests
 
-Real end-to-end tests using a second Discord bot + live Happy relay. Located in `e2e/` directory (separate vitest config).
+Real end-to-end tests using a second Discord bot + live Happy relay. Located in `e2e/` directory (separate vitest config). Each test auto-spawns a fresh CLI session via daemon HTTP API — no pre-existing session needed.
 
 **Setup:**
 1. Create a second Discord bot (test bot) and add to same server
 2. Create a dedicated test channel (both bots have access)
 3. Copy `.env.e2e.example` to `.env.e2e` and fill in values
 4. Ensure happy daemon is running (`happy daemon start`)
-5. Ensure at least one CLI session is active
 
 **Run:** `npm run test:e2e`
 
-**Test scenarios:** Message E2E flow, permission auto-approve via state.json, bot restart recovery, manual permission approval via sessionRPC, AskUserQuestion option flow, ExitPlanMode approve/reject with feedback, typing indicator and tool-call emoji signals.
+**Test files:**
+
+| File | Scenario | Requires HappyTestClient? |
+|------|----------|--------------------------|
+| `smoke-messaging.test.ts` | Message forwarding round-trip | No |
+| `smoke-permission.test.ts` | `acceptEdits` auto-approve (no buttons shown) | No |
+| `smoke-restart.test.ts` | Bot restart preserves permission state | No |
+| `smoke-manual-permission.test.ts` | Manual permission approval via sessionRPC | Yes |
+| `smoke-ask-user.test.ts` | AskUserQuestion option buttons + answer | Yes |
+| `smoke-plan-mode.test.ts` | ExitPlanMode reject with feedback → revised plan → approve | Yes |
+| `smoke-tool-signals.test.ts` | Typing indicator + 🔧 emoji during tool calls | No |
+
+**E2E helper classes (`e2e/helpers/`):**
+
+| Helper | Purpose |
+|--------|---------|
+| `DaemonClient` | HTTP API to spawn/stop CLI sessions via `~/.happy/daemon.state.json` |
+| `BotProcess` | Spawn bot as subprocess, capture logs, start/stop/restart |
+| `DiscordTestClient` | Second Discord bot: send messages, collect responses/typing/reactions |
+| `HappyTestClient` | Connect to Happy relay for sessionRPC (approve/deny permissions) |
+| `StateFile` | Write/read `state.json` for pre-seeding permission state |
+| `wait.ts` | Polling `waitFor()` + `waitForExit()` utilities |
+
+**E2E test pattern:** Each test spawns a fresh session → optionally pre-seeds permission state via `StateFile` → starts bot subprocess → sends Discord messages → asserts on bot responses/buttons/signals → cleans up session and state.
 
 ## Gotchas
 
 - **`agentState` has no `state` field** — only `controlledByUser`, `requests`, `completedRequests`. Thinking status comes from `ephemeral` Socket.IO events, not agentState.
 - **`chunkMessage` reserves 24 chars** — for code fence close/reopen overhead when splitting. Final chunks may be slightly under 2000 chars.
 - **Discord `sendTyping()` has no stop API** — typing disappears on timeout (~10s) or when bot sends a message.
+- **`EDIT_TOOLS` includes `Read`** — intentional divergence from upstream CLI (`getToolDescriptor.ts`). CLI's Write tool requires Read first (safety mechanism), so without Read in EDIT_TOOLS, `acceptEdits` mode deadlocks: Write auto-approved → Read blocked → "File has not been read yet" error.
+- **E2E 🔧 emoji is transient** — tool-call emoji is added then removed quickly; `smoke-tool-signals` catches it best-effort without failing on miss.
+- **E2E tests are non-deterministic** — Claude model responses vary; predicates should match loosely (e.g. check for keywords, not exact strings). Timeouts are generous (60-90s) to accommodate model latency.
 
 ## Vendor Modules
 
