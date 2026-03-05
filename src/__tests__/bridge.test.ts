@@ -26,12 +26,15 @@ function makeMockHappy(): HappyClient {
 
 function makeMockDiscord(): DiscordBot {
     return {
-        send: vi.fn().mockResolvedValue([]),
+        send: vi.fn().mockResolvedValue([{ id: 'todo-msg-1' }]),
         sendWithButtons: vi.fn().mockResolvedValue({}),
         sendWithAttachmentAndButtons: vi.fn().mockResolvedValue({}),
         sendTyping: vi.fn().mockResolvedValue(undefined),
         reactToMessage: vi.fn().mockResolvedValue(undefined),
         removeReaction: vi.fn().mockResolvedValue(undefined),
+        editMessage: vi.fn().mockResolvedValue(undefined),
+        pinMessage: vi.fn().mockResolvedValue(undefined),
+        unpinMessage: vi.fn().mockResolvedValue(undefined),
     } as unknown as DiscordBot;
 }
 
@@ -960,6 +963,143 @@ describe('Bridge', () => {
             bridge.setActiveSession('sess-1');
             permissionCache.setMode('acceptEdits');
             expect(() => bridge.persistModes()).not.toThrow();
+        });
+    });
+
+    describe('TodoWrite progress display', () => {
+        function sendToolCallStart(sessionId: string, name: string, args: Record<string, unknown>) {
+            const content = {
+                role: 'session',
+                content: {
+                    role: 'agent',
+                    ev: { t: 'tool-call-start', name, args },
+                },
+            };
+            const encrypted = Buffer.from(JSON.stringify(content)).toString('base64');
+            bridge.processUpdate({
+                body: {
+                    t: 'new-message',
+                    sid: sessionId,
+                    message: {
+                        id: `msg-${Date.now()}`,
+                        seq: 1,
+                        content: { c: encrypted, t: 'encrypted' },
+                        createdAt: Date.now(),
+                        updatedAt: Date.now(),
+                    },
+                },
+            });
+        }
+
+        it('sends and pins a formatted todo message on first TodoWrite', async () => {
+            bridge.setActiveSession('sess-1');
+            sendToolCallStart('sess-1', 'TodoWrite', {
+                todos: [
+                    { id: '1', content: 'Task A', status: 'pending' },
+                    { id: '2', content: 'Task B', status: 'in_progress' },
+                ],
+            });
+
+            await vi.advanceTimersByTimeAsync(0);
+            expect(discord.send).toHaveBeenCalledWith(expect.stringContaining('📋 Tasks'));
+            expect(discord.pinMessage).toHaveBeenCalledWith('todo-msg-1');
+        });
+
+        it('edits existing message on subsequent TodoWrite', async () => {
+            bridge.setActiveSession('sess-1');
+
+            // First call — sends new message
+            sendToolCallStart('sess-1', 'TodoWrite', {
+                todos: [{ id: '1', content: 'Task A', status: 'pending' }],
+            });
+            await vi.advanceTimersByTimeAsync(0);
+
+            vi.mocked(discord.send).mockClear();
+
+            // Second call — should edit, not send new
+            sendToolCallStart('sess-1', 'TodoWrite', {
+                todos: [{ id: '1', content: 'Task A', status: 'completed' }],
+            });
+            await vi.advanceTimersByTimeAsync(0);
+
+            expect(discord.send).not.toHaveBeenCalled();
+            expect(discord.editMessage).toHaveBeenCalledWith('todo-msg-1', expect.stringContaining('📋 Tasks'));
+        });
+
+        it('unpins message when all todos are completed', async () => {
+            bridge.setActiveSession('sess-1');
+
+            sendToolCallStart('sess-1', 'TodoWrite', {
+                todos: [{ id: '1', content: 'Task A', status: 'pending' }],
+            });
+            await vi.advanceTimersByTimeAsync(0);
+
+            sendToolCallStart('sess-1', 'TodoWrite', {
+                todos: [{ id: '1', content: 'Task A', status: 'completed' }],
+            });
+            await vi.advanceTimersByTimeAsync(0);
+
+            expect(discord.unpinMessage).toHaveBeenCalledWith('todo-msg-1');
+        });
+
+        it('creates new pinned message after previous was unpinned', async () => {
+            bridge.setActiveSession('sess-1');
+
+            // First round: all completed immediately — send but don't pin
+            sendToolCallStart('sess-1', 'TodoWrite', {
+                todos: [{ id: '1', content: 'Task A', status: 'completed' }],
+            });
+            await vi.advanceTimersByTimeAsync(0);
+            vi.mocked(discord.send).mockClear();
+            vi.mocked(discord.pinMessage).mockClear();
+
+            // New round: should send new message + pin again
+            sendToolCallStart('sess-1', 'TodoWrite', {
+                todos: [{ id: '2', content: 'Task B', status: 'pending' }],
+            });
+            await vi.advanceTimersByTimeAsync(0);
+
+            expect(discord.send).toHaveBeenCalledWith(expect.stringContaining('📋 Tasks'));
+            expect(discord.pinMessage).toHaveBeenCalled();
+        });
+
+        it('does not process TodoWrite for non-active session', async () => {
+            bridge.setActiveSession('sess-1');
+            sendToolCallStart('sess-other', 'TodoWrite', {
+                todos: [{ id: '1', content: 'Task', status: 'pending' }],
+            });
+            await vi.advanceTimersByTimeAsync(0);
+            expect(discord.pinMessage).not.toHaveBeenCalled();
+        });
+
+        it('ignores tool-call-start for non-TodoWrite tools', async () => {
+            bridge.setActiveSession('sess-1');
+            sendToolCallStart('sess-1', 'Bash', { command: 'ls' });
+            await vi.advanceTimersByTimeAsync(0);
+            expect(discord.pinMessage).not.toHaveBeenCalled();
+        });
+
+        it('resets todo state on session switch', async () => {
+            bridge.setActiveSession('sess-1');
+            sendToolCallStart('sess-1', 'TodoWrite', {
+                todos: [{ id: '1', content: 'Task A', status: 'pending' }],
+            });
+            await vi.advanceTimersByTimeAsync(0);
+
+            // Switch session
+            bridge.setActiveSession('sess-2');
+
+            vi.mocked(discord.send).mockClear();
+            vi.mocked(discord.pinMessage).mockClear();
+
+            // New session should get fresh todo state
+            sendToolCallStart('sess-2', 'TodoWrite', {
+                todos: [{ id: '2', content: 'Task B', status: 'pending' }],
+            });
+            await vi.advanceTimersByTimeAsync(0);
+
+            expect(discord.send).toHaveBeenCalledWith(expect.stringContaining('📋 Tasks'));
+            expect(discord.pinMessage).toHaveBeenCalled();
         });
     });
 });
