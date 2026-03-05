@@ -39,12 +39,21 @@ export class BotProcess {
             }
         });
 
-        this.proc.on('exit', (code) => {
-            console.log(`[BotProcess] exited with code ${code}`);
-            this.proc = null;
+        // Race: wait for "Bot online" log OR early process exit
+        const earlyExit = new Promise<never>((_, reject) => {
+            this.proc!.once('exit', (code) => {
+                this.proc = null;
+                reject(new Error(
+                    `Bot process exited with code ${code} before becoming ready.\n`
+                    + `Last 10 logs:\n${this.logs.slice(-10).join('\n')}`,
+                ));
+            });
         });
 
-        await this.waitForLog('[Discord] Bot online', 30_000);
+        await Promise.race([
+            this.waitForLog('[Discord] Bot online', 30_000),
+            earlyExit,
+        ]);
         console.log('[BotProcess] Bot is online');
     }
 
@@ -53,11 +62,17 @@ export class BotProcess {
      */
     async stop(): Promise<void> {
         if (!this.proc) return;
-        this.proc.kill('SIGINT');
+        const proc = this.proc;
+        proc.kill('SIGINT');
         try {
-            await waitForExit(this.proc, 10_000);
+            await waitForExit(proc, 10_000);
         } catch {
-            this.proc?.kill('SIGKILL');
+            proc.kill('SIGKILL');
+            try {
+                await waitForExit(proc, 5_000);
+            } catch {
+                console.warn('[BotProcess] Process did not exit after SIGKILL');
+            }
         }
         this.proc = null;
     }

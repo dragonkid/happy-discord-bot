@@ -41,19 +41,22 @@ export function waitForExit(
     timeout: number,
 ): Promise<number | null> {
     return new Promise((resolve, reject) => {
+        // Already exited — resolve immediately
+        if (proc.exitCode !== null) {
+            resolve(proc.exitCode);
+            return;
+        }
+
+        function onExit(code: number | null) {
+            clearTimeout(timer);
+            resolve(code);
+        }
+
         const timer = setTimeout(() => {
+            proc.removeListener('exit', onExit);
             reject(new TimeoutError(`Process did not exit within ${timeout}ms`));
         }, timeout);
 
-        proc.once('exit', (code) => {
-            clearTimeout(timer);
-            resolve(code);
-        });
-
-        // Already exited
-        if (proc.exitCode !== null) {
-            clearTimeout(timer);
-            resolve(proc.exitCode);
-        }
+        proc.once('exit', onExit);
     });
 }

@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { BotProcess } from './helpers/bot-process.js';
 import { DiscordTestClient } from './helpers/discord-test-client.js';
 import { StateFile } from './helpers/state-file.js';
@@ -7,7 +9,7 @@ import { loadE2EConfig } from './env.js';
 const config = loadE2EConfig();
 const bot = new BotProcess();
 const discord = new DiscordTestClient(config.discordToken, config.discordChannelId);
-const stateFile = new StateFile();
+const stateFile = new StateFile(join(tmpdir(), 'happy-discord-bot-e2e'));
 
 let sessionId: string;
 
@@ -21,6 +23,7 @@ describe('Smoke: Permission Auto-Approve', () => {
             DISCORD_TOKEN: config.botDiscordToken,
             DISCORD_CHANNEL_ID: config.discordChannelId,
             DISCORD_USER_ID: discord.userId,
+            BOT_STATE_DIR: stateFile.stateDir,
         });
 
         // Extract active session from bot logs
@@ -49,6 +52,7 @@ describe('Smoke: Permission Auto-Approve', () => {
             DISCORD_TOKEN: config.botDiscordToken,
             DISCORD_CHANNEL_ID: config.discordChannelId,
             DISCORD_USER_ID: discord.userId,
+            BOT_STATE_DIR: stateFile.stateDir,
         });
 
         expect(bot.hasLog('[Store] Loaded 1 saved session(s)')).toBe(true);
@@ -63,15 +67,12 @@ describe('Smoke: Permission Auto-Approve', () => {
     it('should auto-approve Edit/Write tools in acceptEdits mode', async () => {
         const logBaseline = bot.logCount;
 
-        // Ask Claude to create a file (triggers Write or Edit)
         await discord.sendMessage(
             'Create a file at /tmp/e2e-auto-approve-test.txt with content "hello e2e"',
         );
 
-        // Wait for auto-approve log
         await bot.waitForLog('Auto-approving', 60_000);
 
-        // Verify it was an edit-type auto-approve
         const newLogs = bot.getLogsSince(logBaseline);
         const autoApproveLog = newLogs.find((l) => l.includes('Auto-approving'));
         expect(autoApproveLog).toBeDefined();
@@ -80,7 +81,6 @@ describe('Smoke: Permission Auto-Approve', () => {
             autoApproveLog!.includes('Auto-approving Edit'),
         ).toBe(true);
 
-        // Wait for Claude's response in Discord
         await discord.waitForBotMessage(
             (content) => content.includes('e2e-auto-approve-test'),
             60_000,

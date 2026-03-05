@@ -110,10 +110,11 @@ export class DiscordTestClient {
     }
 
     /**
-     * Get the test bot's user ID.
+     * Get the test bot's user ID. Throws if not connected.
      */
     get userId(): string {
-        return this.client.user?.id ?? '';
+        if (!this.client.user) throw new Error('Not connected — call start() first');
+        return this.client.user.id;
     }
 
     /**

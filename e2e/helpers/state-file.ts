@@ -1,28 +1,26 @@
 import { readFile, writeFile, mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { homedir } from 'node:os';
+import type { SessionPermissions, BotState } from '../../src/store.js';
 
-export interface SessionPermissions {
-    mode: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan';
-    allowedTools: string[];
-    bashLiterals: string[];
-    bashPrefixes: string[];
-}
+export type { SessionPermissions, BotState };
 
-export interface BotState {
-    sessions: Record<string, SessionPermissions>;
-}
-
-const STATE_DIR = join(homedir(), '.happy-discord-bot');
-const STATE_FILE = join(STATE_DIR, 'state.json');
+const STATE_FILE = 'state.json';
 
 export class StateFile {
+    private readonly dir: string;
+    private readonly filePath: string;
+
+    constructor(dir: string) {
+        this.dir = dir;
+        this.filePath = join(dir, STATE_FILE);
+    }
+
     /**
      * Write state.json with the given state.
      */
     async write(state: BotState): Promise<void> {
-        await mkdir(STATE_DIR, { recursive: true });
-        await writeFile(STATE_FILE, JSON.stringify(state, null, 2) + '\n');
+        await mkdir(this.dir, { recursive: true });
+        await writeFile(this.filePath, JSON.stringify(state, null, 2) + '\n');
     }
 
     /**
@@ -30,7 +28,7 @@ export class StateFile {
      */
     async read(): Promise<BotState> {
         try {
-            const raw = await readFile(STATE_FILE, 'utf-8');
+            const raw = await readFile(this.filePath, 'utf-8');
             return JSON.parse(raw) as BotState;
         } catch {
             return { sessions: {} };
@@ -41,6 +39,13 @@ export class StateFile {
      * Delete state.json (clean slate for tests).
      */
     async clean(): Promise<void> {
-        await rm(STATE_FILE, { force: true });
+        await rm(this.filePath, { force: true });
+    }
+
+    /**
+     * Get the directory path (for passing as BOT_STATE_DIR to bot subprocess).
+     */
+    get stateDir(): string {
+        return this.dir;
     }
 }

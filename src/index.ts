@@ -42,7 +42,7 @@ async function main(): Promise<void> {
     // --- Bridge ---
     const stateTracker = new StateTracker();
     const permissionCache = new PermissionCache();
-    const store = new Store(join(homedir(), '.happy-discord-bot'));
+    const store = new Store(process.env.BOT_STATE_DIR ?? join(homedir(), '.happy-discord-bot'));
     const savedState = await store.load();
     permissionCache.loadSessions(savedState.sessions);
     console.log(`[Store] Loaded ${Object.keys(savedState.sessions).length} saved session(s)`);
