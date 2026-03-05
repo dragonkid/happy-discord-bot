@@ -7,6 +7,9 @@ import { parseAskButtonId, parseSessionButtonId, handleAskButton, handleSessionB
 import { Bridge } from './bridge.js';
 import { StateTracker } from './happy/state-tracker.js';
 import { PermissionCache } from './happy/permission-cache.js';
+import { Store } from './store.js';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 
 // Patch console to prepend timestamps
 const origLog = console.log;
@@ -39,7 +42,12 @@ async function main(): Promise<void> {
     // --- Bridge ---
     const stateTracker = new StateTracker();
     const permissionCache = new PermissionCache();
+    const store = new Store(join(homedir(), '.happy-discord-bot'));
+    const savedState = await store.load();
+    permissionCache.loadSessions(savedState.sessions);
+    console.log(`[Store] Loaded ${Object.keys(savedState.sessions).length} saved session(s)`);
     const bridge = new Bridge(happy, discord, config, stateTracker, permissionCache);
+    bridge.setStore(store);
     await bridge.start();
 
     if (bridge.activeSession) {
@@ -203,6 +211,7 @@ async function main(): Promise<void> {
                     case 'allow-edits':
                         await bridge.approvePermission(sessionId, requestId, 'acceptEdits');
                         permissionCache.applyApproval([], 'acceptEdits');
+                        bridge.persistModes();
                         break;
                     case 'for-tool': {
                         let toolIdentifier = toolName;
@@ -211,6 +220,7 @@ async function main(): Promise<void> {
                         }
                         await bridge.approvePermission(sessionId, requestId, undefined, [toolIdentifier]);
                         permissionCache.applyApproval([toolIdentifier]);
+                        bridge.persistModes();
                         break;
                     }
                     case 'no':

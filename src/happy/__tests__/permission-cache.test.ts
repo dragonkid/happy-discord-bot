@@ -110,4 +110,62 @@ describe('PermissionCache', () => {
             expect(cache.mode).toBe('plan');
         });
     });
+
+    describe('per-session persistence', () => {
+        it('saveSession + restoreSession round-trips mode', () => {
+            cache.setMode('acceptEdits');
+            cache.saveSession('sess-1');
+            cache.reset();
+            cache.restoreSession('sess-1');
+            expect(cache.mode).toBe('acceptEdits');
+        });
+
+        it('saveSession + restoreSession round-trips allowedTools', () => {
+            cache.applyApproval(['Edit', 'Glob']);
+            cache.saveSession('sess-1');
+            cache.reset();
+            cache.restoreSession('sess-1');
+            expect(cache.isAutoApproved('Edit', {})).toBe(true);
+            expect(cache.isAutoApproved('Glob', {})).toBe(true);
+        });
+
+        it('saveSession + restoreSession round-trips bash permissions', () => {
+            cache.applyApproval(['Bash(git status)', 'Bash(npm:*)']);
+            cache.saveSession('sess-1');
+            cache.reset();
+            cache.restoreSession('sess-1');
+            expect(cache.isAutoApproved('Bash', { command: 'git status' })).toBe(true);
+            expect(cache.isAutoApproved('Bash', { command: 'npm test' })).toBe(true);
+            expect(cache.isAutoApproved('Bash', { command: 'rm -rf' })).toBe(false);
+        });
+
+        it('restoreSession with no saved state resets to default', () => {
+            cache.setMode('acceptEdits');
+            cache.restoreSession('unknown-session');
+            expect(cache.mode).toBe('default');
+        });
+
+        it('loadSessions bulk-loads from persisted data', () => {
+            cache.loadSessions({
+                s1: { mode: 'acceptEdits', allowedTools: ['Edit'], bashLiterals: [], bashPrefixes: [] },
+                s2: { mode: 'plan', allowedTools: [], bashLiterals: [], bashPrefixes: [] },
+            });
+            cache.restoreSession('s1');
+            expect(cache.mode).toBe('acceptEdits');
+            expect(cache.isAutoApproved('Edit', {})).toBe(true);
+        });
+
+        it('getAllSessions returns all saved session states', () => {
+            cache.setMode('acceptEdits');
+            cache.applyApproval(['Edit']);
+            cache.saveSession('s1');
+            cache.reset();
+            cache.setMode('plan');
+            cache.saveSession('s2');
+            const all = cache.getAllSessions();
+            expect(all.s1.mode).toBe('acceptEdits');
+            expect(all.s1.allowedTools).toContain('Edit');
+            expect(all.s2.mode).toBe('plan');
+        });
+    });
 });

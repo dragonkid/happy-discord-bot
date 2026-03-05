@@ -969,4 +969,65 @@ describe('Bridge', () => {
             expect(calls.every(([msg]) => !msg.includes('unresponsive'))).toBe(true);
         });
     });
+
+    describe('permission mode persistence', () => {
+        it('setActiveSession restores saved mode for the new session', () => {
+            permissionCache.setMode('acceptEdits');
+            permissionCache.saveSession('sess-new');
+            permissionCache.reset();
+            bridge.setActiveSession('sess-new');
+            expect(permissionCache.mode).toBe('acceptEdits');
+        });
+
+        it('setActiveSession saves current mode before switching', () => {
+            bridge.setActiveSession('sess-1');
+            permissionCache.setMode('bypassPermissions');
+            bridge.setActiveSession('sess-2');
+            // Switching back to sess-1 should restore bypassPermissions
+            bridge.setActiveSession('sess-1');
+            expect(permissionCache.mode).toBe('bypassPermissions');
+        });
+
+        it('setActiveSession preserves allowedTools across switches', () => {
+            bridge.setActiveSession('sess-1');
+            permissionCache.applyApproval(['Edit', 'Glob']);
+            bridge.setActiveSession('sess-2');
+            // sess-2 should not have Edit approved
+            expect(permissionCache.isAutoApproved('Edit', {})).toBe(false);
+            // Switch back — Edit should be restored
+            bridge.setActiveSession('sess-1');
+            expect(permissionCache.isAutoApproved('Edit', {})).toBe(true);
+            expect(permissionCache.isAutoApproved('Glob', {})).toBe(true);
+        });
+
+        it('setActiveSession resets to default for session with no saved state', () => {
+            bridge.setActiveSession('sess-1');
+            permissionCache.setMode('acceptEdits');
+            bridge.setActiveSession('sess-unknown');
+            expect(permissionCache.mode).toBe('default');
+        });
+
+        it('persistModes calls store.save with all session states', async () => {
+            const mockStore = { save: vi.fn().mockResolvedValue(undefined), load: vi.fn() };
+            bridge.setStore(mockStore as any);
+            bridge.setActiveSession('sess-1');
+            permissionCache.setMode('acceptEdits');
+            permissionCache.applyApproval(['Edit']);
+            bridge.persistModes();
+            expect(mockStore.save).toHaveBeenCalledWith({
+                sessions: expect.objectContaining({
+                    'sess-1': expect.objectContaining({
+                        mode: 'acceptEdits',
+                        allowedTools: expect.arrayContaining(['Edit']),
+                    }),
+                }),
+            });
+        });
+
+        it('persistModes is no-op without store', () => {
+            bridge.setActiveSession('sess-1');
+            permissionCache.setMode('acceptEdits');
+            expect(() => bridge.persistModes()).not.toThrow();
+        });
+    });
 });

@@ -24,6 +24,7 @@ src/
 ├── index.ts              # Entry point, message forwarding + mention filtering
 ├── config.ts             # Env var loading (incl. requireMention)
 ├── bridge.ts             # Glue: Happy events ↔ Discord messages/buttons + typing/emoji
+├── store.ts              # Bot state persistence (~/.happy-discord-bot/state.json)
 ├── happy/
 │   ├── client.ts         # HappyClient: Socket.IO + sessionRPC + HTTP
 │   ├── permission-cache.ts  # Tool approval caching (allowedTools, BashLiterals)
@@ -93,6 +94,7 @@ Check order: Bash literal → Bash prefix → tool whitelist → permissionMode
 - `bypassPermissions` → approve all
 - `acceptEdits` + edit tool → approve
 - Cache accumulates at runtime via user approvals
+- **Per-session persistence:** Full permission state (mode, allowedTools, bashLiterals, bashPrefixes) saved per session in `~/.happy-discord-bot/state.json`. Session switches save/restore. Bot restart restores from disk.
 
 ### Key Source References
 
@@ -139,7 +141,7 @@ npm run test:watch       # Vitest (watch mode)
 ## Testing
 
 - Framework: Vitest
-- 10 test suites, 203 tests
+- 11 test suites, 220 tests
 - Test files: `src/**/__tests__/*.test.ts`
 - All Happy/Discord dependencies mocked (no real connections needed)
 

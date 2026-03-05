@@ -1,10 +1,12 @@
 import { EDIT_TOOLS, type PermissionMode } from './types.js';
+import type { SessionPermissions } from '../store.js';
 
 export class PermissionCache {
     private allowedTools = new Set<string>();
     private bashLiterals = new Set<string>();
     private bashPrefixes = new Set<string>();
     private _mode: PermissionMode = 'default';
+    private sessionStates = new Map<string, SessionPermissions>();
 
     get mode(): PermissionMode {
         return this._mode;
@@ -50,6 +52,39 @@ export class PermissionCache {
         this.bashLiterals.clear();
         this.bashPrefixes.clear();
         this._mode = 'default';
+    }
+
+    /** Save current permission state for a session. */
+    saveSession(sessionId: string): void {
+        this.sessionStates.set(sessionId, {
+            mode: this._mode,
+            allowedTools: [...this.allowedTools],
+            bashLiterals: [...this.bashLiterals],
+            bashPrefixes: [...this.bashPrefixes],
+        });
+    }
+
+    /** Restore permission state for a session (resets first). */
+    restoreSession(sessionId: string): void {
+        this.reset();
+        const saved = this.sessionStates.get(sessionId);
+        if (!saved) return;
+        this._mode = saved.mode;
+        for (const tool of saved.allowedTools) this.allowedTools.add(tool);
+        for (const literal of saved.bashLiterals) this.bashLiterals.add(literal);
+        for (const prefix of saved.bashPrefixes) this.bashPrefixes.add(prefix);
+    }
+
+    /** Bulk-load session states from persisted data. */
+    loadSessions(sessions: Record<string, SessionPermissions>): void {
+        for (const [id, state] of Object.entries(sessions)) {
+            this.sessionStates.set(id, state);
+        }
+    }
+
+    /** Export all session states for persistence. */
+    getAllSessions(): Record<string, SessionPermissions> {
+        return Object.fromEntries(this.sessionStates);
     }
 
     private parseTool(permission: string): void {
