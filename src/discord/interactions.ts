@@ -1,9 +1,10 @@
-import type { ButtonInteraction } from 'discord.js';
+import type { ButtonInteraction, StringSelectMenuInteraction, ModalSubmitInteraction } from 'discord.js';
 import { parseAskButtonId, parseSessionButtonId, buildAskButtons, buildRejectPlanModal } from './buttons.js';
 import type { AskButtonAction, ParsedSessionButtonId, ParsedExitPlanButtonId } from './buttons.js';
 import type { AskUserQuestionInput } from '../happy/types.js';
 import type { Bridge } from '../bridge.js';
 import type { StateTracker } from '../happy/state-tracker.js';
+import { extractDirectories } from '../happy/session-metadata.js';
 
 export async function handleAskButton(
     interaction: ButtonInteraction,
@@ -157,3 +158,63 @@ export async function handleExitPlanButton(
 }
 
 export { parseAskButtonId, parseSessionButtonId };
+
+export async function handleNewSessionSelect(
+    interaction: StringSelectMenuInteraction,
+    bridge: Bridge,
+): Promise<void> {
+    const index = Number(interaction.values[0]);
+
+    // Re-fetch directories to resolve the index
+    const allSessions = await bridge.listAllSessions();
+    const directories = extractDirectories(allSessions);
+    const selection = directories[index];
+
+    if (!selection) {
+        await interaction.editReply({ content: 'Invalid selection.', components: [] });
+        return;
+    }
+
+    try {
+        const sessionId = await bridge.createNewSession(selection.machineId, selection.path);
+        await interaction.editReply({
+            content: `Session created in \`${selection.path}\` (\`${sessionId.slice(0, 8)}\`)`,
+            components: [],
+        });
+    } catch (err) {
+        const detail = err instanceof Error ? err.message : 'Unknown error';
+        await interaction.editReply({
+            content: `Failed to create session: ${detail}`,
+            components: [],
+        });
+    }
+}
+
+export async function handleNewSessionModal(
+    interaction: ModalSubmitInteraction,
+    machineId: string,
+    bridge: Bridge,
+): Promise<void> {
+    const directory = interaction.fields.getTextInputValue('directory').trim();
+    if (!directory) {
+        await interaction.editReply({
+            content: 'Please provide a directory path.',
+            components: [],
+        });
+        return;
+    }
+
+    try {
+        const sessionId = await bridge.createNewSession(machineId, directory);
+        await interaction.editReply({
+            content: `Session created in \`${directory}\` (\`${sessionId.slice(0, 8)}\`)`,
+            components: [],
+        });
+    } catch (err) {
+        const detail = err instanceof Error ? err.message : 'Unknown error';
+        await interaction.editReply({
+            content: `Failed to create session: ${detail}`,
+            components: [],
+        });
+    }
+}

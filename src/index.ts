@@ -2,8 +2,8 @@ import { loadBotConfig } from './config.js';
 import { HappyClient } from './happy/client.js';
 import { DiscordBot } from './discord/bot.js';
 import { handleCommand } from './discord/commands.js';
-import { parseButtonId, parseExitPlanButtonId, parsePlanModalId } from './discord/buttons.js';
-import { parseAskButtonId, parseSessionButtonId, handleAskButton, handleSessionButton, handleExitPlanButton } from './discord/interactions.js';
+import { parseButtonId, parseExitPlanButtonId, parsePlanModalId, parseNewSessionSelect, parseCustomPathButton, parseCustomPathModal, buildCustomPathModal } from './discord/buttons.js';
+import { parseAskButtonId, parseSessionButtonId, handleAskButton, handleSessionButton, handleExitPlanButton, handleNewSessionSelect, handleNewSessionModal } from './discord/interactions.js';
 import { Bridge } from './bridge.js';
 import { StateTracker } from './happy/state-tracker.js';
 import { PermissionCache } from './happy/permission-cache.js';
@@ -101,6 +101,38 @@ async function main(): Promise<void> {
         if (interaction.isButton()) {
             if (interaction.user.id !== config.discord.userId) {
                 await interaction.reply({ content: 'Unauthorized.', ephemeral: true });
+                return;
+            }
+
+            // --- New Session custom path button ---
+            if (parseCustomPathButton(interaction.customId)) {
+                const menuRow = interaction.message.components[0] as unknown as
+                    { components?: Array<{ type: number; options?: Array<{ value: string }> }> };
+                let machineId = '';
+                if (menuRow?.components?.[0]?.type === 3 /* StringSelect */) {
+                    const firstOption = menuRow.components[0].options?.[0];
+                    if (firstOption?.value) {
+                        // Index-based: re-fetch directories to get machineId
+                        try {
+                            const allSessions = await bridge.listAllSessions();
+                            const { extractDirectories } = await import('./happy/session-metadata.js');
+                            const dirs = extractDirectories(allSessions);
+                            if (dirs.length > 0) machineId = dirs[0].machineId;
+                        } catch {
+                            // fallback: empty
+                        }
+                    }
+                }
+                if (!machineId) {
+                    await interaction.reply({ content: 'No machine available.', ephemeral: true });
+                    return;
+                }
+                try {
+                    await interaction.showModal(buildCustomPathModal(machineId));
+                } catch (err) {
+                    console.error('[Discord] Custom path modal error:', err);
+                    await interaction.reply({ content: 'Error showing path input.', ephemeral: true }).catch(() => {});
+                }
                 return;
             }
 
@@ -250,6 +282,27 @@ async function main(): Promise<void> {
                 }).catch(() => {});
             }
         }
+        // StringSelectMenu interactions
+        if (interaction.isStringSelectMenu()) {
+            if (interaction.user.id !== config.discord.userId) {
+                await interaction.reply({ content: 'Unauthorized.', ephemeral: true });
+                return;
+            }
+
+            if (parseNewSessionSelect(interaction.customId)) {
+                await interaction.deferUpdate();
+                try {
+                    await handleNewSessionSelect(interaction, bridge);
+                } catch (err) {
+                    console.error('[Discord] New session select error:', err);
+                    await interaction.editReply({
+                        content: 'Error creating session.',
+                        components: [],
+                    }).catch(() => {});
+                }
+                return;
+            }
+        }
         // Modal submissions (ExitPlanMode reject feedback)
         if (interaction.isModalSubmit()) {
             if (interaction.user.id !== config.discord.userId) {
@@ -275,6 +328,22 @@ async function main(): Promise<void> {
                         components: [],
                     }).catch(() => {});
                 }
+                return;
+            }
+
+            const newSessModal = parseCustomPathModal(interaction.customId);
+            if (newSessModal) {
+                await interaction.deferUpdate();
+                try {
+                    await handleNewSessionModal(interaction, newSessModal.machineId, bridge);
+                } catch (err) {
+                    console.error('[Discord] New session modal error:', err);
+                    await interaction.editReply({
+                        content: 'Error creating session.',
+                        components: [],
+                    }).catch(() => {});
+                }
+                return;
             }
         }
     });

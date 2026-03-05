@@ -21,6 +21,7 @@ function makeMockHappy(): HappyClient {
             messages: [{ id: 'msg-1', seq: 1, localId: 'local-1', createdAt: Date.now(), updatedAt: Date.now() }],
         }))),
         sessionRPC: vi.fn().mockResolvedValue({}),
+        machineRPC: vi.fn().mockResolvedValue({ sessionId: 'new-sess-id' }),
     } as unknown as HappyClient;
 }
 
@@ -54,6 +55,7 @@ function makeMockConfig(): BotConfig {
 
 vi.mock('../vendor/api.js', () => ({
     listActiveSessions: vi.fn().mockResolvedValue([]),
+    listSessions: vi.fn().mockResolvedValue([]),
     resolveSessionEncryption: vi.fn(),
 }));
 
@@ -1100,6 +1102,84 @@ describe('Bridge', () => {
 
             expect(discord.send).toHaveBeenCalledWith(expect.stringContaining('📋 Tasks'));
             expect(discord.pinMessage).toHaveBeenCalled();
+        });
+    });
+
+    describe('createNewSession', () => {
+        it('calls machineRPC with spawn-happy-session', async () => {
+            bridge.setActiveSession('existing-sess');
+            const { listActiveSessions } = await import('../vendor/api.js');
+            const newSession = {
+                id: 'new-sess-id',
+                seq: 1,
+                createdAt: 1000,
+                updatedAt: 2000,
+                active: true,
+                activeAt: 2000,
+                metadata: { path: '/test/dir' },
+                agentState: null,
+                dataEncryptionKey: null,
+                encryption: { key: new Uint8Array(32), variant: 'dataKey' as const },
+            };
+            vi.mocked(listActiveSessions).mockResolvedValueOnce([newSession] as DecryptedSession[]);
+
+            const result = await bridge.createNewSession('machine-1', '/test/dir');
+
+            expect(happy.machineRPC).toHaveBeenCalledWith(
+                'machine-1',
+                'spawn-happy-session',
+                { directory: '/test/dir', approvedNewDirectoryCreation: true },
+            );
+            expect(result).toBe('new-sess-id');
+            expect(bridge.activeSession).toBe('new-sess-id');
+        });
+
+        it('throws when machineRPC fails', async () => {
+            vi.mocked(happy.machineRPC).mockRejectedValueOnce(new Error('machine offline'));
+
+            await expect(bridge.createNewSession('machine-1', '/test/dir')).rejects.toThrow('machine offline');
+        });
+
+        it('retries listActiveSessions if new session not found initially', async () => {
+            bridge.setActiveSession('existing-sess');
+            const { listActiveSessions } = await import('../vendor/api.js');
+            const newSession = {
+                id: 'new-sess-id',
+                seq: 1,
+                createdAt: 1000,
+                updatedAt: 2000,
+                active: true,
+                activeAt: 2000,
+                metadata: { path: '/test/dir' },
+                agentState: null,
+                dataEncryptionKey: null,
+                encryption: { key: new Uint8Array(32), variant: 'dataKey' as const },
+            };
+            vi.mocked(listActiveSessions)
+                .mockResolvedValueOnce([])
+                .mockResolvedValueOnce([newSession] as DecryptedSession[]);
+
+            const resultPromise = bridge.createNewSession('machine-1', '/test/dir');
+            await vi.advanceTimersByTimeAsync(2000);
+            const result = await resultPromise;
+
+            expect(result).toBe('new-sess-id');
+            expect(listActiveSessions).toHaveBeenCalledTimes(2);
+        });
+    });
+
+    describe('listAllSessions', () => {
+        it('returns all sessions from listSessions API', async () => {
+            const { listSessions } = await import('../vendor/api.js');
+            const mockSessions = [
+                { id: 'sess-1', activeAt: 1000, encryption: { key: new Uint8Array(32), variant: 'dataKey' } },
+            ] as unknown as DecryptedSession[];
+            vi.mocked(listSessions).mockResolvedValueOnce(mockSessions);
+
+            const result = await bridge.listAllSessions();
+
+            expect(result).toEqual(mockSessions);
+            expect(listSessions).toHaveBeenCalledWith(config.happy, config.credentials);
         });
     });
 });

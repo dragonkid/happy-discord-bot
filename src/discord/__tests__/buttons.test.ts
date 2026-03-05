@@ -12,6 +12,14 @@ import {
     buildRejectPlanModal,
     parsePlanModalId,
     PLAN_MODAL_PREFIX,
+    buildNewSessionMenu,
+    parseNewSessionSelect,
+    parseCustomPathButton,
+    buildCustomPathModal,
+    parseCustomPathModal,
+    NEW_SESSION_SELECT_PREFIX,
+    NEW_SESSION_CUSTOM_PREFIX,
+    NEW_SESSION_MODAL_PREFIX,
 } from '../buttons.js';
 import { ButtonStyle, type APIButtonComponentWithCustomId } from 'discord.js';
 
@@ -284,6 +292,81 @@ describe('ExitPlanMode buttons', () => {
 
         it('returns null for malformed modal ID', () => {
             expect(parsePlanModalId('plan-modal:incomplete')).toBeNull();
+        });
+    });
+});
+
+describe('New session menu', () => {
+    const directories = [
+        { path: '/Users/user/project-a', machineId: 'machine-1', label: 'user/project-a' },
+        { path: '/Users/user/project-b', machineId: 'machine-1', label: 'user/project-b' },
+    ];
+
+    describe('buildNewSessionMenu', () => {
+        it('creates a StringSelectMenu with directory options', () => {
+            const rows = buildNewSessionMenu(directories);
+            expect(rows).toHaveLength(2);
+            const menuRow = rows[0];
+            expect(menuRow.components).toHaveLength(1);
+            // StringSelectMenuBuilder stores options differently than .data
+            const menu = menuRow.components[0] as any;
+            expect(menu.options?.length ?? menu.data?.options?.length).toBe(2);
+        });
+
+        it('uses index-based values to avoid 100-char limit', () => {
+            const rows = buildNewSessionMenu(directories);
+            const menu = rows[0].components[0] as any;
+            const options = menu.options ?? menu.data?.options ?? [];
+            const values = options.map((o: any) => o.data?.value ?? o.value);
+            expect(values[0]).toBe('0');
+            expect(values[1]).toBe('1');
+        });
+
+        it('includes a Custom path button in second row', () => {
+            const rows = buildNewSessionMenu(directories);
+            const btnRow = rows[1];
+            expect(btnRow.components).toHaveLength(1);
+            const btnData = btnRow.components[0].data as { custom_id: string; label: string };
+            expect(btnData.label).toBe('Custom path...');
+        });
+    });
+
+    describe('parseNewSessionSelect', () => {
+        it('parses valid select customId', () => {
+            expect(parseNewSessionSelect(`${NEW_SESSION_SELECT_PREFIX}test`)).toBe(true);
+        });
+
+        it('returns false for non-matching prefix', () => {
+            expect(parseNewSessionSelect('other:id')).toBe(false);
+        });
+    });
+
+    describe('parseCustomPathButton', () => {
+        it('parses valid custom path button', () => {
+            expect(parseCustomPathButton(`${NEW_SESSION_CUSTOM_PREFIX}btn`)).toBe(true);
+        });
+
+        it('returns false for non-matching prefix', () => {
+            expect(parseCustomPathButton('perm:something')).toBe(false);
+        });
+    });
+
+    describe('buildCustomPathModal', () => {
+        it('creates a modal with text input for directory path', () => {
+            const modal = buildCustomPathModal('machine-1');
+            expect(modal.data.title).toBe('New Session');
+            expect(modal.data.custom_id).toContain(NEW_SESSION_MODAL_PREFIX);
+        });
+    });
+
+    describe('parseCustomPathModal', () => {
+        it('parses valid modal customId', () => {
+            const result = parseCustomPathModal(`${NEW_SESSION_MODAL_PREFIX}machine-1`);
+            expect(result).toEqual({ machineId: 'machine-1' });
+        });
+
+        it('returns null for non-matching prefix', () => {
+            expect(parseCustomPathModal('other:id')).toBeNull();
         });
     });
 });

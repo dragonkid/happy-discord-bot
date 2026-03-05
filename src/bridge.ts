@@ -3,7 +3,7 @@ import type { HappyClient } from './happy/client.js';
 import type { DiscordBot } from './discord/bot.js';
 import type { BotConfig } from './config.js';
 import { encrypt, encodeBase64, decrypt, decodeBase64 } from './vendor/encryption.js';
-import { listActiveSessions, type DecryptedSession } from './vendor/api.js';
+import { listActiveSessions, listSessions, type DecryptedSession } from './vendor/api.js';
 import type { StateTracker } from './happy/state-tracker.js';
 import type { PermissionCache } from './happy/permission-cache.js';
 import type { Store } from './store.js';
@@ -202,6 +202,32 @@ export class Bridge {
 
     async listSessions(): Promise<DecryptedSession[]> {
         return this.loadSessions();
+    }
+
+    async listAllSessions(): Promise<DecryptedSession[]> {
+        return listSessions(this.config.happy, this.config.credentials);
+    }
+
+    async createNewSession(machineId: string, directory: string): Promise<string> {
+        const result = await this.happy.machineRPC<{ sessionId: string }>(
+            machineId,
+            'spawn-happy-session',
+            { directory, approvedNewDirectoryCreation: true },
+        );
+
+        const sessionId = result.sessionId;
+        if (!sessionId) {
+            throw new Error('Daemon did not return a sessionId');
+        }
+
+        const newSession = await this.waitForSession(sessionId);
+        if (newSession) {
+            this.happy.registerSessionEncryption(newSession.id, newSession.encryption);
+            this.setActiveSession(newSession.id);
+            this.persistModes();
+        }
+
+        return sessionId;
     }
 
     /** Process a raw update from the Happy relay. Public for testing. */
@@ -418,11 +444,23 @@ export class Bridge {
 
     private async loadSessions(): Promise<DecryptedSession[]> {
         const sessions = await listActiveSessions(this.config.happy, this.config.credentials);
-        // Register encryption keys from DecryptedSession (which has .encryption field)
         for (const session of sessions) {
             this.happy.registerSessionEncryption(session.id, session.encryption);
         }
         return sessions;
+    }
+
+    private async waitForSession(sessionId: string, retries = 2): Promise<DecryptedSession | null> {
+        for (let attempt = 0; attempt <= retries; attempt++) {
+            if (attempt > 0) {
+                await new Promise((resolve) => setTimeout(resolve, 1500));
+            }
+            const sessions = await this.loadSessions();
+            const found = sessions.find((s) => s.id === sessionId);
+            if (found) return found;
+        }
+        console.warn(`[Bridge] Session ${sessionId} not found after ${retries + 1} attempts`);
+        return null;
     }
 
     private async handleNewMessage(sessionId: string, raw: unknown): Promise<void> {

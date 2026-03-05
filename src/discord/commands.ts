@@ -4,7 +4,8 @@ import {
     type RESTPostAPIChatInputApplicationCommandsJSONBody,
 } from 'discord.js';
 import type { Bridge } from '../bridge.js';
-import { buildSessionButtons } from './buttons.js';
+import { buildSessionButtons, buildNewSessionMenu } from './buttons.js';
+import { extractDirectories } from '../happy/session-metadata.js';
 import type { PermissionMode } from '../happy/types.js';
 
 // --- Command definitions ---
@@ -44,7 +45,11 @@ const mode = new SlashCommandBuilder()
             ),
     );
 
-const allCommands = [sessions, send, stop, compact, mode];
+const newSession = new SlashCommandBuilder()
+    .setName('new')
+    .setDescription('Create a new Claude Code session');
+
+const allCommands = [sessions, send, stop, compact, mode, newSession];
 
 export const commandDefinitions: RESTPostAPIChatInputApplicationCommandsJSONBody[] =
     allCommands.map((cmd) => cmd.toJSON());
@@ -67,6 +72,8 @@ export async function handleCommand(
             return handleCompact(interaction, bridge);
         case 'mode':
             return handleMode(interaction, bridge);
+        case 'new':
+            return handleNewSession(interaction, bridge);
         default:
             await interaction.reply({ content: `Unknown command: ${interaction.commandName}`, ephemeral: true });
     }
@@ -142,4 +149,22 @@ async function handleMode(interaction: ChatInputCommandInteraction, bridge: Brid
     bridge.permissions.setMode(modeValue);
     bridge.persistModes();
     await interaction.editReply(`Permission mode set to: **${modeValue}**`);
+}
+
+async function handleNewSession(interaction: ChatInputCommandInteraction, bridge: Bridge): Promise<void> {
+    await interaction.deferReply();
+
+    const allSessions = await bridge.listAllSessions();
+    const directories = extractDirectories(allSessions);
+
+    if (directories.length === 0) {
+        await interaction.editReply('No machines found. Start a session manually first.');
+        return;
+    }
+
+    const components = buildNewSessionMenu(directories);
+    await interaction.editReply({
+        content: 'Select a directory for the new session:',
+        components,
+    });
 }
