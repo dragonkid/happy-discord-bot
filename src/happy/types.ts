@@ -1,6 +1,6 @@
 // --- Permission types ---
 
-export const EDIT_TOOLS = new Set(['Edit', 'MultiEdit', 'Write', 'NotebookEdit']) as ReadonlySet<string>;
+export const EDIT_TOOLS = new Set(['Edit', 'MultiEdit', 'Write', 'NotebookEdit', 'Read']) as ReadonlySet<string>;
 
 const EXIT_PLAN_TOOLS: ReadonlySet<string> = new Set(['ExitPlanMode', 'exit_plan_mode']);
 

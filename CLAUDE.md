@@ -160,7 +160,7 @@ Real end-to-end tests using a second Discord bot + live Happy relay. Located in 
 
 **Run:** `npm run test:e2e`
 
-**Test scenarios:** Message E2E flow, permission auto-approve via state.json, bot restart recovery.
+**Test scenarios:** Message E2E flow, permission auto-approve via state.json, bot restart recovery, manual permission approval via sessionRPC, AskUserQuestion option flow, ExitPlanMode approve/reject with feedback, typing indicator and tool-call emoji signals.
 
 ## Gotchas
 

@@ -12,6 +12,8 @@ export class DiscordTestClient {
     private client: Client;
     private channel: TextChannel | null = null;
     private collectedMessages: Message[] = [];
+    private typingEvents: Array<{ userId: string; timestamp: Date }> = [];
+    private reactionEvents: Array<{ userId: string; emoji: string; messageId: string; added: boolean }> = [];
 
     constructor(
         private readonly token: string,
@@ -22,18 +24,42 @@ export class DiscordTestClient {
                 GatewayIntentBits.Guilds,
                 GatewayIntentBits.GuildMessages,
                 GatewayIntentBits.MessageContent,
+                GatewayIntentBits.GuildMessageTyping,
+                GatewayIntentBits.GuildMessageReactions,
             ],
         });
     }
 
-    /**
-     * Connect to Discord and start listening for messages.
-     */
     async start(): Promise<void> {
         this.client.on(Events.MessageCreate, (msg) => {
             if (msg.channelId !== this.channelId) return;
-            if (msg.author.id === this.client.user?.id) return; // ignore own messages
+            if (msg.author.id === this.client.user?.id) return;
             this.collectedMessages.push(msg);
+        });
+
+        this.client.on(Events.TypingStart, (typing) => {
+            if (typing.channel.id !== this.channelId) return;
+            this.typingEvents.push({ userId: typing.user?.id ?? '', timestamp: new Date() });
+        });
+
+        this.client.on(Events.MessageReactionAdd, (reaction, user) => {
+            if (reaction.message.channelId !== this.channelId) return;
+            this.reactionEvents.push({
+                userId: user.id,
+                emoji: reaction.emoji.name ?? '',
+                messageId: reaction.message.id,
+                added: true,
+            });
+        });
+
+        this.client.on(Events.MessageReactionRemove, (reaction, user) => {
+            if (reaction.message.channelId !== this.channelId) return;
+            this.reactionEvents.push({
+                userId: user.id,
+                emoji: reaction.emoji.name ?? '',
+                messageId: reaction.message.id,
+                added: false,
+            });
         });
 
         await this.client.login(this.token);
@@ -46,9 +72,6 @@ export class DiscordTestClient {
         console.log('[TestClient] Connected to Discord');
     }
 
-    /**
-     * Send a message to the test channel.
-     */
     async sendMessage(text: string): Promise<Message> {
         if (!this.channel) throw new Error('Not connected');
         const msg = await this.channel.send(text);
@@ -56,10 +79,6 @@ export class DiscordTestClient {
         return msg;
     }
 
-    /**
-     * Wait for the bot to send a message matching the predicate.
-     * Only checks messages received AFTER this method is called.
-     */
     async waitForBotMessage(
         predicate: (content: string, msg: Message) => boolean,
         timeout = 60_000,
@@ -83,9 +102,6 @@ export class DiscordTestClient {
         );
     }
 
-    /**
-     * Wait for a message with button components.
-     */
     async waitForMessageWithButtons(timeout = 30_000): Promise<Message> {
         const baseline = this.collectedMessages.length;
 
@@ -102,24 +118,35 @@ export class DiscordTestClient {
         );
     }
 
-    /**
-     * Clear collected messages (call between tests).
-     */
-    clearMessages(): void {
-        this.collectedMessages = [];
+    async waitForTypingStart(timeout = 30_000): Promise<{ userId: string; timestamp: Date }> {
+        const baseline = this.typingEvents.length;
+        return waitFor(
+            () => this.typingEvents.slice(baseline).find(e => e.userId !== this.client.user?.id),
+            { timeout, interval: 500, label: 'typing start' },
+        );
     }
 
-    /**
-     * Get the test bot's user ID. Throws if not connected.
-     */
+    async waitForReaction(emoji: string, added: boolean, timeout = 30_000): Promise<void> {
+        const baseline = this.reactionEvents.length;
+        await waitFor(
+            () => this.reactionEvents.slice(baseline).find(
+                e => e.emoji === emoji && e.added === added && e.userId !== this.client.user?.id,
+            ),
+            { timeout, interval: 500, label: `reaction ${added ? 'add' : 'remove'} ${emoji}` },
+        );
+    }
+
+    clearMessages(): void {
+        this.collectedMessages = [];
+        this.typingEvents = [];
+        this.reactionEvents = [];
+    }
+
     get userId(): string {
         if (!this.client.user) throw new Error('Not connected — call start() first');
         return this.client.user.id;
     }
 
-    /**
-     * Disconnect from Discord.
-     */
     destroy(): void {
         this.client.destroy();
         this.channel = null;

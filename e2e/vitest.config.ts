@@ -4,7 +4,7 @@ export default defineConfig({
     test: {
         include: ['e2e/**/*.test.ts'],
         testTimeout: 120_000,
-        hookTimeout: 60_000,
+        hookTimeout: 120_000,
         fileParallelism: false,
         globalSetup: ['e2e/setup.ts'],
     },

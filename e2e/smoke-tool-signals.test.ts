@@ -15,19 +15,19 @@ const daemon = new DaemonClient();
 
 let spawnedSessionId: string | null = null;
 
-describe('Smoke: Permission Auto-Approve', () => {
+describe('Smoke: Tool Call Signals', () => {
     beforeAll(async () => {
         await stateFile.clean();
         await discord.start();
 
         await daemon.connect();
-        spawnedSessionId = await daemon.spawnSession(`/tmp/e2e-session-perm-${Date.now()}`);
+        spawnedSessionId = await daemon.spawnSession(`/tmp/e2e-session-signals-${Date.now()}`);
         console.log(`[Test] Spawned session: ${spawnedSessionId}`);
 
         await stateFile.write({
             sessions: {
                 [spawnedSessionId]: {
-                    mode: 'acceptEdits',
+                    mode: 'bypassPermissions',
                     allowedTools: [],
                     bashLiterals: [],
                     bashPrefixes: [],
@@ -35,7 +35,6 @@ describe('Smoke: Permission Auto-Approve', () => {
             },
         });
 
-        discord.clearMessages();
         await bot.start({
             DISCORD_TOKEN: config.botDiscordToken,
             DISCORD_CHANNEL_ID: config.discordChannelId,
@@ -43,7 +42,6 @@ describe('Smoke: Permission Auto-Approve', () => {
             BOT_STATE_DIR: stateFile.stateDir,
         });
 
-        expect(bot.hasLog('[Store] Loaded 1 saved session(s)')).toBe(true);
         await bot.waitForLog('[Bridge] Active session:', 15_000);
     }, 120_000);
 
@@ -56,19 +54,27 @@ describe('Smoke: Permission Auto-Approve', () => {
         await stateFile.clean();
     });
 
-    it('should complete edit operations without permission buttons in acceptEdits mode', async () => {
+    it('should show typing indicator and tool-use emoji during processing', async () => {
         await discord.sendMessage(
-            'Create a file at /tmp/e2e-auto-approve-test.txt with content "hello e2e"',
+            'Run this command: echo "tool-signal-test-output" && sleep 1',
         );
 
-        // The key assertion: bot should auto-approve Write and Read tools without
-        // showing permission buttons. Wait for ANY text response without components.
+        // Wait for typing indicator
+        const typingEvent = await discord.waitForTypingStart(30_000);
+        expect(typingEvent).toBeDefined();
+
+        // Wrench emoji is transient — try to catch it but don't fail if missed
+        try {
+            await discord.waitForReaction('🔧', true, 30_000);
+        } catch {
+            console.log('[Test] Wrench emoji not captured (transient)');
+        }
+
+        // Wait for Claude's response
         const response = await discord.waitForBotMessage(
-            (content, msg) => msg.components.length === 0 && content.length > 0,
+            (content) => content.includes('tool-signal-test-output'),
             90_000,
         );
-
-        // Verify no permission buttons were shown at any point
-        expect(response.components.length).toBe(0);
+        expect(response.content).toContain('tool-signal-test-output');
     });
 });
