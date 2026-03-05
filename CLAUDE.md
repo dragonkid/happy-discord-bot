@@ -120,6 +120,7 @@ Required env vars (via `.env` or shell):
 - `DISCORD_CHANNEL_ID` — Target channel for bot messages
 - `DISCORD_USER_ID` — Owner's Discord user ID (single-user access control)
 - `DISCORD_REQUIRE_MENTION` — (optional, default `false`) Require @bot mention to forward messages
+- `BOT_STATE_DIR` — (optional, default `~/.happy-discord-bot`) Directory for state.json persistence
 
 Happy credentials (one of):
 - `HAPPY_TOKEN` + `HAPPY_SECRET` env vars, or
@@ -136,6 +137,7 @@ npm run lint             # ESLint
 npm run lint:fix         # ESLint auto-fix
 npm test                 # Vitest (run once)
 npm run test:watch       # Vitest (watch mode)
+npm run test:e2e         # E2E smoke tests (requires .env.e2e, real services)
 ```
 
 ## Testing
@@ -144,6 +146,21 @@ npm run test:watch       # Vitest (watch mode)
 - 11 test suites, 220 tests
 - Test files: `src/**/__tests__/*.test.ts`
 - All Happy/Discord dependencies mocked (no real connections needed)
+
+## E2E Smoke Tests
+
+Real end-to-end tests using a second Discord bot + live Happy relay. Located in `e2e/` directory (separate vitest config).
+
+**Setup:**
+1. Create a second Discord bot (test bot) and add to same server
+2. Create a dedicated test channel (both bots have access)
+3. Copy `.env.e2e.example` to `.env.e2e` and fill in values
+4. Ensure happy daemon is running (`happy daemon start`)
+5. Ensure at least one CLI session is active
+
+**Run:** `npm run test:e2e`
+
+**Test scenarios:** Message E2E flow, permission auto-approve via state.json, bot restart recovery.
 
 ## Gotchas
 

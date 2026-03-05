@@ -42,7 +42,7 @@ async function main(): Promise<void> {
     // --- Bridge ---
     const stateTracker = new StateTracker();
     const permissionCache = new PermissionCache();
-    const store = new Store(join(homedir(), '.happy-discord-bot'));
+    const store = new Store(process.env.BOT_STATE_DIR ?? join(homedir(), '.happy-discord-bot'));
     const savedState = await store.load();
     permissionCache.loadSessions(savedState.sessions);
     console.log(`[Store] Loaded ${Object.keys(savedState.sessions).length} saved session(s)`);
@@ -185,6 +185,7 @@ async function main(): Promise<void> {
             const parsed = parseButtonId(interaction.customId);
             if (!parsed) return;
 
+            console.log(`[Discord] Permission button: action=${parsed.action} tool=${parsed.requestId.slice(0, 8)}`);
             await interaction.deferUpdate();
 
             try {
