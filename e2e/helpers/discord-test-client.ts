@@ -14,6 +14,7 @@ export class DiscordTestClient {
     private collectedMessages: Message[] = [];
     private typingEvents: Array<{ userId: string; timestamp: Date }> = [];
     private reactionEvents: Array<{ userId: string; emoji: string; messageId: string; added: boolean }> = [];
+    private messageUpdateEvents: Array<{ messageId: string; content: string; timestamp: Date }> = [];
 
     constructor(
         private readonly token: string,
@@ -59,6 +60,16 @@ export class DiscordTestClient {
                 emoji: reaction.emoji.name ?? '',
                 messageId: reaction.message.id,
                 added: false,
+            });
+        });
+
+        this.client.on(Events.MessageUpdate, (_oldMsg, newMsg) => {
+            if (newMsg.channelId !== this.channelId) return;
+            if (newMsg.author?.id === this.client.user?.id) return;
+            this.messageUpdateEvents.push({
+                messageId: newMsg.id,
+                content: newMsg.content ?? '',
+                timestamp: new Date(),
             });
         });
 
@@ -136,10 +147,25 @@ export class DiscordTestClient {
         );
     }
 
+    async waitForMessageEdit(
+        messageId: string,
+        predicate: (content: string) => boolean,
+        timeout = 60_000,
+    ): Promise<{ content: string }> {
+        const baseline = this.messageUpdateEvents.length;
+        return waitFor(
+            () => this.messageUpdateEvents.slice(baseline).find(
+                (e) => e.messageId === messageId && predicate(e.content),
+            ),
+            { timeout, interval: 1000, label: `message edit on ${messageId}` },
+        );
+    }
+
     clearMessages(): void {
         this.collectedMessages = [];
         this.typingEvents = [];
         this.reactionEvents = [];
+        this.messageUpdateEvents = [];
     }
 
     get userId(): string {
