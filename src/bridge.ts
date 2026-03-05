@@ -12,7 +12,6 @@ import { formatPermissionRequest, formatAskUserQuestion, formatExitPlanMode } fr
 import { isExitPlanMode } from './happy/types.js';
 import type { PermissionRequest, PermissionResponse, PermissionMode, AgentState, AskUserQuestionInput } from './happy/types.js';
 
-const RESPONSE_TIMEOUT_MS = 300_000;
 const DISCONNECT_DEBOUNCE_MS = 5_000;
 const TYPING_INTERVAL_MS = 8_000;
 const THINKING_EMOJI = '🤔';
@@ -27,7 +26,6 @@ export class Bridge {
     private readonly multiSelectState = new Map<string, Set<number>>();
     private activeSessionId: string | null = null;
     private store: Store | null = null;
-    private responseTimer: ReturnType<typeof setTimeout> | null = null;
     private disconnectTimer: ReturnType<typeof setTimeout> | null = null;
     private initialConnectDone = false;
     private typingInterval: ReturnType<typeof setInterval> | null = null;
@@ -140,7 +138,6 @@ export class Bridge {
         }
 
         console.log(`[Bridge] Message sent to session ${sessionId.slice(0, 8)} (localId: ${localId.slice(0, 8)})`);
-        this.startResponseTimer();
     }
 
     async start(): Promise<void> {
@@ -297,27 +294,6 @@ export class Bridge {
         this.multiSelectState.delete(key);
     }
 
-    private startResponseTimer(): void {
-        this.cancelResponseTimer();
-        this.responseTimer = setTimeout(() => {
-            this.responseTimer = null;
-            console.warn('[Bridge] No CLI response within timeout');
-            this.discord.send(
-                '⚠️ CLI appears unresponsive — no activity detected within 30s.\n'
-                + 'Try pressing Enter in the CLI terminal to wake it.',
-            ).catch((err) => {
-                console.error('[Bridge] Failed to send timeout warning:', err);
-            });
-        }, RESPONSE_TIMEOUT_MS);
-    }
-
-    private cancelResponseTimer(): void {
-        if (this.responseTimer) {
-            clearTimeout(this.responseTimer);
-            this.responseTimer = null;
-        }
-    }
-
     private cancelDisconnectTimer(): void {
         if (this.disconnectTimer) {
             clearTimeout(this.disconnectTimer);
@@ -375,8 +351,6 @@ export class Bridge {
         encryptedState: { version: number; value: string },
     ): Promise<void> {
         if (sessionId !== this.activeSessionId) return;
-
-        this.cancelResponseTimer();
 
         const enc = this.happy.getSessionEncryption(sessionId);
         if (!enc) {
@@ -449,10 +423,6 @@ export class Bridge {
     }
 
     private async handleNewMessage(sessionId: string, raw: unknown): Promise<void> {
-        if (sessionId === this.activeSessionId) {
-            this.cancelResponseTimer();
-        }
-
         const msg = raw as Record<string, unknown> | null;
         const content = (msg?.content as Record<string, unknown> | undefined);
         if (!content?.c || typeof content.c !== 'string') {
