@@ -55,6 +55,7 @@ export async function handleCommand(
     interaction: ChatInputCommandInteraction,
     bridge: Bridge,
 ): Promise<void> {
+    console.log(`[Commands] /${interaction.commandName}`, interaction.options.data?.map((o) => `${o.name}=${o.value}`).join(' ') ?? '');
     switch (interaction.commandName) {
         case 'sessions':
             return handleSessions(interaction, bridge);
