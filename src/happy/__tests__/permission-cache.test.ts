@@ -58,6 +58,7 @@ describe('PermissionCache', () => {
             expect(cache.isAutoApproved('MultiEdit', {})).toBe(true);
             expect(cache.isAutoApproved('Write', {})).toBe(true);
             expect(cache.isAutoApproved('NotebookEdit', {})).toBe(true);
+            expect(cache.isAutoApproved('Read', {})).toBe(true);
         });
 
         it('acceptEdits does not approve non-edit tools', () => {
