@@ -185,6 +185,7 @@ async function main(): Promise<void> {
             const parsed = parseButtonId(interaction.customId);
             if (!parsed) return;
 
+            console.log(`[Discord] Permission button: action=${parsed.action} tool=${parsed.requestId.slice(0, 8)}`);
             await interaction.deferUpdate();
 
             try {
