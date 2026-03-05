@@ -120,6 +120,7 @@ Required env vars (via `.env` or shell):
 - `DISCORD_CHANNEL_ID` — Target channel for bot messages
 - `DISCORD_USER_ID` — Owner's Discord user ID (single-user access control)
 - `DISCORD_REQUIRE_MENTION` — (optional, default `false`) Require @bot mention to forward messages
+- `BOT_STATE_DIR` — (optional, default `~/.happy-discord-bot`) Directory for state.json persistence
 
 Happy credentials (one of):
 - `HAPPY_TOKEN` + `HAPPY_SECRET` env vars, or
