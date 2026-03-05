@@ -12,7 +12,7 @@ import { formatPermissionRequest, formatAskUserQuestion, formatExitPlanMode } fr
 import { isExitPlanMode } from './happy/types.js';
 import type { PermissionRequest, PermissionResponse, PermissionMode, AgentState, AskUserQuestionInput } from './happy/types.js';
 
-const RESPONSE_TIMEOUT_MS = 30_000;
+const RESPONSE_TIMEOUT_MS = 300_000;
 const DISCONNECT_DEBOUNCE_MS = 5_000;
 const TYPING_INTERVAL_MS = 8_000;
 const THINKING_EMOJI = '🤔';
@@ -196,7 +196,7 @@ export class Bridge {
         // Auto-select latest active session by activeAt
         if (sessions.length > 0) {
             const latest = sessions.reduce((a, b) => (a.activeAt > b.activeAt ? a : b));
-            this.activeSessionId = latest.id;
+            this.setActiveSession(latest.id);
         }
     }
 
