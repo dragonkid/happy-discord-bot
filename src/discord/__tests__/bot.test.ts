@@ -8,6 +8,9 @@ const mockReactions = { resolve: vi.fn().mockReturnValue(mockReaction) };
 const mockFetchedMessage = {
     react: vi.fn().mockResolvedValue(undefined),
     reactions: mockReactions,
+    edit: vi.fn().mockResolvedValue(undefined),
+    pin: vi.fn().mockResolvedValue(undefined),
+    unpin: vi.fn().mockResolvedValue(undefined),
 };
 
 const mockChannel = {
@@ -152,6 +155,33 @@ describe('DiscordBot', () => {
             await bot.removeReaction('msg-123', '🤔');
             expect(mockChannel.messages.fetch).toHaveBeenCalledWith('msg-123');
             expect(mockReactionUsers.remove).toHaveBeenCalledWith(mockClient.user.id);
+        });
+    });
+
+    describe('editMessage', () => {
+        it('fetches message and calls edit with new content', async () => {
+            await bot.start();
+            await bot.editMessage('msg-1', 'updated text');
+            expect(mockChannel.messages.fetch).toHaveBeenCalledWith('msg-1');
+            expect(mockFetchedMessage.edit).toHaveBeenCalledWith({ content: 'updated text' });
+        });
+    });
+
+    describe('pinMessage', () => {
+        it('fetches message and calls pin()', async () => {
+            await bot.start();
+            await bot.pinMessage('msg-1');
+            expect(mockChannel.messages.fetch).toHaveBeenCalledWith('msg-1');
+            expect(mockFetchedMessage.pin).toHaveBeenCalled();
+        });
+    });
+
+    describe('unpinMessage', () => {
+        it('fetches message and calls unpin()', async () => {
+            await bot.start();
+            await bot.unpinMessage('msg-1');
+            expect(mockChannel.messages.fetch).toHaveBeenCalledWith('msg-1');
+            expect(mockFetchedMessage.unpin).toHaveBeenCalled();
         });
     });
 });

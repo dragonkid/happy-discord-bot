@@ -117,6 +117,27 @@ export class DiscordBot {
         }
     }
 
+    /** Edit an existing message's content. */
+    async editMessage(messageId: string, content: string): Promise<void> {
+        const channel = this.requireChannel();
+        const message = await channel.messages.fetch(messageId);
+        await message.edit({ content });
+    }
+
+    /** Pin a message in the channel. */
+    async pinMessage(messageId: string): Promise<void> {
+        const channel = this.requireChannel();
+        const message = await channel.messages.fetch(messageId);
+        await message.pin();
+    }
+
+    /** Unpin a message from the channel. */
+    async unpinMessage(messageId: string): Promise<void> {
+        const channel = this.requireChannel();
+        const message = await channel.messages.fetch(messageId);
+        await message.unpin();
+    }
+
     destroy(): void {
         this.client.destroy();
         this.channel = null;
