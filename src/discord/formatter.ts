@@ -145,3 +145,32 @@ export function formatExitPlanMode(planText: string): string {
     }
     return '**Plan Proposal**\nSee attached plan. Choose how to proceed:';
 }
+
+export interface TodoItem {
+    id?: string;
+    content: string;
+    status: 'pending' | 'in_progress' | 'completed';
+    priority?: 'high' | 'medium' | 'low';
+}
+
+const TODO_STATUS_EMOJI: Record<TodoItem['status'], string> = {
+    completed: '✅',
+    in_progress: '🔄',
+    pending: '⬜',
+};
+
+/** Format a TodoWrite tool call for Discord display. */
+export function formatTodoWrite(todos: readonly TodoItem[]): string {
+    if (todos.length === 0) return '';
+
+    const completed = todos.filter((t) => t.status === 'completed').length;
+    const header = `📋 Tasks (${completed}/${todos.length})`;
+
+    const lines = todos.map((todo) => {
+        const emoji = TODO_STATUS_EMOJI[todo.status] ?? '⬜';
+        const priority = todo.priority ? ` [${todo.priority}]` : '';
+        return `${emoji} ${todo.content}${priority}`;
+    });
+
+    return `${header}\n\`\`\`\n${lines.join('\n')}\n\`\`\``;
+}

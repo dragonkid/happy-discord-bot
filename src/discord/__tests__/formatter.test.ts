@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { chunkMessage, codeBlock, diffBlock, truncate, formatPermissionRequest, formatAskUserQuestion, formatExitPlanMode } from '../formatter.js';
+import { chunkMessage, codeBlock, diffBlock, truncate, formatPermissionRequest, formatAskUserQuestion, formatExitPlanMode, formatTodoWrite } from '../formatter.js';
 
 describe('formatter', () => {
     describe('chunkMessage', () => {
@@ -250,6 +250,46 @@ describe('formatter', () => {
             const result = formatExitPlanMode('');
             expect(result).toContain('Plan Proposal');
             expect(result).toContain('attached plan');
+        });
+    });
+
+    describe('formatTodoWrite', () => {
+        it('formats a mixed-status todo list with header and code block', () => {
+            const todos = [
+                { id: '1', content: 'Fix TypeScript errors', status: 'completed' as const, priority: 'high' as const },
+                { id: '2', content: 'Add error boundary', status: 'in_progress' as const, priority: 'medium' as const },
+                { id: '3', content: 'Implement loading state', status: 'pending' as const },
+            ];
+            const result = formatTodoWrite(todos);
+            expect(result).toContain('📋 Tasks (1/3)');
+            expect(result).toContain('```');
+            expect(result).toContain('✅ Fix TypeScript errors');
+            expect(result).toContain('[high]');
+            expect(result).toContain('🔄 Add error boundary');
+            expect(result).toContain('[medium]');
+            expect(result).toContain('⬜ Implement loading state');
+        });
+
+        it('shows correct completion count', () => {
+            const todos = [
+                { id: '1', content: 'A', status: 'completed' as const },
+                { id: '2', content: 'B', status: 'completed' as const },
+                { id: '3', content: 'C', status: 'pending' as const },
+            ];
+            const result = formatTodoWrite(todos);
+            expect(result).toContain('📋 Tasks (2/3)');
+        });
+
+        it('omits priority tag when not present', () => {
+            const todos = [
+                { id: '1', content: 'No priority task', status: 'pending' as const },
+            ];
+            const result = formatTodoWrite(todos);
+            expect(result).not.toContain('[');
+        });
+
+        it('returns empty string for empty todos array', () => {
+            expect(formatTodoWrite([])).toBe('');
         });
     });
 });
