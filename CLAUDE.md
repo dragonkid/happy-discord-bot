@@ -86,6 +86,14 @@ Two independent signal sources:
 
 Both react on user's last Discord message (`lastUserMsgId`). `/send` commands have no message ID — typing only.
 
+### TodoWrite Progress Display
+Intercepts `tool-call-start` events for `TodoWrite` in session protocol messages. Formats the todo list and sends/edits a pinned Discord message.
+- **First TodoWrite** → send new message + pin
+- **Subsequent TodoWrite** → edit same message (keeps pin)
+- **All completed** → final edit + unpin
+- Only processes TodoWrite from the active session
+- State (`todoMessageId`) resets on session switch
+
 ### Direct Message Forwarding
 User messages in the configured channel auto-forward to CLI via `bridge.sendMessage()`. Optional `DISCORD_REQUIRE_MENTION=true` requires @bot mention (strips mention text before forwarding).
 
@@ -143,7 +151,7 @@ npm run test:e2e         # E2E smoke tests (requires .env.e2e, real services)
 ## Testing
 
 - Framework: Vitest
-- 11 test suites, 220 tests
+- 11 test suites, 231 tests
 - Test files: `src/**/__tests__/*.test.ts`
 - All Happy/Discord dependencies mocked (no real connections needed)
 
@@ -170,6 +178,7 @@ Real end-to-end tests using a second Discord bot + live Happy relay. Located in 
 | `smoke-ask-user.test.ts` | AskUserQuestion option buttons + answer | Yes |
 | `smoke-plan-mode.test.ts` | ExitPlanMode reject with feedback → revised plan → approve | Yes |
 | `smoke-tool-signals.test.ts` | Typing indicator + 🔧 emoji during tool calls | No |
+| `smoke-todowrite.test.ts` | TodoWrite progress display (best-effort) | No |
 
 **E2E helper classes (`e2e/helpers/`):**
 
