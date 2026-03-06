@@ -1190,7 +1190,8 @@ describe('Bridge', () => {
         });
     });
 
-    describe('Attachment upload', () => {        const IMAGE_CONTENT_TYPE = 'image/png';
+    describe('Attachment upload', () => {
+        const IMAGE_CONTENT_TYPE = 'image/png';
         const PDF_CONTENT_TYPE = 'application/pdf';
         const MAX_SIZE = 10 * 1024 * 1024; // 10MB
 
