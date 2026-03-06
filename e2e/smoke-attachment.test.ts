@@ -63,13 +63,69 @@ describe('Smoke: Attachment Upload', () => {
             [{ content: fileContent, name: 'test-note.txt' }],
         );
 
-        // Bot should forward message with [Attached file: ...] hint
-        // Then Claude reads the file and responds with the marker
         const response = await discord.waitForBotMessage(
             (content) => content.includes('ATTACH_E2E_OK'),
             90_000,
         );
 
         expect(response.content).toContain('ATTACH_E2E_OK');
+    });
+
+    it('should upload a PNG image and Claude should describe it', async () => {
+        // Minimal valid 1x1 red PNG (67 bytes)
+        const png = Buffer.from(
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==',
+            'base64',
+        );
+
+        await discord.sendMessageWithFiles(
+            'I attached a PNG image. Use the Read tool to view it and describe what you see. Mention the word "image" in your reply.',
+            [{ content: png, name: 'red-pixel.png' }],
+        );
+
+        const response = await discord.waitForBotMessage(
+            (content) => content.toLowerCase().includes('image') || content.toLowerCase().includes('pixel') || content.toLowerCase().includes('red'),
+            90_000,
+        );
+
+        expect(response.content.toLowerCase()).toMatch(/image|pixel|red|png/);
+    });
+
+    it('should upload a PDF and Claude should read its content', async () => {
+        // Minimal valid PDF with text "PDF_MARKER_E2E"
+        const pdfContent = [
+            '%PDF-1.0',
+            '1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj',
+            '2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj',
+            '3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>endobj',
+            '4 0 obj<</Length 44>>stream',
+            'BT /F1 12 Tf 100 700 Td (PDF_MARKER_E2E) Tj ET',
+            'endstream endobj',
+            '5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj',
+            'xref',
+            '0 6',
+            '0000000000 65535 f ',
+            '0000000009 00000 n ',
+            '0000000058 00000 n ',
+            '0000000115 00000 n ',
+            '0000000266 00000 n ',
+            '0000000360 00000 n ',
+            'trailer<</Size 6/Root 1 0 R>>',
+            'startxref',
+            '430',
+            '%%EOF',
+        ].join('\n');
+
+        await discord.sendMessageWithFiles(
+            'I attached a PDF file. Read it and tell me the marker text inside. Reply with just the marker.',
+            [{ content: Buffer.from(pdfContent, 'utf-8'), name: 'test-doc.pdf' }],
+        );
+
+        const response = await discord.waitForBotMessage(
+            (content) => content.includes('PDF_MARKER_E2E'),
+            90_000,
+        );
+
+        expect(response.content).toContain('PDF_MARKER_E2E');
     });
 });
