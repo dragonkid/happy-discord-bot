@@ -98,6 +98,15 @@ Intercepts `tool-call-start` events for `TodoWrite` in session protocol messages
 ### Direct Message Forwarding
 User messages in the configured channel auto-forward to CLI via `bridge.sendMessage()`. Optional `DISCORD_REQUIRE_MENTION=true` requires @bot mention (strips mention text before forwarding).
 
+### Attachment Upload
+When a Discord message includes attachments (images, PDFs, code files, etc.), the bot downloads each file, base64-encodes it, and writes it to the CLI working directory via `writeFile` RPC.
+- Files stored in `.attachments/<timestamp>-<sanitized-name>`
+- Directory created via `bash` RPC (`mkdir -p .attachments`) before first write
+- 10MB size limit per file (checked against both Discord metadata and actual download)
+- Filenames sanitized with `path.basename()` + character allowlist to prevent path traversal
+- Hint text appended to forwarded message: `[Attached image: .attachments/... — use Read tool to view]`
+- Pure-attachment messages (no text) are forwarded as hint-only messages
+
 ### /new Session Creation Flow
 1. User runs `/new` → bot fetches all sessions via `listAllSessions()`, decrypts metadata
 2. `extractDirectories()` deduplicates by path, filters E2E dirs, sorts by activeAt, limits to 25
@@ -169,7 +178,7 @@ npm run test:e2e         # E2E smoke tests (requires .env.e2e, real services)
 ## Testing
 
 - Framework: Vitest
-- 11 test suites, 231 tests
+- 12 test suites, 271 tests
 - Test files: `src/**/__tests__/*.test.ts`
 - All Happy/Discord dependencies mocked (no real connections needed)
 
