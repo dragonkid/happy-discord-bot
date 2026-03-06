@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { handleExitPlanButton, handleNewSessionSelect, handleNewSessionModal } from '../interactions.js';
+import { handleExitPlanButton, handleNewSessionSelect, handleNewSessionModal, handleDeleteButton } from '../interactions.js';
 import type { ButtonInteraction, StringSelectMenuInteraction, ModalSubmitInteraction } from 'discord.js';
 import type { Bridge } from '../../bridge.js';
 import type { StateTracker } from '../../happy/state-tracker.js';
-import type { ParsedExitPlanButtonId } from '../buttons.js';
+import type { ParsedExitPlanButtonId, ParsedDeleteButtonId } from '../buttons.js';
 
 function makeMockInteraction(overrides: Partial<ButtonInteraction> = {}): ButtonInteraction {
     return {
@@ -218,5 +218,50 @@ describe('handleNewSessionModal', () => {
                 content: expect.stringContaining('provide a directory'),
             }),
         );
+    });
+});
+
+describe('handleDeleteButton', () => {
+    it('cancels delete and shows cancelled message', async () => {
+        const bridge = makeMockBridge('sess-1');
+        (bridge as any).deleteSession = vi.fn().mockResolvedValue('sess-1');
+        const interaction = makeMockInteraction();
+        const parsed: ParsedDeleteButtonId = { sessionId: 'sess-1', action: 'cancel' };
+
+        await handleDeleteButton(interaction, parsed, bridge);
+
+        expect(interaction.editReply).toHaveBeenCalledWith(expect.objectContaining({
+            content: expect.stringContaining('Cancelled'),
+            components: [],
+        }));
+        expect(bridge.deleteSession).not.toHaveBeenCalled();
+    });
+
+    it('confirms delete and calls bridge.deleteSession', async () => {
+        const bridge = makeMockBridge('sess-1');
+        (bridge as any).deleteSession = vi.fn().mockResolvedValue('sess-1');
+        const interaction = makeMockInteraction();
+        const parsed: ParsedDeleteButtonId = { sessionId: 'sess-1', action: 'confirm' };
+
+        await handleDeleteButton(interaction, parsed, bridge);
+
+        expect(bridge.deleteSession).toHaveBeenCalledWith('sess-1');
+        expect(interaction.editReply).toHaveBeenCalledWith(expect.objectContaining({
+            content: expect.stringContaining('deleted'),
+            components: [],
+        }));
+    });
+
+    it('shows error when deleteSession fails', async () => {
+        const bridge = makeMockBridge('sess-1');
+        (bridge as any).deleteSession = vi.fn().mockRejectedValue(new Error('Not found'));
+        const interaction = makeMockInteraction();
+        const parsed: ParsedDeleteButtonId = { sessionId: 'sess-1', action: 'confirm' };
+
+        await handleDeleteButton(interaction, parsed, bridge);
+
+        expect(interaction.editReply).toHaveBeenCalledWith(expect.objectContaining({
+            content: expect.stringContaining('Failed to delete'),
+        }));
     });
 });

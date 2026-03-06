@@ -21,6 +21,8 @@ function makeMockBridge(): Bridge {
         listSessions: vi.fn().mockResolvedValue([]),
         listAllSessions: vi.fn().mockResolvedValue([]),
         createNewSession: vi.fn().mockResolvedValue('new-sess-id'),
+        archiveSession: vi.fn().mockResolvedValue('sess-1'),
+        deleteSession: vi.fn().mockResolvedValue('sess-1'),
         sendMessage: vi.fn().mockResolvedValue(undefined),
         stopSession: vi.fn().mockResolvedValue(undefined),
         compactSession: vi.fn().mockResolvedValue(undefined),
@@ -180,6 +182,83 @@ describe('commands', () => {
 
             expect(interaction.editReply).toHaveBeenCalledWith(
                 expect.stringContaining('No machines found'),
+            );
+        });
+
+        it('includes /archive command', () => {
+            expect(commandDefinitions.find((c: { name: string }) => c.name === 'archive')).toBeDefined();
+        });
+
+        it('includes /delete command', () => {
+            expect(commandDefinitions.find((c: { name: string }) => c.name === 'delete')).toBeDefined();
+        });
+
+        it('/archive calls bridge.archiveSession with active session', async () => {
+            const bridge = makeMockBridge();
+            Object.defineProperty(bridge, 'activeSession', { value: 'sess-1' });
+            const interaction = mockInteraction('archive');
+            await handleCommand(interaction as any, bridge);
+
+            expect(bridge.archiveSession).toHaveBeenCalledWith('sess-1');
+            expect(interaction.editReply).toHaveBeenCalledWith(
+                expect.stringContaining('archived'),
+            );
+        });
+
+        it('/archive calls bridge.archiveSession with specified session', async () => {
+            const bridge = makeMockBridge();
+            Object.defineProperty(bridge, 'activeSession', { value: 'sess-1' });
+            vi.mocked(bridge.archiveSession).mockResolvedValue('sess-other');
+            const interaction = mockInteraction('archive', { session: 'sess-other' });
+            await handleCommand(interaction as any, bridge);
+
+            expect(bridge.archiveSession).toHaveBeenCalledWith('sess-other');
+        });
+
+        it('/archive shows error when no active session', async () => {
+            const bridge = makeMockBridge();
+            const interaction = mockInteraction('archive');
+            await handleCommand(interaction as any, bridge);
+
+            expect(interaction.editReply).toHaveBeenCalledWith(
+                expect.stringContaining('Failed to archive'),
+            );
+        });
+
+        it('/delete shows confirmation buttons', async () => {
+            const bridge = makeMockBridge();
+            Object.defineProperty(bridge, 'activeSession', { value: 'sess-1' });
+            const interaction = mockInteraction('delete');
+            await handleCommand(interaction as any, bridge);
+
+            expect(interaction.editReply).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    content: expect.stringContaining('Permanently delete'),
+                    components: expect.any(Array),
+                }),
+            );
+        });
+
+        it('/delete shows confirmation for specified session', async () => {
+            const bridge = makeMockBridge();
+            Object.defineProperty(bridge, 'activeSession', { value: 'sess-1' });
+            const interaction = mockInteraction('delete', { session: 'sess-other' });
+            await handleCommand(interaction as any, bridge);
+
+            expect(interaction.editReply).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    content: expect.stringContaining('sess-oth'),
+                }),
+            );
+        });
+
+        it('/delete shows error when no active session', async () => {
+            const bridge = makeMockBridge();
+            const interaction = mockInteraction('delete');
+            await handleCommand(interaction as any, bridge);
+
+            expect(interaction.editReply).toHaveBeenCalledWith(
+                expect.stringContaining('Failed'),
             );
         });
     });

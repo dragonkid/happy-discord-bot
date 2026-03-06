@@ -2,8 +2,8 @@ import { loadBotConfig } from './config.js';
 import { HappyClient } from './happy/client.js';
 import { DiscordBot } from './discord/bot.js';
 import { handleCommand } from './discord/commands.js';
-import { parseButtonId, parseExitPlanButtonId, parsePlanModalId, parseNewSessionSelect, parseCustomPathButton, parseCustomPathModal, buildCustomPathModal } from './discord/buttons.js';
-import { parseAskButtonId, parseSessionButtonId, handleAskButton, handleSessionButton, handleExitPlanButton, handleNewSessionSelect, handleNewSessionModal } from './discord/interactions.js';
+import { parseButtonId, parseExitPlanButtonId, parsePlanModalId, parseNewSessionSelect, parseCustomPathButton, parseCustomPathModal, buildCustomPathModal, parseDeleteButtonId } from './discord/buttons.js';
+import { parseAskButtonId, parseSessionButtonId, handleAskButton, handleSessionButton, handleExitPlanButton, handleNewSessionSelect, handleNewSessionModal, handleDeleteButton } from './discord/interactions.js';
 import { Bridge } from './bridge.js';
 import { StateTracker } from './happy/state-tracker.js';
 import { PermissionCache } from './happy/permission-cache.js';
@@ -228,6 +228,22 @@ async function main(): Promise<void> {
                             components: [],
                         }).catch(() => {});
                     }
+                }
+                return;
+            }
+
+            // --- Delete confirmation buttons ---
+            const deleteParsed = parseDeleteButtonId(interaction.customId);
+            if (deleteParsed) {
+                await interaction.deferUpdate();
+                try {
+                    await handleDeleteButton(interaction, deleteParsed, bridge);
+                } catch (err) {
+                    console.error('[Discord] Delete button error:', err);
+                    await interaction.editReply({
+                        content: `${interaction.message.content}\n\n*Error processing delete*`,
+                        components: [],
+                    }).catch(() => {});
                 }
                 return;
             }

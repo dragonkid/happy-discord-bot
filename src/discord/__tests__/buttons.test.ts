@@ -20,6 +20,8 @@ import {
     NEW_SESSION_SELECT_PREFIX,
     NEW_SESSION_CUSTOM_PREFIX,
     NEW_SESSION_MODAL_PREFIX,
+    buildDeleteConfirmButtons,
+    parseDeleteButtonId,
 } from '../buttons.js';
 import { ButtonStyle, type APIButtonComponentWithCustomId } from 'discord.js';
 
@@ -367,6 +369,58 @@ describe('New session menu', () => {
 
         it('returns null for non-matching prefix', () => {
             expect(parseCustomPathModal('other:id')).toBeNull();
+        });
+    });
+});
+
+describe('Delete confirmation buttons', () => {
+    describe('buildDeleteConfirmButtons', () => {
+        it('returns one row with confirm and cancel buttons', () => {
+            const rows = buildDeleteConfirmButtons('sess-1');
+            expect(rows).toHaveLength(1);
+            expect(rows[0].components).toHaveLength(2);
+        });
+
+        it('confirm button has Danger style', () => {
+            const rows = buildDeleteConfirmButtons('sess-1');
+            const btn = rows[0].components[0].data as any;
+            expect(btn.label).toBe('Confirm Delete');
+            expect(btn.style).toBe(ButtonStyle.Danger);
+            expect(btn.custom_id).toBe('delete:sess-1:confirm');
+        });
+
+        it('cancel button has Secondary style', () => {
+            const rows = buildDeleteConfirmButtons('sess-1');
+            const btn = rows[0].components[1].data as any;
+            expect(btn.label).toBe('Cancel');
+            expect(btn.style).toBe(ButtonStyle.Secondary);
+            expect(btn.custom_id).toBe('delete:sess-1:cancel');
+        });
+    });
+
+    describe('parseDeleteButtonId', () => {
+        it('parses confirm button', () => {
+            expect(parseDeleteButtonId('delete:sess-1:confirm')).toEqual({
+                sessionId: 'sess-1', action: 'confirm',
+            });
+        });
+
+        it('parses cancel button', () => {
+            expect(parseDeleteButtonId('delete:sess-1:cancel')).toEqual({
+                sessionId: 'sess-1', action: 'cancel',
+            });
+        });
+
+        it('returns null for non-delete buttons', () => {
+            expect(parseDeleteButtonId('perm:sess-1:req-1:yes')).toBeNull();
+        });
+
+        it('returns null for invalid action', () => {
+            expect(parseDeleteButtonId('delete:sess-1:invalid')).toBeNull();
+        });
+
+        it('returns null for malformed button', () => {
+            expect(parseDeleteButtonId('delete:incomplete')).toBeNull();
         });
     });
 });

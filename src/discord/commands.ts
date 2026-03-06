@@ -4,7 +4,7 @@ import {
     type RESTPostAPIChatInputApplicationCommandsJSONBody,
 } from 'discord.js';
 import type { Bridge } from '../bridge.js';
-import { buildSessionButtons, buildNewSessionMenu } from './buttons.js';
+import { buildSessionButtons, buildNewSessionMenu, buildDeleteConfirmButtons } from './buttons.js';
 import { extractDirectories } from '../happy/session-metadata.js';
 import type { PermissionMode } from '../happy/types.js';
 
@@ -49,7 +49,21 @@ const newSession = new SlashCommandBuilder()
     .setName('new')
     .setDescription('Create a new Claude Code session');
 
-const allCommands = [sessions, send, stop, compact, mode, newSession];
+const archive = new SlashCommandBuilder()
+    .setName('archive')
+    .setDescription('Archive (kill) a Claude Code session')
+    .addStringOption((opt) =>
+        opt.setName('session').setDescription('Session ID prefix (default: current)').setRequired(false),
+    );
+
+const deleteCmd = new SlashCommandBuilder()
+    .setName('delete')
+    .setDescription('Permanently delete a Claude Code session')
+    .addStringOption((opt) =>
+        opt.setName('session').setDescription('Session ID prefix (default: current)').setRequired(false),
+    );
+
+const allCommands = [sessions, send, stop, compact, mode, newSession, archive, deleteCmd];
 
 export const commandDefinitions: RESTPostAPIChatInputApplicationCommandsJSONBody[] =
     allCommands.map((cmd) => cmd.toJSON());
@@ -74,6 +88,10 @@ export async function handleCommand(
             return handleMode(interaction, bridge);
         case 'new':
             return handleNewSession(interaction, bridge);
+        case 'archive':
+            return handleArchive(interaction, bridge);
+        case 'delete':
+            return handleDelete(interaction, bridge);
         default:
             await interaction.reply({ content: `Unknown command: ${interaction.commandName}`, ephemeral: true });
     }
@@ -167,4 +185,41 @@ async function handleNewSession(interaction: ChatInputCommandInteraction, bridge
         content: 'Select a directory for the new session:',
         components,
     });
+}
+
+function resolveSessionId(interaction: ChatInputCommandInteraction, bridge: Bridge): string {
+    const prefix = interaction.options.getString('session');
+    if (!prefix) {
+        const active = bridge.activeSession;
+        if (!active) throw new Error('No active session. Use /sessions to check available sessions.');
+        return active;
+    }
+    return prefix;
+}
+
+async function handleArchive(interaction: ChatInputCommandInteraction, bridge: Bridge): Promise<void> {
+    await interaction.deferReply();
+    try {
+        const sessionId = resolveSessionId(interaction, bridge);
+        await bridge.archiveSession(sessionId);
+        await interaction.editReply(`Session \`${sessionId.slice(0, 8)}\` archived.`);
+    } catch (err) {
+        const detail = err instanceof Error ? err.message : 'Unknown error';
+        await interaction.editReply(`Failed to archive: ${detail}`);
+    }
+}
+
+async function handleDelete(interaction: ChatInputCommandInteraction, bridge: Bridge): Promise<void> {
+    await interaction.deferReply();
+    try {
+        const sessionId = resolveSessionId(interaction, bridge);
+        const buttons = buildDeleteConfirmButtons(sessionId);
+        await interaction.editReply({
+            content: `⚠️ Permanently delete session \`${sessionId.slice(0, 8)}\`? This removes all messages and data.`,
+            components: buttons,
+        });
+    } catch (err) {
+        const detail = err instanceof Error ? err.message : 'Unknown error';
+        await interaction.editReply(`Failed: ${detail}`);
+    }
 }

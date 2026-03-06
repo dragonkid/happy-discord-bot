@@ -347,3 +347,45 @@ export function parseCustomPathModal(customId: string): { machineId: string } | 
     if (!machineId) return null;
     return { machineId };
 }
+
+// --- Delete confirmation buttons ---
+
+const DELETE_PREFIX = 'delete:';
+
+export type DeleteAction = 'confirm' | 'cancel';
+
+export interface ParsedDeleteButtonId {
+    sessionId: string;
+    action: DeleteAction;
+}
+
+const VALID_DELETE_ACTIONS: ReadonlySet<string> = new Set(['confirm', 'cancel']);
+
+export function buildDeleteConfirmButtons(
+    sessionId: string,
+): ActionRowBuilder<ButtonBuilder>[] {
+    const confirm = new ButtonBuilder()
+        .setCustomId(`${DELETE_PREFIX}${sessionId}:confirm`)
+        .setLabel('Confirm Delete')
+        .setStyle(ButtonStyle.Danger);
+
+    const cancel = new ButtonBuilder()
+        .setCustomId(`${DELETE_PREFIX}${sessionId}:cancel`)
+        .setLabel('Cancel')
+        .setStyle(ButtonStyle.Secondary);
+
+    return [new ActionRowBuilder<ButtonBuilder>().addComponents(confirm, cancel)];
+}
+
+export function parseDeleteButtonId(customId: string): ParsedDeleteButtonId | null {
+    if (!customId.startsWith(DELETE_PREFIX)) return null;
+
+    const rest = customId.slice(DELETE_PREFIX.length);
+    const parts = rest.split(':');
+    if (parts.length !== 2) return null;
+
+    const [sessionId, action] = parts;
+    if (!VALID_DELETE_ACTIONS.has(action)) return null;
+
+    return { sessionId, action: action as DeleteAction };
+}
