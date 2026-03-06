@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import path from 'node:path';
 import type { HappyClient } from './happy/client.js';
 import type { DiscordBot } from './discord/bot.js';
 import type { BotConfig } from './config.js';
@@ -162,10 +163,14 @@ export class Bridge {
 
         const hints = await Promise.all(
             attachments.map(async (att) => {
+                // Sanitize filename to prevent path traversal
+                const safeName = path.basename(att.name).replace(/[^a-zA-Z0-9._-]/g, '_') || 'unnamed';
+                const timestamp = Date.now();
+
                 // Size check
                 if (att.size > ATTACHMENT_MAX_BYTES) {
                     const sizeMB = (att.size / (1024 * 1024)).toFixed(1);
-                    return `[Skipped: ${att.name} (${sizeMB}MB, exceeds 10MB limit)]`;
+                    return `[Skipped: ${safeName} (${sizeMB}MB, exceeds 10MB limit)]`;
                 }
 
                 // Download
@@ -174,15 +179,18 @@ export class Bridge {
                     const resp = await fetch(att.url);
                     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
                     buffer = Buffer.from(await resp.arrayBuffer());
+                    if (buffer.byteLength > ATTACHMENT_MAX_BYTES) {
+                        const actualMB = (buffer.byteLength / (1024 * 1024)).toFixed(1);
+                        return `[Skipped: ${safeName} (${actualMB}MB actual, exceeds 10MB limit)]`;
+                    }
                 } catch (err) {
                     const msg = err instanceof Error ? err.message : String(err);
-                    console.error(`[Bridge] Failed to download attachment ${att.name}:`, msg);
-                    return `[Failed to download: ${att.name}]`;
+                    console.error(`[Bridge] Failed to download attachment ${safeName}:`, msg);
+                    return `[Failed to download: ${safeName}]`;
                 }
 
                 // Write to CLI working directory
-                const timestamp = Date.now();
-                const remotePath = `${ATTACHMENT_DIR}/${timestamp}-${att.name}`;
+                const remotePath = `${ATTACHMENT_DIR}/${timestamp}-${safeName}`;
                 try {
                     const result = await this.happy.sessionRPC<WriteFileResponse>(
                         sessionId, 'writeFile', {
@@ -194,8 +202,8 @@ export class Bridge {
                     if (!result.success) throw new Error(result.error ?? 'unknown');
                 } catch (err) {
                     const msg = err instanceof Error ? err.message : String(err);
-                    console.error(`[Bridge] Failed to upload attachment ${att.name}:`, msg);
-                    return `[Failed to upload: ${att.name}]`;
+                    console.error(`[Bridge] Failed to upload attachment ${safeName}:`, msg);
+                    return `[Failed to upload: ${safeName}]`;
                 }
 
                 // Build hint

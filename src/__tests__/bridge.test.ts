@@ -1325,5 +1325,20 @@ describe('Bridge', () => {
             const hints = await bridge.uploadAttachments([attachment]);
             expect(hints).toHaveLength(0);
         });
+
+        it('should sanitize path traversal in filename', async () => {
+            bridge.setActiveSession('sess-1');
+            const attachment = makeAttachment({ name: '../../../.bashrc' });
+            const hints = await bridge.uploadAttachments([attachment]);
+
+            expect(hints).toHaveLength(1);
+            expect(hints[0]).toContain('.attachments/');
+            expect(hints[0]).not.toContain('../');
+            // writeFile path should not contain traversal
+            const writeCall = (happy.sessionRPC as ReturnType<typeof vi.fn>).mock.calls
+                .find((call) => call[1] === 'writeFile');
+            expect(writeCall).toBeDefined();
+            expect(writeCall![2].path).not.toContain('..');
+        });
     });
 });
