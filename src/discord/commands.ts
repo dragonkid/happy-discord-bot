@@ -233,6 +233,12 @@ async function handleDelete(interaction: ChatInputCommandInteraction, bridge: Br
             components: buttons,
         });
     } catch (err) {
+        // If in an orphaned thread (no mapped session), delete it directly
+        if (interaction.channel?.isThread()) {
+            await interaction.editReply('Deleting orphaned thread...');
+            await interaction.channel.delete().catch(() => {});
+            return;
+        }
         const detail = err instanceof Error ? err.message : 'Unknown error';
         await interaction.editReply(`Failed: ${detail}`);
     }
