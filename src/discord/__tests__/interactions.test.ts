@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { handleExitPlanButton } from '../interactions.js';
-import type { ButtonInteraction } from 'discord.js';
+import { handleExitPlanButton, handleNewSessionSelect, handleNewSessionModal } from '../interactions.js';
+import type { ButtonInteraction, StringSelectMenuInteraction, ModalSubmitInteraction } from 'discord.js';
 import type { Bridge } from '../../bridge.js';
 import type { StateTracker } from '../../happy/state-tracker.js';
 import type { ParsedExitPlanButtonId } from '../buttons.js';
@@ -113,5 +113,110 @@ describe('handleExitPlanButton', () => {
             }),
         );
         expect(bridge.denyPermission).not.toHaveBeenCalled();
+    });
+});
+
+function makeMockSelectInteraction(value: string): StringSelectMenuInteraction {
+    return {
+        values: [value],
+        message: { content: 'Select a directory for the new session:' },
+        editReply: vi.fn().mockResolvedValue({}),
+    } as unknown as StringSelectMenuInteraction;
+}
+
+function makeMockModalInteraction(directory: string): ModalSubmitInteraction {
+    return {
+        message: { content: '' },
+        fields: {
+            getTextInputValue: vi.fn().mockReturnValue(directory),
+        },
+        editReply: vi.fn().mockResolvedValue({}),
+    } as unknown as ModalSubmitInteraction;
+}
+
+describe('handleNewSessionSelect', () => {
+    it('calls bridge.createNewSession with selected directory', async () => {
+        const bridge = makeMockBridge('sess-1');
+        (bridge as any).listAllSessions = vi.fn().mockResolvedValue([
+            {
+                id: 'sess-1',
+                activeAt: 3000,
+                metadata: { path: '/Users/user/project', machineId: 'machine-1', host: 'test' },
+            },
+        ]);
+        (bridge as any).createNewSession = vi.fn().mockResolvedValue('new-sess');
+        const interaction = makeMockSelectInteraction('0');
+
+        await handleNewSessionSelect(interaction, bridge);
+
+        expect(bridge.createNewSession).toHaveBeenCalledWith('machine-1', '/Users/user/project');
+        expect(interaction.editReply).toHaveBeenCalledWith(
+            expect.objectContaining({
+                content: expect.stringContaining('Session created'),
+                components: [],
+            }),
+        );
+    });
+
+    it('shows error when index is invalid', async () => {
+        const bridge = makeMockBridge('sess-1');
+        (bridge as any).listAllSessions = vi.fn().mockResolvedValue([]);
+        const interaction = makeMockSelectInteraction('99');
+
+        await handleNewSessionSelect(interaction, bridge);
+
+        expect(interaction.editReply).toHaveBeenCalledWith(
+            expect.objectContaining({
+                content: 'Invalid selection.',
+                components: [],
+            }),
+        );
+    });
+
+    it('shows error when createNewSession fails', async () => {
+        const bridge = makeMockBridge('sess-1');
+        (bridge as any).listAllSessions = vi.fn().mockResolvedValue([
+            {
+                id: 'sess-1',
+                activeAt: 3000,
+                metadata: { path: '/test', machineId: 'machine-1', host: 'test' },
+            },
+        ]);
+        (bridge as any).createNewSession = vi.fn().mockRejectedValue(new Error('machine offline'));
+        const interaction = makeMockSelectInteraction('0');
+
+        await handleNewSessionSelect(interaction, bridge);
+
+        expect(interaction.editReply).toHaveBeenCalledWith(
+            expect.objectContaining({
+                content: expect.stringContaining('Failed'),
+                components: [],
+            }),
+        );
+    });
+});
+
+describe('handleNewSessionModal', () => {
+    it('calls bridge.createNewSession with custom directory', async () => {
+        const bridge = makeMockBridge('sess-1');
+        (bridge as any).createNewSession = vi.fn().mockResolvedValue('new-sess');
+        const interaction = makeMockModalInteraction('/Users/user/custom-dir');
+
+        await handleNewSessionModal(interaction, 'machine-1', bridge);
+
+        expect(bridge.createNewSession).toHaveBeenCalledWith('machine-1', '/Users/user/custom-dir');
+    });
+
+    it('shows error for empty directory', async () => {
+        const bridge = makeMockBridge('sess-1');
+        const interaction = makeMockModalInteraction('   ');
+
+        await handleNewSessionModal(interaction, 'machine-1', bridge);
+
+        expect(interaction.editReply).toHaveBeenCalledWith(
+            expect.objectContaining({
+                content: expect.stringContaining('provide a directory'),
+            }),
+        );
     });
 });

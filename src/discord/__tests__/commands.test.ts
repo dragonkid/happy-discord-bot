@@ -19,6 +19,8 @@ function mockInteraction(name: string, options: Record<string, string> = {}) {
 function makeMockBridge(): Bridge {
     return {
         listSessions: vi.fn().mockResolvedValue([]),
+        listAllSessions: vi.fn().mockResolvedValue([]),
+        createNewSession: vi.fn().mockResolvedValue('new-sess-id'),
         sendMessage: vi.fn().mockResolvedValue(undefined),
         stopSession: vi.fn().mockResolvedValue(undefined),
         compactSession: vi.fn().mockResolvedValue(undefined),
@@ -140,6 +142,44 @@ describe('commands', () => {
 
             expect(interaction.reply).toHaveBeenCalledWith(
                 expect.objectContaining({ content: expect.stringContaining('Unknown') }),
+            );
+        });
+
+        it('includes /new command', () => {
+            expect(commandDefinitions.find((c: { name: string }) => c.name === 'new')).toBeDefined();
+        });
+
+        it('/new shows directory menu when sessions have metadata', async () => {
+            const bridge = makeMockBridge();
+            vi.mocked(bridge.listAllSessions).mockResolvedValueOnce([
+                {
+                    id: 'sess-1',
+                    activeAt: 3000,
+                    metadata: { path: '/Users/user/project', machineId: 'machine-1', host: 'test', version: '0.14.0', os: 'darwin' },
+                },
+            ] as any);
+
+            const interaction = mockInteraction('new');
+            await handleCommand(interaction as any, bridge);
+
+            expect(interaction.deferReply).toHaveBeenCalled();
+            expect(interaction.editReply).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    content: expect.stringContaining('Select a directory'),
+                    components: expect.any(Array),
+                }),
+            );
+        });
+
+        it('/new shows error when no machines found', async () => {
+            const bridge = makeMockBridge();
+            vi.mocked(bridge.listAllSessions).mockResolvedValueOnce([]);
+
+            const interaction = mockInteraction('new');
+            await handleCommand(interaction as any, bridge);
+
+            expect(interaction.editReply).toHaveBeenCalledWith(
+                expect.stringContaining('No machines found'),
             );
         });
     });

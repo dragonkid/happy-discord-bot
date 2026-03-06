@@ -101,6 +101,17 @@ export interface Session {
     updatedAt: number;
 }
 
+// --- Session metadata (from relay, subset of fields we need) ---
+
+export interface SessionMetadata {
+    path: string;
+    machineId: string;
+    host: string;
+    version?: string;
+    os?: string;
+    lifecycleState?: string;
+}
+
 // --- RPC types ---
 
 export interface RpcCallPayload {

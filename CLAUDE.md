@@ -26,20 +26,21 @@ src/
 ├── bridge.ts             # Glue: Happy events ↔ Discord messages/buttons + typing/emoji
 ├── store.ts              # Bot state persistence (~/.happy-discord-bot/state.json)
 ├── happy/
-│   ├── client.ts         # HappyClient: Socket.IO + sessionRPC + HTTP
+│   ├── client.ts         # HappyClient: Socket.IO + sessionRPC + machineRPC + HTTP
+│   ├── session-metadata.ts  # Session metadata decryption + directory extraction
 │   ├── permission-cache.ts  # Tool approval caching (allowedTools, BashLiterals)
 │   ├── state-tracker.ts  # agentState monitoring, permission request detection
 │   └── types.ts          # RPC request/response types
 ├── discord/
 │   ├── bot.ts            # Discord client init + event routing + typing/reaction methods
 │   ├── commands.ts       # Slash command handlers
-│   ├── buttons.ts        # Button builders (permission, AskUserQuestion, session, ExitPlanMode)
-│   ├── interactions.ts   # Button interaction handlers (ask, session, ExitPlanMode)
+│   ├── buttons.ts        # Button builders (permission, AskUserQuestion, session, ExitPlanMode, NewSession)
+│   ├── interactions.ts   # Button interaction handlers (ask, session, ExitPlanMode, NewSession)
 │   ├── formatter.ts      # Code fence-aware message chunking, code blocks, diff formatting
 │   └── deploy-commands.ts  # One-time slash command deployment
 └── vendor/               # Vendored from happy-agent (~800 lines)
     ├── encryption.ts     # AES-256-GCM + XSalsa20 + key derivation
-    ├── credentials.ts    # ~/.happy/agent.key read/write
+    ├── credentials.ts    # ~/.happy/agent.key + ~/.happy/access.key read/write
     ├── api.ts            # REST API (listSessions, getMessages, etc.)
     └── config.ts         # Happy server config loading
 ```
@@ -96,6 +97,23 @@ Intercepts `tool-call-start` events for `TodoWrite` in session protocol messages
 
 ### Direct Message Forwarding
 User messages in the configured channel auto-forward to CLI via `bridge.sendMessage()`. Optional `DISCORD_REQUIRE_MENTION=true` requires @bot mention (strips mention text before forwarding).
+
+### /new Session Creation Flow
+1. User runs `/new` → bot fetches all sessions via `listAllSessions()`, decrypts metadata
+2. `extractDirectories()` deduplicates by path, filters E2E dirs, sorts by activeAt, limits to 25
+3. Bot shows `StringSelectMenu` with directory options + "Custom path..." button
+4. User selects directory (or enters custom path via modal) → `bridge.createNewSession(machineId, directory)`
+5. `machineRPC('spawn-happy-session', {directory, approvedNewDirectoryCreation})` → daemon spawns CLI session
+6. Bot polls `loadSessions()` to find new session → registers encryption key → sets active
+
+**StringSelectMenu values use index-based encoding** (`String(i)`) instead of JSON to stay within Discord's 100-char value limit. Handler re-fetches sessions to resolve the index.
+
+### machineRPC Encryption
+Bot reads two credential files:
+- `~/.happy/agent.key` → `{token, secret}` (legacy XSalsa20-Poly1305)
+- `~/.happy/access.key` → `{encryption: {machineKey}}` (AES-256-GCM / dataKey)
+
+`machineRPC` uses `machineKey` + `dataKey` variant when `access.key` is available, falls back to `secret` + `legacy` otherwise. This matches daemon's `RpcHandlerManager` which always encrypts responses with its machineKey.
 
 ### PermissionCache Logic (replicate from permissionHandler.ts:116-165)
 Check order: Bash literal → Bash prefix → tool whitelist → permissionMode

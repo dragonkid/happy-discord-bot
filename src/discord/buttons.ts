@@ -3,12 +3,14 @@ import {
     ButtonBuilder,
     ButtonStyle,
     ModalBuilder,
+    StringSelectMenuBuilder,
     TextInputBuilder,
     TextInputStyle,
 } from 'discord.js';
 import { EDIT_TOOLS } from '../happy/types.js';
 import type { AskUserQuestionOption } from '../happy/types.js';
 import type { DecryptedSession } from '../vendor/api.js';
+import type { DirectoryEntry } from '../happy/session-metadata.js';
 
 export const BUTTON_PREFIX = 'perm:';
 
@@ -281,4 +283,67 @@ export function parsePlanModalId(customId: string): { sessionId: string; request
     const parts = rest.split(':');
     if (parts.length !== 2) return null;
     return { sessionId: parts[0], requestId: parts[1] };
+}
+
+// --- New Session menu ---
+
+export const NEW_SESSION_SELECT_PREFIX = 'newsess-sel:';
+export const NEW_SESSION_CUSTOM_PREFIX = 'newsess-custom:';
+export const NEW_SESSION_MODAL_PREFIX = 'newsess-modal:';
+
+export function buildNewSessionMenu(
+    directories: readonly DirectoryEntry[],
+): ActionRowBuilder<StringSelectMenuBuilder | ButtonBuilder>[] {
+    const menu = new StringSelectMenuBuilder()
+        .setCustomId(`${NEW_SESSION_SELECT_PREFIX}dir`)
+        .setPlaceholder('Select a directory...')
+        .addOptions(
+            directories.map((dir, i) => ({
+                label: dir.label.slice(0, 100),
+                description: dir.path.slice(0, 100),
+                value: String(i),
+            })),
+        );
+
+    const menuRow = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu);
+
+    const customBtn = new ButtonBuilder()
+        .setCustomId(`${NEW_SESSION_CUSTOM_PREFIX}btn`)
+        .setLabel('Custom path...')
+        .setStyle(ButtonStyle.Secondary);
+
+    const btnRow = new ActionRowBuilder<ButtonBuilder>().addComponents(customBtn);
+
+    return [menuRow, btnRow];
+}
+
+export function parseNewSessionSelect(customId: string): boolean {
+    return customId.startsWith(NEW_SESSION_SELECT_PREFIX);
+}
+
+export function parseCustomPathButton(customId: string): boolean {
+    return customId.startsWith(NEW_SESSION_CUSTOM_PREFIX);
+}
+
+export function buildCustomPathModal(machineId: string): ModalBuilder {
+    const input = new TextInputBuilder()
+        .setCustomId('directory')
+        .setLabel('Directory path')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setPlaceholder('/Users/user/my-project');
+
+    const row = new ActionRowBuilder<TextInputBuilder>().addComponents(input);
+
+    return new ModalBuilder()
+        .setCustomId(`${NEW_SESSION_MODAL_PREFIX}${machineId}`)
+        .setTitle('New Session')
+        .addComponents(row);
+}
+
+export function parseCustomPathModal(customId: string): { machineId: string } | null {
+    if (!customId.startsWith(NEW_SESSION_MODAL_PREFIX)) return null;
+    const machineId = customId.slice(NEW_SESSION_MODAL_PREFIX.length);
+    if (!machineId) return null;
+    return { machineId };
 }
