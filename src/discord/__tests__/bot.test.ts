@@ -184,4 +184,182 @@ describe('DiscordBot', () => {
             expect(mockFetchedMessage.unpin).toHaveBeenCalled();
         });
     });
+
+    describe('createThread', () => {
+        it('sends anchor message and creates thread', async () => {
+            const mockThread = { id: 'thread-1', send: vi.fn() };
+            const mockAnchorMsg = {
+                id: 'anchor-1',
+                startThread: vi.fn().mockResolvedValue(mockThread),
+            };
+            mockChannel.send.mockResolvedValueOnce(mockAnchorMsg);
+
+            await bot.start();
+            const threadId = await bot.createThread('my-session @ macbook');
+            expect(mockChannel.send).toHaveBeenCalledWith('my-session @ macbook');
+            expect(mockAnchorMsg.startThread).toHaveBeenCalledWith({
+                name: 'my-session @ macbook',
+            });
+            expect(threadId).toBe('thread-1');
+        });
+    });
+
+    describe('sendToThread', () => {
+        it('fetches thread channel and sends chunked text', async () => {
+            const mockThreadChannel = {
+                send: vi.fn().mockResolvedValue({ id: 'tmsg-1' }),
+                isThread: vi.fn().mockReturnValue(true),
+            };
+
+            await bot.start();
+            mockClient.channels.fetch.mockResolvedValueOnce(mockThreadChannel);
+            const msgs = await bot.sendToThread('thread-1', 'hello');
+            expect(mockClient.channels.fetch).toHaveBeenCalledWith('thread-1');
+            expect(mockThreadChannel.send).toHaveBeenCalledWith('hello');
+            expect(msgs).toHaveLength(1);
+        });
+    });
+
+    describe('sendToThreadWithButtons', () => {
+        it('sends message with buttons to thread', async () => {
+            const mockThreadChannel = {
+                send: vi.fn().mockResolvedValue({ id: 'tmsg-1' }),
+                isThread: vi.fn().mockReturnValue(true),
+            };
+
+            await bot.start();
+            mockClient.channels.fetch.mockResolvedValueOnce(mockThreadChannel);
+            const rows = [{ type: 'row' }];
+            await bot.sendToThreadWithButtons('thread-1', 'Pick', rows as any);
+            expect(mockThreadChannel.send).toHaveBeenCalledWith({
+                content: 'Pick',
+                components: rows,
+            });
+        });
+    });
+
+    describe('sendToThreadWithAttachment', () => {
+        it('sends attachment with buttons to thread', async () => {
+            const mockThreadChannel = {
+                send: vi.fn().mockResolvedValue({ id: 'tmsg-1' }),
+                isThread: vi.fn().mockReturnValue(true),
+            };
+
+            await bot.start();
+            mockClient.channels.fetch.mockResolvedValueOnce(mockThreadChannel);
+            const rows = [{ type: 'row' }];
+            const buf = Buffer.from('data');
+            await bot.sendToThreadWithAttachment('thread-1', 'See', buf, 'f.md', rows as any);
+            expect(mockThreadChannel.send).toHaveBeenCalledWith(expect.objectContaining({
+                content: 'See',
+                components: rows,
+            }));
+        });
+    });
+
+    describe('archiveThread', () => {
+        it('sets thread archived', async () => {
+            const mockThreadChannel = {
+                setArchived: vi.fn().mockResolvedValue(undefined),
+                isThread: vi.fn().mockReturnValue(true),
+            };
+
+            await bot.start();
+            mockClient.channels.fetch.mockResolvedValueOnce(mockThreadChannel);
+            await bot.archiveThread('thread-1');
+            expect(mockThreadChannel.setArchived).toHaveBeenCalledWith(true);
+        });
+    });
+
+    describe('deleteThread', () => {
+        it('deletes thread channel', async () => {
+            const mockThreadChannel = {
+                delete: vi.fn().mockResolvedValue(undefined),
+                isThread: vi.fn().mockReturnValue(true),
+            };
+
+            await bot.start();
+            mockClient.channels.fetch.mockResolvedValueOnce(mockThreadChannel);
+            await bot.deleteThread('thread-1');
+            expect(mockThreadChannel.delete).toHaveBeenCalled();
+        });
+    });
+
+    describe('sendTypingInThread', () => {
+        it('sends typing in thread channel', async () => {
+            const mockThreadChannel = {
+                sendTyping: vi.fn().mockResolvedValue(undefined),
+                isThread: vi.fn().mockReturnValue(true),
+            };
+
+            await bot.start();
+            mockClient.channels.fetch.mockResolvedValueOnce(mockThreadChannel);
+            await bot.sendTypingInThread('thread-1');
+            expect(mockThreadChannel.sendTyping).toHaveBeenCalled();
+        });
+    });
+
+    describe('thread operations — reactInThread / removeReactionInThread', () => {
+        it('reacts on message within thread', async () => {
+            const mockReactionsCache = {
+                resolve: vi.fn().mockReturnValue({
+                    users: { remove: vi.fn().mockResolvedValue(undefined) },
+                }),
+            };
+            const mockMsg = { react: vi.fn().mockResolvedValue(undefined), reactions: mockReactionsCache };
+            const mockThreadChannel = {
+                messages: { fetch: vi.fn().mockResolvedValue(mockMsg) },
+                isThread: vi.fn().mockReturnValue(true),
+            };
+
+            await bot.start();
+            mockClient.channels.fetch.mockResolvedValueOnce(mockThreadChannel);
+            await bot.reactInThread('thread-1', 'msg-1', '🤔');
+            expect(mockThreadChannel.messages.fetch).toHaveBeenCalledWith('msg-1');
+            expect(mockMsg.react).toHaveBeenCalledWith('🤔');
+        });
+    });
+
+    describe('editMessageInThread', () => {
+        it('edits message in thread', async () => {
+            const mockMsg = { edit: vi.fn().mockResolvedValue(undefined) };
+            const mockThreadChannel = {
+                messages: { fetch: vi.fn().mockResolvedValue(mockMsg) },
+                isThread: vi.fn().mockReturnValue(true),
+            };
+
+            await bot.start();
+            mockClient.channels.fetch.mockResolvedValueOnce(mockThreadChannel);
+            await bot.editMessageInThread('thread-1', 'msg-1', 'updated');
+            expect(mockMsg.edit).toHaveBeenCalledWith({ content: 'updated' });
+        });
+    });
+
+    describe('pinMessageInThread / unpinMessageInThread', () => {
+        it('pins message in thread', async () => {
+            const mockMsg = { pin: vi.fn().mockResolvedValue(undefined) };
+            const mockThreadChannel = {
+                messages: { fetch: vi.fn().mockResolvedValue(mockMsg) },
+                isThread: vi.fn().mockReturnValue(true),
+            };
+
+            await bot.start();
+            mockClient.channels.fetch.mockResolvedValueOnce(mockThreadChannel);
+            await bot.pinMessageInThread('thread-1', 'msg-1');
+            expect(mockMsg.pin).toHaveBeenCalled();
+        });
+
+        it('unpins message in thread', async () => {
+            const mockMsg = { unpin: vi.fn().mockResolvedValue(undefined) };
+            const mockThreadChannel = {
+                messages: { fetch: vi.fn().mockResolvedValue(mockMsg) },
+                isThread: vi.fn().mockReturnValue(true),
+            };
+
+            await bot.start();
+            mockClient.channels.fetch.mockResolvedValueOnce(mockThreadChannel);
+            await bot.unpinMessageInThread('thread-1', 'msg-1');
+            expect(mockMsg.unpin).toHaveBeenCalled();
+        });
+    });
 });
