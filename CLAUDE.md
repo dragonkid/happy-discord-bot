@@ -206,6 +206,7 @@ Real end-to-end tests using a second Discord bot + live Happy relay. Located in 
 | `smoke-plan-mode.test.ts` | ExitPlanMode reject with feedback → revised plan → approve | Yes |
 | `smoke-tool-signals.test.ts` | Typing indicator + 🔧 emoji during tool calls | No |
 | `smoke-todowrite.test.ts` | TodoWrite progress display (best-effort) | No |
+| `smoke-attachment.test.ts` | Attachment upload via writeFile RPC + Claude reads file | No |
 
 **E2E helper classes (`e2e/helpers/`):**
 
@@ -213,7 +214,7 @@ Real end-to-end tests using a second Discord bot + live Happy relay. Located in 
 |--------|---------|
 | `DaemonClient` | HTTP API to spawn/stop CLI sessions via `~/.happy/daemon.state.json` |
 | `BotProcess` | Spawn bot as subprocess, capture logs, start/stop/restart |
-| `DiscordTestClient` | Second Discord bot: send messages, collect responses/typing/reactions |
+| `DiscordTestClient` | Second Discord bot: send messages/attachments, collect responses/typing/reactions |
 | `HappyTestClient` | Connect to Happy relay for sessionRPC (approve/deny permissions) |
 | `StateFile` | Write/read `state.json` for pre-seeding permission state |
 | `wait.ts` | Polling `waitFor()` + `waitForExit()` utilities |
