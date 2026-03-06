@@ -14,6 +14,7 @@ const stateFile = new StateFile(join(tmpdir(), 'happy-discord-bot-e2e'));
 const daemon = new DaemonClient();
 
 let spawnedSessionId: string | null = null;
+let sessionDirName: string;
 
 describe('Smoke: Thread per Session E2E', () => {
     beforeAll(async () => {
@@ -21,7 +22,8 @@ describe('Smoke: Thread per Session E2E', () => {
         await discord.start();
         await daemon.connect();
 
-        spawnedSessionId = await daemon.spawnSession(`/tmp/e2e-thread-${Date.now()}`);
+        sessionDirName = `e2e-thread-${Date.now()}`;
+        spawnedSessionId = await daemon.spawnSession(`/tmp/${sessionDirName}`);
         console.log(`[Test] Spawned session: ${spawnedSessionId}`);
 
         await bot.start({
@@ -36,6 +38,10 @@ describe('Smoke: Thread per Session E2E', () => {
 
     afterAll(async () => {
         await bot.stop();
+        // Clean up threads created during test
+        for (const thread of discord.getCreatedThreads()) {
+            await discord.deleteThread(thread.id).catch(() => {});
+        }
         discord.destroy();
         if (spawnedSessionId) {
             await daemon.stopSession(spawnedSessionId).catch(() => {});
@@ -46,7 +52,7 @@ describe('Smoke: Thread per Session E2E', () => {
     it('creates a thread when session starts', async () => {
         // Bot auto-creates threads for all active sessions — find the e2e one
         const thread = await discord.waitForThread(
-            (t) => t.name.includes('e2e-thread'),
+            (t) => t.name.includes(sessionDirName),
             15_000,
         );
         expect(thread).toBeDefined();

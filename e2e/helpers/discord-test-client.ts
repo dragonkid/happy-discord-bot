@@ -213,6 +213,15 @@ export class DiscordTestClient {
         return this.createdThreads.find(predicate);
     }
 
+    getCreatedThreads(): ReadonlyArray<{ id: string; name: string }> {
+        return this.createdThreads;
+    }
+
+    async deleteThread(threadId: string): Promise<void> {
+        const ch = await this.client.channels.fetch(threadId);
+        if (ch?.isThread()) await ch.delete();
+    }
+
     async sendMessageInThread(threadId: string, text: string): Promise<Message> {
         const thread = await this.client.channels.fetch(threadId);
         if (!thread?.isThread()) throw new Error(`Channel ${threadId} is not a thread`);
