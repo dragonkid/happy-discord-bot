@@ -99,17 +99,25 @@ export async function handleCommand(
 
 // --- Handlers ---
 
+const E2E_PATH_PATTERN = /^\/(?:private\/)?tmp\/e2e-/;
+
 async function handleSessions(interaction: ChatInputCommandInteraction, bridge: Bridge): Promise<void> {
     await interaction.deferReply();
     const sessions = await bridge.listAllSessions();
 
-    if (sessions.length === 0) {
+    // Filter out E2E test sessions
+    const filtered = sessions.filter((s) => {
+        const meta = s.metadata as { path?: string } | null;
+        return !meta?.path || !E2E_PATH_PATTERN.test(meta.path);
+    });
+
+    if (filtered.length === 0) {
         await interaction.editReply('No sessions found.');
         return;
     }
 
     // Sort: active first (by activeAt desc), then inactive (by activeAt desc)
-    const sorted = [...sessions].sort((a, b) => {
+    const sorted = [...filtered].sort((a, b) => {
         if (a.active !== b.active) return a.active ? -1 : 1;
         return b.activeAt - a.activeAt;
     });
@@ -121,13 +129,24 @@ async function handleSessions(interaction: ChatInputCommandInteraction, bridge: 
         return `${s.active ? '🟢' : '⚪'} \`${s.id.slice(0, 8)}\` ${name}${status}${marker}`;
     });
 
+    // Truncate to fit Discord 2000-char limit
+    let content = '';
+    for (const line of lines) {
+        const next = content ? `${content}\n${line}` : line;
+        if (next.length > 1900) {
+            content += `\n... and ${lines.length - content.split('\n').length} more`;
+            break;
+        }
+        content = next;
+    }
+
     const activeSessions = sorted.filter((s) => s.active);
     const buttons = activeSessions.length > 0
         ? buildSessionButtons(activeSessions, bridge.activeSession)
         : [];
 
     await interaction.editReply({
-        content: lines.join('\n'),
+        content,
         components: buttons,
     });
 }
