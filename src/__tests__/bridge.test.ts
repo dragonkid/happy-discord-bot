@@ -1188,4 +1188,142 @@ describe('Bridge', () => {
             expect(listSessions).toHaveBeenCalledWith(config.happy, config.credentials);
         });
     });
+
+    describe('Attachment upload', () => {
+        const IMAGE_CONTENT_TYPE = 'image/png';
+        const PDF_CONTENT_TYPE = 'application/pdf';
+        const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+
+        function makeAttachment(overrides: Partial<{
+            url: string;
+            name: string;
+            contentType: string | null;
+            size: number;
+        }> = {}) {
+            return {
+                url: overrides.url ?? 'https://cdn.discordapp.com/attachments/123/456/test.png',
+                name: overrides.name ?? 'test.png',
+                contentType: overrides.contentType ?? IMAGE_CONTENT_TYPE,
+                size: overrides.size ?? 1024,
+            };
+        }
+
+        beforeEach(() => {
+            vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+                ok: true,
+                arrayBuffer: () => Promise.resolve(new ArrayBuffer(8)),
+            }));
+
+            (happy.sessionRPC as ReturnType<typeof vi.fn>).mockImplementation(
+                (_sid: string, method: string) => {
+                    if (method === 'writeFile') return Promise.resolve({ success: true, hash: 'abc123' });
+                    if (method === 'bash') return Promise.resolve({ stdout: '', stderr: '', exitCode: 0 });
+                    return Promise.resolve({});
+                },
+            );
+        });
+
+        afterEach(() => {
+            vi.unstubAllGlobals();
+        });
+
+        it('should upload a single image attachment and return hint', async () => {
+            bridge.setActiveSession('sess-1');
+            const attachment = makeAttachment();
+            const hints = await bridge.uploadAttachments([attachment]);
+
+            expect(hints).toHaveLength(1);
+            expect(hints[0]).toContain('[Attached image:');
+            expect(hints[0]).toContain('test.png');
+            expect(hints[0]).toContain('Read tool');
+
+            expect(happy.sessionRPC).toHaveBeenCalledWith(
+                'sess-1', 'bash',
+                expect.objectContaining({ command: 'mkdir -p .attachments' }),
+            );
+
+            expect(happy.sessionRPC).toHaveBeenCalledWith(
+                'sess-1', 'writeFile',
+                expect.objectContaining({
+                    path: expect.stringContaining('.attachments/'),
+                    content: expect.any(String),
+                    expectedHash: null,
+                }),
+            );
+        });
+
+        it('should upload a non-image file with correct hint', async () => {
+            bridge.setActiveSession('sess-1');
+            const attachment = makeAttachment({
+                name: 'report.pdf',
+                contentType: PDF_CONTENT_TYPE,
+            });
+            const hints = await bridge.uploadAttachments([attachment]);
+
+            expect(hints).toHaveLength(1);
+            expect(hints[0]).toContain('[Attached file:');
+            expect(hints[0]).toContain('report.pdf');
+        });
+
+        it('should skip attachments exceeding size limit', async () => {
+            bridge.setActiveSession('sess-1');
+            const attachment = makeAttachment({ size: MAX_SIZE + 1, name: 'huge.png' });
+            const hints = await bridge.uploadAttachments([attachment]);
+
+            expect(hints).toHaveLength(1);
+            expect(hints[0]).toContain('Skipped');
+            expect(hints[0]).toContain('huge.png');
+            expect(hints[0]).toContain('exceeds');
+        });
+
+        it('should handle download failure gracefully', async () => {
+            bridge.setActiveSession('sess-1');
+            vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 404 }));
+
+            const attachment = makeAttachment({ name: 'missing.png' });
+            const hints = await bridge.uploadAttachments([attachment]);
+
+            expect(hints).toHaveLength(1);
+            expect(hints[0]).toContain('Failed to download');
+            expect(hints[0]).toContain('missing.png');
+        });
+
+        it('should handle writeFile RPC failure gracefully', async () => {
+            bridge.setActiveSession('sess-1');
+            (happy.sessionRPC as ReturnType<typeof vi.fn>).mockImplementation(
+                (_sid: string, method: string) => {
+                    if (method === 'writeFile') return Promise.resolve({ success: false, error: 'disk full' });
+                    if (method === 'bash') return Promise.resolve({ stdout: '', stderr: '', exitCode: 0 });
+                    return Promise.resolve({});
+                },
+            );
+
+            const attachment = makeAttachment({ name: 'fail.png' });
+            const hints = await bridge.uploadAttachments([attachment]);
+
+            expect(hints).toHaveLength(1);
+            expect(hints[0]).toContain('Failed to upload');
+            expect(hints[0]).toContain('fail.png');
+        });
+
+        it('should upload multiple attachments in parallel', async () => {
+            bridge.setActiveSession('sess-1');
+            const attachments = [
+                makeAttachment({ name: 'a.png', url: 'https://cdn.example.com/a.png' }),
+                makeAttachment({ name: 'b.pdf', contentType: PDF_CONTENT_TYPE, url: 'https://cdn.example.com/b.pdf' }),
+            ];
+            const hints = await bridge.uploadAttachments(attachments);
+
+            expect(hints).toHaveLength(2);
+            const bashCalls = (happy.sessionRPC as ReturnType<typeof vi.fn>).mock.calls
+                .filter(([, method]: [string, string]) => method === 'bash');
+            expect(bashCalls).toHaveLength(1);
+        });
+
+        it('should return empty array when no active session', async () => {
+            const attachment = makeAttachment();
+            const hints = await bridge.uploadAttachments([attachment]);
+            expect(hints).toHaveLength(0);
+        });
+    });
 });
