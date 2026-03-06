@@ -135,3 +135,28 @@ export interface SessionMessage {
     createdAt: number;
     updatedAt: number;
 }
+
+// --- Attachment upload RPC types ---
+
+export interface WriteFileRequest {
+    path: string;
+    content: string; // base64 encoded
+    expectedHash: string | null; // null for new files
+}
+
+export interface WriteFileResponse {
+    success: boolean;
+    hash?: string;
+    error?: string;
+}
+
+export interface BashRequest {
+    command: string;
+    cwd?: string;
+}
+
+export interface BashResponse {
+    stdout: string;
+    stderr: string;
+    exitCode: number;
+}
