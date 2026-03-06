@@ -13,6 +13,7 @@ import { formatPermissionRequest, formatAskUserQuestion, formatExitPlanMode, for
 import type { TodoItem } from './discord/formatter.js';
 import { isExitPlanMode } from './happy/types.js';
 import type { PermissionRequest, PermissionResponse, PermissionMode, AgentState, AskUserQuestionInput, WriteFileResponse } from './happy/types.js';
+import { threadName } from './happy/session-metadata.js';
 
 const DISCONNECT_DEBOUNCE_MS = 5_000;
 const TYPING_INTERVAL_MS = 8_000;
@@ -277,6 +278,15 @@ export class Bridge {
             const latest = sessions.reduce((a, b) => (a.activeAt > b.activeAt ? a : b));
             this.setActiveSession(latest.id);
         }
+
+        // Create threads for sessions that don't have one
+        for (const session of sessions) {
+            if (!this.getThreadId(session.id)) {
+                this.ensureThread(session.id, session.metadata).catch((err) => {
+                    console.error(`[Bridge] Failed to create thread for session ${session.id.slice(0, 8)}:`, err);
+                });
+            }
+        }
     }
 
     async listSessions(): Promise<DecryptedSession[]> {
@@ -304,6 +314,7 @@ export class Bridge {
             this.happy.registerSessionEncryption(newSession.id, newSession.encryption);
             this.setActiveSession(newSession.id);
             this.persistModes();
+            await this.ensureThread(newSession.id, newSession.metadata);
         }
 
         return sessionId;
@@ -458,6 +469,17 @@ export class Bridge {
         for (const [sessionId, threadId] of Object.entries(map)) {
             this.setThread(sessionId, threadId);
         }
+    }
+
+    async ensureThread(sessionId: string, metadata: unknown): Promise<string> {
+        const existing = this.getThreadId(sessionId);
+        if (existing) return existing;
+
+        const name = threadName(metadata, sessionId);
+        const threadId = await this.discord.createThread(name);
+        this.setThread(sessionId, threadId);
+        this.persistModes();
+        return threadId;
     }
 
     private cancelDisconnectTimer(): void {

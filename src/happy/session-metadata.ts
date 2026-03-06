@@ -16,6 +16,15 @@ function isValidMetadata(metadata: unknown): metadata is SessionMetadata {
     return typeof m.path === 'string' && typeof m.machineId === 'string';
 }
 
+export function threadName(metadata: unknown, fallbackSessionId: string): string {
+    if (!isValidMetadata(metadata)) {
+        return `session-${fallbackSessionId.slice(0, 8)}`;
+    }
+    const dir = metadata.path.split('/').filter(Boolean).pop() ?? 'unknown';
+    const host = metadata.host || metadata.machineId.slice(0, 8);
+    return `${dir} @ ${host}`;
+}
+
 function shortLabel(fullPath: string): string {
     const segments = fullPath.split('/').filter(Boolean);
     if (segments.length < 2) return fullPath;

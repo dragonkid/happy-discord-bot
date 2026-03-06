@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractDirectories } from '../session-metadata.js';
+import { extractDirectories, threadName } from '../session-metadata.js';
 import type { DecryptedSession } from '../../vendor/api.js';
 
 function makeSession(path: string, machineId: string, activeAt: number): DecryptedSession {
@@ -92,5 +92,29 @@ describe('extractDirectories', () => {
         ];
         const result = extractDirectories(sessions);
         expect(result[0].label).toBe('/root');
+    });
+});
+
+describe('threadName', () => {
+    it('returns "dir @ host" for valid metadata', () => {
+        expect(threadName(
+            { path: '/Users/user/my-project', machineId: 'abc', host: 'macbook' },
+            'sess-1',
+        )).toBe('my-project @ macbook');
+    });
+
+    it('falls back to machineId prefix when host is empty', () => {
+        expect(threadName(
+            { path: '/a/b', machineId: 'abcdef1234', host: '' },
+            's1',
+        )).toBe('b @ abcdef12');
+    });
+
+    it('returns fallback for invalid metadata', () => {
+        expect(threadName(null, 'sess-1234-abcd')).toBe('session-sess-123');
+    });
+
+    it('returns fallback for undefined metadata', () => {
+        expect(threadName(undefined, 'abcd1234')).toBe('session-abcd1234');
     });
 });
