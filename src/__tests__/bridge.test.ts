@@ -952,14 +952,14 @@ describe('Bridge', () => {
             permissionCache.setMode('acceptEdits');
             permissionCache.applyApproval(['Edit']);
             bridge.persistModes();
-            expect(mockStore.save).toHaveBeenCalledWith({
+            expect(mockStore.save).toHaveBeenCalledWith(expect.objectContaining({
                 sessions: expect.objectContaining({
                     'sess-1': expect.objectContaining({
                         mode: 'acceptEdits',
                         allowedTools: expect.arrayContaining(['Edit']),
                     }),
                 }),
-            });
+            }));
         });
 
         it('persistModes is no-op without store', () => {

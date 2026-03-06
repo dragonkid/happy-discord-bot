@@ -93,7 +93,7 @@ export class Bridge {
         if (this.activeSessionId) {
             this.permissionCache.saveSession(this.activeSessionId);
         }
-        this.store.save({ sessions: this.permissionCache.getAllSessions() }).catch((err) => {
+        this.store.save({ sessions: this.permissionCache.getAllSessions(), threads: {} }).catch((err) => {
             console.error('[Bridge] Failed to persist modes:', err);
         });
     }
