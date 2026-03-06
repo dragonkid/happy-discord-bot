@@ -1,6 +1,6 @@
 import type { ButtonInteraction, StringSelectMenuInteraction, ModalSubmitInteraction } from 'discord.js';
 import { parseAskButtonId, parseSessionButtonId, buildAskButtons, buildRejectPlanModal } from './buttons.js';
-import type { AskButtonAction, ParsedSessionButtonId, ParsedExitPlanButtonId } from './buttons.js';
+import type { AskButtonAction, ParsedSessionButtonId, ParsedExitPlanButtonId, ParsedDeleteButtonId } from './buttons.js';
 import type { AskUserQuestionInput } from '../happy/types.js';
 import type { Bridge } from '../bridge.js';
 import type { StateTracker } from '../happy/state-tracker.js';
@@ -214,6 +214,34 @@ export async function handleNewSessionModal(
         const detail = err instanceof Error ? err.message : 'Unknown error';
         await interaction.editReply({
             content: `Failed to create session: ${detail}`,
+            components: [],
+        });
+    }
+}
+
+export async function handleDeleteButton(
+    interaction: ButtonInteraction,
+    parsed: ParsedDeleteButtonId,
+    bridge: Bridge,
+): Promise<void> {
+    if (parsed.action === 'cancel') {
+        await interaction.editReply({
+            content: `${interaction.message.content}\n\n*Cancelled*`,
+            components: [],
+        });
+        return;
+    }
+
+    try {
+        const deletedId = await bridge.deleteSession(parsed.sessionId);
+        await interaction.editReply({
+            content: `Session \`${deletedId.slice(0, 8)}\` deleted.`,
+            components: [],
+        });
+    } catch (err) {
+        const detail = err instanceof Error ? err.message : 'Unknown error';
+        await interaction.editReply({
+            content: `Failed to delete: ${detail}`,
             components: [],
         });
     }

@@ -117,6 +117,13 @@ When a Discord message includes attachments (images, PDFs, code files, etc.), th
 
 **StringSelectMenu values use index-based encoding** (`String(i)`) instead of JSON to stay within Discord's 100-char value limit. Handler re-fetches sessions to resolve the index.
 
+### /archive and /delete Session Lifecycle
+- `/archive [session]` — Kill session process (data preserved): `sessionRPC('killSession', {})`
+- `/delete [session]` — Permanently delete session + all data: `DELETE /v1/sessions/:id`
+- Both default to current active session; optional `session` parameter accepts session ID prefix
+- `/archive` executes directly; `/delete` shows "Confirm Delete" / "Cancel" buttons first
+- Deleting the active session clears `activeSessionId`
+
 ### machineRPC Encryption
 Bot reads two credential files:
 - `~/.happy/agent.key` → `{token, secret}` (legacy XSalsa20-Poly1305)
@@ -178,7 +185,7 @@ npm run test:e2e         # E2E smoke tests (requires .env.e2e, real services)
 ## Testing
 
 - Framework: Vitest
-- 12 test suites, 271 tests
+- 12 test suites, 297 tests
 - Test files: `src/**/__tests__/*.test.ts`
 - All Happy/Discord dependencies mocked (no real connections needed)
 

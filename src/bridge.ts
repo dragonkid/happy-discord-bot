@@ -4,7 +4,7 @@ import type { HappyClient } from './happy/client.js';
 import type { DiscordBot } from './discord/bot.js';
 import type { BotConfig } from './config.js';
 import { encrypt, encodeBase64, decrypt, decodeBase64 } from './vendor/encryption.js';
-import { listActiveSessions, listSessions, type DecryptedSession } from './vendor/api.js';
+import { listActiveSessions, listSessions, deleteSession as apiDeleteSession, type DecryptedSession } from './vendor/api.js';
 import type { StateTracker } from './happy/state-tracker.js';
 import type { PermissionCache } from './happy/permission-cache.js';
 import type { Store } from './store.js';
@@ -302,6 +302,21 @@ export class Bridge {
         }
 
         return sessionId;
+    }
+
+    async archiveSession(sessionId?: string): Promise<string> {
+        const target = sessionId ?? this.requireActiveSession();
+        await this.happy.sessionRPC(target, 'killSession', {});
+        return target;
+    }
+
+    async deleteSession(sessionId?: string): Promise<string> {
+        const target = sessionId ?? this.requireActiveSession();
+        await apiDeleteSession(this.config.happy, this.config.credentials, target);
+        if (target === this.activeSessionId) {
+            this.activeSessionId = null;
+        }
+        return target;
     }
 
     /** Process a raw update from the Happy relay. Public for testing. */

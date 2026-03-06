@@ -56,6 +56,7 @@ function makeMockConfig(): BotConfig {
 vi.mock('../vendor/api.js', () => ({
     listActiveSessions: vi.fn().mockResolvedValue([]),
     listSessions: vi.fn().mockResolvedValue([]),
+    deleteSession: vi.fn().mockResolvedValue(undefined),
     resolveSessionEncryption: vi.fn(),
 }));
 
@@ -1189,8 +1190,7 @@ describe('Bridge', () => {
         });
     });
 
-    describe('Attachment upload', () => {
-        const IMAGE_CONTENT_TYPE = 'image/png';
+    describe('Attachment upload', () => {        const IMAGE_CONTENT_TYPE = 'image/png';
         const PDF_CONTENT_TYPE = 'application/pdf';
         const MAX_SIZE = 10 * 1024 * 1024; // 10MB
 
@@ -1351,6 +1351,56 @@ describe('Bridge', () => {
                 .find((call) => call[1] === 'writeFile');
             expect(writeCall).toBeDefined();
             expect(writeCall![2].path).not.toContain('..');
+        });
+    });
+
+    describe('archiveSession', () => {
+        it('calls sessionRPC killSession on active session', async () => {
+            bridge.setActiveSession('sess-1');
+            const result = await bridge.archiveSession();
+
+            expect(happy.sessionRPC).toHaveBeenCalledWith('sess-1', 'killSession', {});
+            expect(result).toBe('sess-1');
+        });
+
+        it('calls sessionRPC killSession on specified session', async () => {
+            bridge.setActiveSession('sess-1');
+            const result = await bridge.archiveSession('sess-other');
+
+            expect(happy.sessionRPC).toHaveBeenCalledWith('sess-other', 'killSession', {});
+            expect(result).toBe('sess-other');
+        });
+
+        it('throws when no active session and no sessionId provided', async () => {
+            await expect(bridge.archiveSession()).rejects.toThrow('No active session');
+        });
+    });
+
+    describe('deleteSession', () => {
+        it('calls deleteSession API on active session and clears activeSessionId', async () => {
+            bridge.setActiveSession('sess-1');
+            const { deleteSession: apiDelete } = await import('../vendor/api.js');
+
+            const result = await bridge.deleteSession();
+
+            expect(apiDelete).toHaveBeenCalledWith(config.happy, config.credentials, 'sess-1');
+            expect(result).toBe('sess-1');
+            expect(bridge.activeSession).toBeNull();
+        });
+
+        it('calls deleteSession API on specified session without clearing active', async () => {
+            bridge.setActiveSession('sess-1');
+            const { deleteSession: apiDelete } = await import('../vendor/api.js');
+
+            const result = await bridge.deleteSession('sess-other');
+
+            expect(apiDelete).toHaveBeenCalledWith(config.happy, config.credentials, 'sess-other');
+            expect(result).toBe('sess-other');
+            expect(bridge.activeSession).toBe('sess-1');
+        });
+
+        it('throws when no active session and no sessionId provided', async () => {
+            await expect(bridge.deleteSession()).rejects.toThrow('No active session');
         });
     });
 });
