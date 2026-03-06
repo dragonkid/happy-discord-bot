@@ -209,6 +209,10 @@ export class DiscordTestClient {
         return this.createdThreads[this.createdThreads.length - 1];
     }
 
+    findThread(predicate: (t: { name: string; id: string }) => boolean): { name: string; id: string } | undefined {
+        return this.createdThreads.find(predicate);
+    }
+
     async sendMessageInThread(threadId: string, text: string): Promise<Message> {
         const thread = await this.client.channels.fetch(threadId);
         if (!thread?.isThread()) throw new Error(`Channel ${threadId} is not a thread`);

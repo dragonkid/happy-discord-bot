@@ -44,19 +44,18 @@ describe('Smoke: Thread per Session E2E', () => {
     });
 
     it('creates a thread when session starts', async () => {
-        // Bot should auto-create a thread for the spawned session
+        // Bot auto-creates threads for all active sessions — find the e2e one
         const thread = await discord.waitForThread(
-            (t) => t.name.includes('@'), // "dir @ host" format
+            (t) => t.name.includes('e2e-thread'),
             15_000,
         );
         expect(thread).toBeDefined();
-        expect(thread.name).toContain('e2e-thread');
         expect(thread.name).toContain('@');
         console.log(`[Test] Thread created: ${thread.name} (${thread.id})`);
     });
 
     it('routes message in thread to session and responds in thread', async () => {
-        const thread = discord.getLatestThread();
+        const thread = discord.findThread((t) => t.name.includes('e2e-thread'));
         expect(thread).toBeDefined();
 
         // Small delay to ensure session is ready for input
@@ -86,7 +85,7 @@ describe('Smoke: Thread per Session E2E', () => {
         await bot.waitForLog('[Store] Loaded', 15_000);
         await bot.waitForLog('saved thread', 10_000);
 
-        const thread = discord.getLatestThread();
+        const thread = discord.findThread((t) => t.name.includes('e2e-thread'));
         if (thread) {
             discord.clearMessages();
             await discord.sendMessageInThread(thread.id, 'Reply with exactly: RESTART-PONG');
