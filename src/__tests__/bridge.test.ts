@@ -1909,5 +1909,20 @@ describe('Bridge', () => {
             await bridge.deleteSession('sess-1');
             expect(mockStore.save).toHaveBeenCalled();
         });
+
+        it('deleteSession resolves prefix to full session ID for thread cleanup', async () => {
+            bridge.setActiveSession('sess-full-id-abc123');
+            bridge.setThread('sess-full-id-abc123', 'thread-1');
+            await bridge.deleteSession('sess-full');
+            expect(discord.deleteThread).toHaveBeenCalledWith('thread-1');
+            expect(bridge.getThreadId('sess-full-id-abc123')).toBeNull();
+        });
+
+        it('archiveSession resolves prefix to full session ID for thread archive', async () => {
+            bridge.setActiveSession('sess-full-id-abc123');
+            bridge.setThread('sess-full-id-abc123', 'thread-1');
+            await bridge.archiveSession('sess-full');
+            expect(discord.archiveThread).toHaveBeenCalledWith('thread-1');
+        });
     });
 });

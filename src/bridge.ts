@@ -326,7 +326,8 @@ export class Bridge {
     async archiveSession(sessionId?: string): Promise<string> {
         const target = sessionId ?? this.requireActiveSession();
         await this.happy.sessionRPC(target, 'killSession', {});
-        const threadId = this.getThreadId(target);
+        const fullId = this.resolveFullSessionId(target);
+        const threadId = this.getThreadId(fullId);
         if (threadId) {
             await this.discord.archiveThread(threadId).catch((err) => {
                 console.error(`[Bridge] Failed to archive thread:`, err);
@@ -338,12 +339,13 @@ export class Bridge {
     async deleteSession(sessionId?: string): Promise<string> {
         const target = sessionId ?? this.requireActiveSession();
         await apiDeleteSession(this.config.happy, this.config.credentials, target);
-        const threadId = this.getThreadId(target);
+        const fullId = this.resolveFullSessionId(target);
+        const threadId = this.getThreadId(fullId);
         if (threadId) {
             await this.discord.deleteThread(threadId).catch((err) => {
                 console.error(`[Bridge] Failed to delete thread:`, err);
             });
-            this.removeThread(target);
+            this.removeThread(fullId);
         }
         if (target === this.activeSessionId) {
             this.activeSessionId = null;
@@ -796,6 +798,15 @@ export class Bridge {
                 }
             }
         }
+    }
+
+    /** Resolve a session ID prefix to a full session ID via the thread map. */
+    private resolveFullSessionId(idOrPrefix: string): string {
+        if (this.sessionToThread.has(idOrPrefix)) return idOrPrefix;
+        for (const key of this.sessionToThread.keys()) {
+            if (key.startsWith(idOrPrefix)) return key;
+        }
+        return idOrPrefix;
     }
 
     private requireActiveSession(): string {
