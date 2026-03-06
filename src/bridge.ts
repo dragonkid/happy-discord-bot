@@ -688,7 +688,16 @@ export class Bridge {
     }
 
     private async loadSessions(): Promise<DecryptedSession[]> {
-        const sessions = await listActiveSessions(this.config.happy, this.config.credentials);
+        let sessions: DecryptedSession[];
+        try {
+            sessions = await listActiveSessions(this.config.happy, this.config.credentials);
+        } catch (err) {
+            // 404 when no active sessions exist — treat as empty list
+            if ((err as { status?: number }).status === 404) {
+                return [];
+            }
+            throw err;
+        }
         for (const session of sessions) {
             this.happy.registerSessionEncryption(session.id, session.encryption);
         }
