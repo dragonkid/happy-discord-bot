@@ -369,7 +369,11 @@ export class Bridge {
                 }
                 count++;
             } catch (err) {
-                console.error(`[Bridge] Failed to delete archived session ${session.id.slice(0, 8)}:`, err);
+                // 404 = already deleted, skip silently
+                const status = (err as { status?: number }).status;
+                if (status !== 404) {
+                    console.error(`[Bridge] Failed to delete archived session ${session.id.slice(0, 8)}:`, err);
+                }
             }
         }
         if (count > 0) this.persistModes();
