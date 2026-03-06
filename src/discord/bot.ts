@@ -142,7 +142,7 @@ export class DiscordBot {
     /** Create a thread from an anchor message in the main channel. Returns thread ID. */
     async createThread(name: string): Promise<string> {
         const channel = this.requireChannel();
-        const anchor = await channel.send(name);
+        const anchor = await channel.send(`--- ${name} ---`);
         const thread = await anchor.startThread({ name });
         return thread.id;
     }

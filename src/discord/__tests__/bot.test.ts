@@ -196,7 +196,7 @@ describe('DiscordBot', () => {
 
             await bot.start();
             const threadId = await bot.createThread('my-session @ macbook');
-            expect(mockChannel.send).toHaveBeenCalledWith('my-session @ macbook');
+            expect(mockChannel.send).toHaveBeenCalledWith('--- my-session @ macbook ---');
             expect(mockAnchorMsg.startThread).toHaveBeenCalledWith({
                 name: 'my-session @ macbook',
             });
