@@ -57,7 +57,18 @@ async function main(): Promise<void> {
     }
 
     discord.onMessage((message) => {
-        if (message.author.id !== config.discord.userId || message.channelId !== config.discord.channelId) return;
+        if (message.author.id !== config.discord.userId) return;
+
+        // Check if message is in a known thread -> route to that session
+        const threadSessionId = bridge.getSessionByThread(message.channelId);
+        if (threadSessionId) {
+            if (bridge.activeSession !== threadSessionId) {
+                bridge.setActiveSession(threadSessionId);
+                bridge.persistModes();
+            }
+        } else if (message.channelId !== config.discord.channelId) {
+            return;
+        }
 
         let text = message.content;
 
@@ -87,13 +98,18 @@ async function main(): Promise<void> {
 
             if (!text) return;
 
-            bridge.setLastUserMessageId(message.id);
+            const threadId = threadSessionId ? message.channelId : undefined;
+            bridge.setLastUserMessageId(message.id, threadId);
             await bridge.sendMessage(text);
         };
 
         handleMessage().catch((err) => {
             console.error('[Bridge] Failed to forward message:', err);
-            discord.send('⚠️ Failed to send message to CLI.').catch(() => {});
+            if (threadSessionId) {
+                discord.sendToThread(message.channelId, '\u26a0\ufe0f Failed to send message to CLI.').catch(() => {});
+            } else {
+                discord.send('\u26a0\ufe0f Failed to send message to CLI.').catch(() => {});
+            }
         });
     });
 

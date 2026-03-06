@@ -381,9 +381,9 @@ export class Bridge {
         }
     }
 
-    async stopSession(): Promise<void> {
-        const sessionId = this.requireActiveSession();
-        await this.happy.sessionRPC(sessionId, 'abort', {});
+    async stopSession(sessionId?: string): Promise<void> {
+        const target = sessionId ?? this.requireActiveSession();
+        await this.happy.sessionRPC(target, 'abort', {});
     }
 
     async compactSession(): Promise<void> {

@@ -142,7 +142,8 @@ async function handleSend(interaction: ChatInputCommandInteraction, bridge: Brid
 async function handleStop(interaction: ChatInputCommandInteraction, bridge: Bridge): Promise<void> {
     await interaction.deferReply();
     try {
-        await bridge.stopSession();
+        const sessionId = resolveSessionFromContext(interaction, bridge);
+        await bridge.stopSession(sessionId);
         await interaction.editReply('Stop requested.');
     } catch (err) {
         const detail = err instanceof Error ? err.message : 'Unknown error';
@@ -153,6 +154,11 @@ async function handleStop(interaction: ChatInputCommandInteraction, bridge: Brid
 async function handleCompact(interaction: ChatInputCommandInteraction, bridge: Bridge): Promise<void> {
     await interaction.deferReply();
     try {
+        const sessionId = resolveSessionFromContext(interaction, bridge);
+        if (bridge.activeSession !== sessionId) {
+            bridge.setActiveSession(sessionId);
+            bridge.persistModes();
+        }
         await bridge.compactSession();
         await interaction.editReply('Compact requested.');
     } catch (err) {
@@ -164,6 +170,12 @@ async function handleCompact(interaction: ChatInputCommandInteraction, bridge: B
 async function handleMode(interaction: ChatInputCommandInteraction, bridge: Bridge): Promise<void> {
     const modeValue = interaction.options.getString('mode', true) as PermissionMode;
     await interaction.deferReply();
+
+    const threadSession = bridge.getSessionByThread(interaction.channelId);
+    if (threadSession && bridge.activeSession !== threadSession) {
+        bridge.setActiveSession(threadSession);
+    }
+
     bridge.permissions.setMode(modeValue);
     bridge.persistModes();
     await interaction.editReply(`Permission mode set to: **${modeValue}**`);
@@ -187,20 +199,22 @@ async function handleNewSession(interaction: ChatInputCommandInteraction, bridge
     });
 }
 
-function resolveSessionId(interaction: ChatInputCommandInteraction, bridge: Bridge): string {
+function resolveSessionFromContext(interaction: ChatInputCommandInteraction, bridge: Bridge): string {
     const prefix = interaction.options.getString('session');
-    if (!prefix) {
-        const active = bridge.activeSession;
-        if (!active) throw new Error('No active session. Use /sessions to check available sessions.');
-        return active;
-    }
-    return prefix;
+    if (prefix) return prefix;
+
+    const threadSession = bridge.getSessionByThread(interaction.channelId);
+    if (threadSession) return threadSession;
+
+    const active = bridge.activeSession;
+    if (!active) throw new Error('No active session. Use /sessions to check available sessions.');
+    return active;
 }
 
 async function handleArchive(interaction: ChatInputCommandInteraction, bridge: Bridge): Promise<void> {
     await interaction.deferReply();
     try {
-        const sessionId = resolveSessionId(interaction, bridge);
+        const sessionId = resolveSessionFromContext(interaction, bridge);
         await bridge.archiveSession(sessionId);
         await interaction.editReply(`Session \`${sessionId.slice(0, 8)}\` archived.`);
     } catch (err) {
@@ -212,7 +226,7 @@ async function handleArchive(interaction: ChatInputCommandInteraction, bridge: B
 async function handleDelete(interaction: ChatInputCommandInteraction, bridge: Bridge): Promise<void> {
     await interaction.deferReply();
     try {
-        const sessionId = resolveSessionId(interaction, bridge);
+        const sessionId = resolveSessionFromContext(interaction, bridge);
         const buttons = buildDeleteConfirmButtons(sessionId);
         await interaction.editReply({
             content: `⚠️ Permanently delete session \`${sessionId.slice(0, 8)}\`? This removes all messages and data.`,
