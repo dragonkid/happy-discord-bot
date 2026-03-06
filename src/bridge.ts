@@ -278,8 +278,11 @@ export class Bridge {
             const latest = sessions.reduce((a, b) => (a.activeAt > b.activeAt ? a : b));
             this.setActiveSession(latest.id);
         }
+    }
 
-        // Create threads for sessions that don't have one
+    /** Create threads for sessions that don't have one. Call after Discord bot is online. */
+    async ensureThreadsForSessions(): Promise<void> {
+        const sessions = await this.loadSessions();
         for (const session of sessions) {
             if (!this.getThreadId(session.id)) {
                 this.ensureThread(session.id, session.metadata).catch((err) => {

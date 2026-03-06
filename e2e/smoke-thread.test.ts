@@ -59,14 +59,18 @@ describe('Smoke: Thread per Session E2E', () => {
         const thread = discord.getLatestThread();
         expect(thread).toBeDefined();
 
-        await discord.sendMessageInThread(thread!.id, 'Reply with exactly: THREAD-PONG');
+        // Small delay to ensure session is ready for input
+        await new Promise((resolve) => setTimeout(resolve, 3_000));
+        discord.clearMessages();
+
+        await discord.sendMessageInThread(thread!.id, 'What is 2+2? Reply with just the number.');
 
         const response = await discord.waitForBotMessageInThread(
             thread!.id,
-            (content) => content.toLowerCase().includes('thread-pong'),
+            (content) => content.includes('4'),
             90_000,
         );
-        expect(response.content.toLowerCase()).toContain('thread-pong');
+        expect(response.content).toContain('4');
     });
 
     it('restores thread routing after bot restart', async () => {

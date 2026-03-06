@@ -404,6 +404,9 @@ async function main(): Promise<void> {
     await discord.start();
     console.log('[Discord] Bot online');
 
+    // Create threads for sessions that don't have one (requires Discord bot to be online)
+    await bridge.ensureThreadsForSessions();
+
     // --- Graceful shutdown ---
     process.on('SIGINT', () => {
         console.log('Shutting down...');

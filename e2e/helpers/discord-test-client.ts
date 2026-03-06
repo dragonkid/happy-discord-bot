@@ -43,10 +43,15 @@ export class DiscordTestClient {
             this.collectedMessages.push(msg);
         });
 
-        this.client.on(Events.ThreadCreate, (thread) => {
+        this.client.on(Events.ThreadCreate, async (thread) => {
             if (thread.parentId !== this.channelId) return;
             console.log(`[TestClient] Thread created: ${thread.name} (${thread.id})`);
             this.createdThreads.push({ id: thread.id, name: thread.name });
+            // Auto-join thread to receive messages
+            if (thread.joinable) {
+                await thread.join().catch((err) =>
+                    console.error(`[TestClient] Failed to join thread ${thread.id}:`, err));
+            }
         });
 
         this.client.on(Events.TypingStart, (typing) => {
