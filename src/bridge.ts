@@ -312,15 +312,29 @@ export class Bridge {
     async archiveSession(sessionId?: string): Promise<string> {
         const target = sessionId ?? this.requireActiveSession();
         await this.happy.sessionRPC(target, 'killSession', {});
+        const threadId = this.getThreadId(target);
+        if (threadId) {
+            await this.discord.archiveThread(threadId).catch((err) => {
+                console.error(`[Bridge] Failed to archive thread:`, err);
+            });
+        }
         return target;
     }
 
     async deleteSession(sessionId?: string): Promise<string> {
         const target = sessionId ?? this.requireActiveSession();
         await apiDeleteSession(this.config.happy, this.config.credentials, target);
+        const threadId = this.getThreadId(target);
+        if (threadId) {
+            await this.discord.deleteThread(threadId).catch((err) => {
+                console.error(`[Bridge] Failed to delete thread:`, err);
+            });
+            this.removeThread(target);
+        }
         if (target === this.activeSessionId) {
             this.activeSessionId = null;
         }
+        this.persistModes();
         return target;
     }
 

@@ -1840,4 +1840,74 @@ describe('Bridge', () => {
             );
         });
     });
+
+    describe('ensureThread', () => {
+        it('creates thread and stores mapping', async () => {
+            bridge.setActiveSession('sess-1');
+            const threadId = await bridge.ensureThread('sess-1', { path: '/Users/user/my-project', machineId: 'abc', host: 'macbook' });
+            expect(discord.createThread).toHaveBeenCalledWith('my-project @ macbook');
+            expect(threadId).toBe('thread-1');
+            expect(bridge.getThreadId('sess-1')).toBe('thread-1');
+        });
+
+        it('returns existing thread if already mapped', async () => {
+            bridge.setThread('sess-1', 'existing-thread');
+            const threadId = await bridge.ensureThread('sess-1', { path: '/a/b', machineId: 'x', host: 'y' });
+            expect(discord.createThread).not.toHaveBeenCalled();
+            expect(threadId).toBe('existing-thread');
+        });
+
+        it('uses fallback name for invalid metadata', async () => {
+            bridge.setActiveSession('sess-1');
+            await bridge.ensureThread('sess-1', null);
+            expect(discord.createThread).toHaveBeenCalledWith('session-sess-1');
+        });
+    });
+
+    describe('Thread lifecycle', () => {
+        it('archiveSession archives the thread', async () => {
+            bridge.setActiveSession('sess-1');
+            bridge.setThread('sess-1', 'thread-1');
+            await bridge.archiveSession('sess-1');
+            expect(happy.sessionRPC).toHaveBeenCalledWith('sess-1', 'killSession', {});
+            expect(discord.archiveThread).toHaveBeenCalledWith('thread-1');
+        });
+
+        it('deleteSession deletes the thread and removes mapping', async () => {
+            bridge.setActiveSession('sess-1');
+            bridge.setThread('sess-1', 'thread-1');
+            await bridge.deleteSession('sess-1');
+            expect(discord.deleteThread).toHaveBeenCalledWith('thread-1');
+            expect(bridge.getThreadId('sess-1')).toBeNull();
+        });
+
+        it('archiveSession without thread still archives session', async () => {
+            bridge.setActiveSession('sess-1');
+            await bridge.archiveSession('sess-1');
+            expect(happy.sessionRPC).toHaveBeenCalledWith('sess-1', 'killSession', {});
+            expect(discord.archiveThread).not.toHaveBeenCalled();
+        });
+
+        it('deleteSession without thread still deletes session', async () => {
+            bridge.setActiveSession('sess-1');
+            await bridge.deleteSession('sess-1');
+            expect(discord.deleteThread).not.toHaveBeenCalled();
+        });
+
+        it('deleteSession clears activeSessionId when deleting active session', async () => {
+            bridge.setActiveSession('sess-1');
+            bridge.setThread('sess-1', 'thread-1');
+            await bridge.deleteSession('sess-1');
+            expect(bridge.activeSession).toBeNull();
+        });
+
+        it('deleteSession persists modes after cleanup', async () => {
+            const mockStore = { save: vi.fn().mockResolvedValue(undefined), load: vi.fn() };
+            bridge.setStore(mockStore as any);
+            bridge.setActiveSession('sess-1');
+            bridge.setThread('sess-1', 'thread-1');
+            await bridge.deleteSession('sess-1');
+            expect(mockStore.save).toHaveBeenCalled();
+        });
+    });
 });
