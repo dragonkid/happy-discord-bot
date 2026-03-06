@@ -36,6 +36,8 @@ export class Bridge {
     private readonly stateTracker: StateTracker;
     private readonly permissionCache: PermissionCache;
     private readonly multiSelectState = new Map<string, Set<number>>();
+    private readonly sessionToThread = new Map<string, string>();
+    private readonly threadToSession = new Map<string, string>();
     private activeSessionId: string | null = null;
     private store: Store | null = null;
     private disconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -44,6 +46,7 @@ export class Bridge {
     private thinkingEmoji = false;
     private toolUseEmoji = false;
     private lastUserMsgId: string | null = null;
+    private lastUserMsgThreadId: string | null = null;
     private isThinking = false;
     private todoMessageId: string | null = null;
 
@@ -67,6 +70,7 @@ export class Bridge {
         this.updateToolUseEmoji(false);
         this.isThinking = false;
         this.lastUserMsgId = null;
+        this.lastUserMsgThreadId = null;
         this.todoMessageId = null;
         if (this.activeSessionId) {
             this.permissionCache.saveSession(this.activeSessionId);
@@ -93,13 +97,14 @@ export class Bridge {
         if (this.activeSessionId) {
             this.permissionCache.saveSession(this.activeSessionId);
         }
-        this.store.save({ sessions: this.permissionCache.getAllSessions(), threads: {} }).catch((err) => {
+        this.store.save({ sessions: this.permissionCache.getAllSessions(), threads: this.getThreadMap() }).catch((err) => {
             console.error('[Bridge] Failed to persist modes:', err);
         });
     }
 
-    setLastUserMessageId(messageId: string): void {
+    setLastUserMessageId(messageId: string, threadId?: string): void {
         this.lastUserMsgId = messageId;
+        this.lastUserMsgThreadId = threadId ?? null;
     }
 
     /** Handle ephemeral activity update (session-alive keepalive). */
@@ -412,6 +417,35 @@ export class Bridge {
         this.multiSelectState.delete(key);
     }
 
+    setThread(sessionId: string, threadId: string): void {
+        this.sessionToThread.set(sessionId, threadId);
+        this.threadToSession.set(threadId, sessionId);
+    }
+
+    removeThread(sessionId: string): void {
+        const threadId = this.sessionToThread.get(sessionId);
+        if (threadId) this.threadToSession.delete(threadId);
+        this.sessionToThread.delete(sessionId);
+    }
+
+    getThreadId(sessionId: string): string | null {
+        return this.sessionToThread.get(sessionId) ?? null;
+    }
+
+    getSessionByThread(threadId: string): string | null {
+        return this.threadToSession.get(threadId) ?? null;
+    }
+
+    getThreadMap(): Record<string, string> {
+        return Object.fromEntries(this.sessionToThread);
+    }
+
+    loadThreadMap(map: Record<string, string>): void {
+        for (const [sessionId, threadId] of Object.entries(map)) {
+            this.setThread(sessionId, threadId);
+        }
+    }
+
     private cancelDisconnectTimer(): void {
         if (this.disconnectTimer) {
             clearTimeout(this.disconnectTimer);
@@ -421,12 +455,18 @@ export class Bridge {
 
     private startTypingLoop(): void {
         this.stopTypingLoop();
-        this.discord.sendTyping().catch((err) =>
-            console.error('[Bridge] sendTyping failed:', err));
-        this.typingInterval = setInterval(() => {
-            this.discord.sendTyping().catch((err) =>
-                console.error('[Bridge] sendTyping failed:', err));
-        }, TYPING_INTERVAL_MS);
+        const threadId = this.activeSessionId ? this.getThreadId(this.activeSessionId) : null;
+        const doTyping = () => {
+            if (threadId) {
+                this.discord.sendTypingInThread(threadId).catch((err) =>
+                    console.error('[Bridge] sendTyping failed:', err));
+            } else {
+                this.discord.sendTyping().catch((err) =>
+                    console.error('[Bridge] sendTyping failed:', err));
+            }
+        };
+        doTyping();
+        this.typingInterval = setInterval(doTyping, TYPING_INTERVAL_MS);
     }
 
     private stopTypingLoop(): void {
@@ -440,12 +480,22 @@ export class Bridge {
         if (thinking === this.thinkingEmoji) return;
 
         if (this.lastUserMsgId && this.thinkingEmoji) {
-            this.discord.removeReaction(this.lastUserMsgId, THINKING_EMOJI).catch((err) =>
-                console.error('[Bridge] removeReaction failed:', err));
+            if (this.lastUserMsgThreadId) {
+                this.discord.removeReactionInThread(this.lastUserMsgThreadId, this.lastUserMsgId, THINKING_EMOJI).catch((err) =>
+                    console.error('[Bridge] removeReaction failed:', err));
+            } else {
+                this.discord.removeReaction(this.lastUserMsgId, THINKING_EMOJI).catch((err) =>
+                    console.error('[Bridge] removeReaction failed:', err));
+            }
         }
         if (this.lastUserMsgId && thinking) {
-            this.discord.reactToMessage(this.lastUserMsgId, THINKING_EMOJI).catch((err) =>
-                console.error('[Bridge] reactToMessage failed:', err));
+            if (this.lastUserMsgThreadId) {
+                this.discord.reactInThread(this.lastUserMsgThreadId, this.lastUserMsgId, THINKING_EMOJI).catch((err) =>
+                    console.error('[Bridge] reactToMessage failed:', err));
+            } else {
+                this.discord.reactToMessage(this.lastUserMsgId, THINKING_EMOJI).catch((err) =>
+                    console.error('[Bridge] reactToMessage failed:', err));
+            }
         }
         this.thinkingEmoji = thinking;
     }
@@ -454,14 +504,53 @@ export class Bridge {
         if (active === this.toolUseEmoji) return;
 
         if (this.lastUserMsgId && this.toolUseEmoji) {
-            this.discord.removeReaction(this.lastUserMsgId, TOOL_USE_EMOJI).catch((err) =>
-                console.error('[Bridge] removeReaction failed:', err));
+            if (this.lastUserMsgThreadId) {
+                this.discord.removeReactionInThread(this.lastUserMsgThreadId, this.lastUserMsgId, TOOL_USE_EMOJI).catch((err) =>
+                    console.error('[Bridge] removeReaction failed:', err));
+            } else {
+                this.discord.removeReaction(this.lastUserMsgId, TOOL_USE_EMOJI).catch((err) =>
+                    console.error('[Bridge] removeReaction failed:', err));
+            }
         }
         if (this.lastUserMsgId && active) {
-            this.discord.reactToMessage(this.lastUserMsgId, TOOL_USE_EMOJI).catch((err) =>
-                console.error('[Bridge] reactToMessage failed:', err));
+            if (this.lastUserMsgThreadId) {
+                this.discord.reactInThread(this.lastUserMsgThreadId, this.lastUserMsgId, TOOL_USE_EMOJI).catch((err) =>
+                    console.error('[Bridge] reactToMessage failed:', err));
+            } else {
+                this.discord.reactToMessage(this.lastUserMsgId, TOOL_USE_EMOJI).catch((err) =>
+                    console.error('[Bridge] reactToMessage failed:', err));
+            }
         }
         this.toolUseEmoji = active;
+    }
+
+    private async sendToSession(sessionId: string, text: string): Promise<{ id: string }[]> {
+        const threadId = this.getThreadId(sessionId);
+        if (threadId) {
+            return this.discord.sendToThread(threadId, text);
+        }
+        return this.discord.send(text);
+    }
+
+    private async sendWithButtonsToSession(
+        sessionId: string, text: string, buttons: Parameters<DiscordBot['sendWithButtons']>[1],
+    ): Promise<{ id: string }> {
+        const threadId = this.getThreadId(sessionId);
+        if (threadId) {
+            return this.discord.sendToThreadWithButtons(threadId, text, buttons);
+        }
+        return this.discord.sendWithButtons(text, buttons);
+    }
+
+    private async sendWithAttachmentToSession(
+        sessionId: string, text: string, file: Buffer, fileName: string,
+        buttons: Parameters<DiscordBot['sendWithAttachmentAndButtons']>[3],
+    ): Promise<{ id: string }> {
+        const threadId = this.getThreadId(sessionId);
+        if (threadId) {
+            return this.discord.sendToThreadWithAttachment(threadId, text, file, fileName, buttons);
+        }
+        return this.discord.sendWithAttachmentAndButtons(text, file, fileName, buttons);
     }
 
     private async handleSessionUpdate(
@@ -505,7 +594,7 @@ export class Bridge {
             if (allRows.length > 5) {
                 console.warn(`[Bridge] AskUserQuestion has ${allRows.length} button rows, truncating to 5 (Discord limit)`);
             }
-            await this.discord.sendWithButtons(description, allRows.slice(0, 5));
+            await this.sendWithButtonsToSession(sessionId, description, allRows.slice(0, 5));
             return;
         }
 
@@ -516,7 +605,7 @@ export class Bridge {
             const description = formatExitPlanMode(planText);
             const buttons = buildExitPlanButtons(sessionId, request.id);
             const fileContent = Buffer.from(planText || '(empty plan)', 'utf-8');
-            await this.discord.sendWithAttachmentAndButtons(description, fileContent, 'plan.md', buttons);
+            await this.sendWithAttachmentToSession(sessionId, description, fileContent, 'plan.md', buttons);
             return;
         }
 
@@ -528,7 +617,7 @@ export class Bridge {
 
         const description = formatPermissionRequest(request.tool, request.arguments);
         const buttons = buildPermissionButtons(sessionId, request.id, request.tool, request.arguments);
-        await this.discord.sendWithButtons(description, buttons);
+        await this.sendWithButtonsToSession(sessionId, description, buttons);
     }
 
     private async loadSessions(): Promise<DecryptedSession[]> {
@@ -593,7 +682,7 @@ export class Bridge {
                         .map((block) => block.text!);
                     const text = textBlocks.join('');
                     if (text) {
-                        await this.discord.send(text);
+                        await this.sendToSession(sessionId, text);
                     }
                 }
             } else {
@@ -612,7 +701,7 @@ export class Bridge {
 
             // Forward agent text messages to Discord (skip thinking/reasoning)
             if (envelope.ev?.t === 'text' && envelope.ev.text && !envelope.ev.thinking) {
-                await this.discord.send(envelope.ev.text);
+                await this.sendToSession(sessionId, envelope.ev.text);
             }
 
             // Tool use emoji tracking + TodoWrite interception
@@ -622,7 +711,7 @@ export class Bridge {
                 if (envelope.ev.name === 'TodoWrite' && sessionId === this.activeSessionId) {
                     const todos = Array.isArray(envelope.ev.args?.todos) ? envelope.ev.args.todos as TodoItem[] : [];
                     if (todos.length > 0) {
-                        await this.handleTodoWrite(todos);
+                        await this.handleTodoWrite(sessionId, todos);
                     }
                 }
             } else if (envelope.ev?.t === 'tool-call-end') {
@@ -631,27 +720,40 @@ export class Bridge {
         }
     }
 
-    private async handleTodoWrite(todos: readonly TodoItem[]): Promise<void> {
+    private async handleTodoWrite(sessionId: string, todos: readonly TodoItem[]): Promise<void> {
         const text = formatTodoWrite(todos);
         if (!text) return;
 
         const allCompleted = todos.every((t) => t.status === 'completed');
+        const threadId = this.getThreadId(sessionId);
 
         if (this.todoMessageId) {
-            await this.discord.editMessage(this.todoMessageId, text);
+            if (threadId) {
+                await this.discord.editMessageInThread(threadId, this.todoMessageId, text);
+            } else {
+                await this.discord.editMessage(this.todoMessageId, text);
+            }
             if (allCompleted) {
-                await this.discord.unpinMessage(this.todoMessageId);
+                if (threadId) {
+                    await this.discord.unpinMessageInThread(threadId, this.todoMessageId);
+                } else {
+                    await this.discord.unpinMessage(this.todoMessageId);
+                }
                 this.todoMessageId = null;
             }
         } else {
-            const messages = await this.discord.send(text);
+            const messages = await this.sendToSession(sessionId, text);
             const msg = messages[0];
             if (msg) {
                 if (allCompleted) {
                     // Already all done — show once, don't pin
                 } else {
                     this.todoMessageId = msg.id;
-                    await this.discord.pinMessage(msg.id);
+                    if (threadId) {
+                        await this.discord.pinMessageInThread(threadId, msg.id);
+                    } else {
+                        await this.discord.pinMessage(msg.id);
+                    }
                 }
             }
         }
