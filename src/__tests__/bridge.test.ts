@@ -1140,6 +1140,12 @@ describe('Bridge', () => {
             await expect(bridge.createNewSession('machine-1', '/test/dir')).rejects.toThrow('machine offline');
         });
 
+        it('throws when machineRPC returns undefined (decrypt failure)', async () => {
+            vi.mocked(happy.machineRPC).mockResolvedValueOnce(undefined as any);
+
+            await expect(bridge.createNewSession('machine-1', '/test/dir')).rejects.toThrow('Daemon did not return a sessionId');
+        });
+
         it('retries listActiveSessions if new session not found initially', async () => {
             bridge.setActiveSession('existing-sess');
             const { listActiveSessions } = await import('../vendor/api.js');
