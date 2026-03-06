@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import path from 'node:path';
 import type { HappyClient } from './happy/client.js';
 import type { DiscordBot } from './discord/bot.js';
 import type { BotConfig } from './config.js';
@@ -11,12 +12,22 @@ import { buildPermissionButtons, buildAskButtons, buildExitPlanButtons } from '.
 import { formatPermissionRequest, formatAskUserQuestion, formatExitPlanMode, formatTodoWrite } from './discord/formatter.js';
 import type { TodoItem } from './discord/formatter.js';
 import { isExitPlanMode } from './happy/types.js';
-import type { PermissionRequest, PermissionResponse, PermissionMode, AgentState, AskUserQuestionInput } from './happy/types.js';
+import type { PermissionRequest, PermissionResponse, PermissionMode, AgentState, AskUserQuestionInput, WriteFileResponse } from './happy/types.js';
 
 const DISCONNECT_DEBOUNCE_MS = 5_000;
 const TYPING_INTERVAL_MS = 8_000;
 const THINKING_EMOJI = '🤔';
 const TOOL_USE_EMOJI = '🔧';
+const ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024; // 10 MB
+const ATTACHMENT_DIR = '.attachments';
+const IMAGE_CONTENT_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
+
+export interface DiscordAttachment {
+    url: string;
+    name: string;
+    contentType: string | null;
+    size: number;
+}
 
 export class Bridge {
     private readonly happy: HappyClient;
@@ -141,6 +152,69 @@ export class Bridge {
         }
 
         console.log(`[Bridge] Message sent to session ${sessionId.slice(0, 8)} (localId: ${localId.slice(0, 8)})`);
+    }
+
+    async uploadAttachments(attachments: readonly DiscordAttachment[]): Promise<string[]> {
+        if (!this.activeSessionId) return [];
+        const sessionId = this.activeSessionId;
+
+        // Ensure .attachments directory exists
+        await this.happy.sessionRPC(sessionId, 'bash', { command: `mkdir -p ${ATTACHMENT_DIR}` });
+
+        const hints = await Promise.all(
+            attachments.map(async (att) => {
+                // Sanitize filename to prevent path traversal
+                const safeName = path.basename(att.name).replace(/[^a-zA-Z0-9._-]/g, '_') || 'unnamed';
+                const timestamp = Date.now();
+
+                // Size check
+                if (att.size > ATTACHMENT_MAX_BYTES) {
+                    const sizeMB = (att.size / (1024 * 1024)).toFixed(1);
+                    return `[Skipped: ${safeName} (${sizeMB}MB, exceeds 10MB limit)]`;
+                }
+
+                // Download
+                let buffer: Buffer;
+                try {
+                    const resp = await fetch(att.url);
+                    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                    buffer = Buffer.from(await resp.arrayBuffer());
+                    if (buffer.byteLength > ATTACHMENT_MAX_BYTES) {
+                        const actualMB = (buffer.byteLength / (1024 * 1024)).toFixed(1);
+                        return `[Skipped: ${safeName} (${actualMB}MB actual, exceeds 10MB limit)]`;
+                    }
+                } catch (err) {
+                    const msg = err instanceof Error ? err.message : String(err);
+                    console.error(`[Bridge] Failed to download attachment ${safeName}:`, msg);
+                    return `[Failed to download: ${safeName}]`;
+                }
+
+                // Write to CLI working directory
+                const remotePath = `${ATTACHMENT_DIR}/${timestamp}-${safeName}`;
+                try {
+                    const result = await this.happy.sessionRPC<WriteFileResponse>(
+                        sessionId, 'writeFile', {
+                            path: remotePath,
+                            content: buffer.toString('base64'),
+                            expectedHash: null,
+                        },
+                    );
+                    if (!result.success) throw new Error(result.error ?? 'unknown');
+                } catch (err) {
+                    const msg = err instanceof Error ? err.message : String(err);
+                    console.error(`[Bridge] Failed to upload attachment ${safeName}:`, msg);
+                    return `[Failed to upload: ${safeName}]`;
+                }
+
+                // Build hint
+                const isImage = att.contentType !== null && IMAGE_CONTENT_TYPES.has(att.contentType);
+                const label = isImage ? 'image' : 'file';
+                const action = isImage ? 'view' : 'open';
+                return `[Attached ${label}: ${remotePath} — use Read tool to ${action}]`;
+            }),
+        );
+
+        return hints;
     }
 
     async start(): Promise<void> {

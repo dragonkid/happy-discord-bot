@@ -98,6 +98,15 @@ Intercepts `tool-call-start` events for `TodoWrite` in session protocol messages
 ### Direct Message Forwarding
 User messages in the configured channel auto-forward to CLI via `bridge.sendMessage()`. Optional `DISCORD_REQUIRE_MENTION=true` requires @bot mention (strips mention text before forwarding).
 
+### Attachment Upload
+When a Discord message includes attachments (images, PDFs, code files, etc.), the bot downloads each file, base64-encodes it, and writes it to the CLI working directory via `writeFile` RPC.
+- Files stored in `.attachments/<timestamp>-<sanitized-name>`
+- Directory created via `bash` RPC (`mkdir -p .attachments`) before first write
+- 10MB size limit per file (checked against both Discord metadata and actual download)
+- Filenames sanitized with `path.basename()` + character allowlist to prevent path traversal
+- Hint text appended to forwarded message: `[Attached image: .attachments/... — use Read tool to view]`
+- Pure-attachment messages (no text) are forwarded as hint-only messages
+
 ### /new Session Creation Flow
 1. User runs `/new` → bot fetches all sessions via `listAllSessions()`, decrypts metadata
 2. `extractDirectories()` deduplicates by path, filters E2E dirs, sorts by activeAt, limits to 25
@@ -169,7 +178,7 @@ npm run test:e2e         # E2E smoke tests (requires .env.e2e, real services)
 ## Testing
 
 - Framework: Vitest
-- 11 test suites, 231 tests
+- 12 test suites, 271 tests
 - Test files: `src/**/__tests__/*.test.ts`
 - All Happy/Discord dependencies mocked (no real connections needed)
 
@@ -197,6 +206,7 @@ Real end-to-end tests using a second Discord bot + live Happy relay. Located in 
 | `smoke-plan-mode.test.ts` | ExitPlanMode reject with feedback → revised plan → approve | Yes |
 | `smoke-tool-signals.test.ts` | Typing indicator + 🔧 emoji during tool calls | No |
 | `smoke-todowrite.test.ts` | TodoWrite progress display (best-effort) | No |
+| `smoke-attachment.test.ts` | Attachment upload via writeFile RPC + Claude reads file | No |
 
 **E2E helper classes (`e2e/helpers/`):**
 
@@ -204,7 +214,7 @@ Real end-to-end tests using a second Discord bot + live Happy relay. Located in 
 |--------|---------|
 | `DaemonClient` | HTTP API to spawn/stop CLI sessions via `~/.happy/daemon.state.json` |
 | `BotProcess` | Spawn bot as subprocess, capture logs, start/stop/restart |
-| `DiscordTestClient` | Second Discord bot: send messages, collect responses/typing/reactions |
+| `DiscordTestClient` | Second Discord bot: send messages/attachments, collect responses/typing/reactions |
 | `HappyTestClient` | Connect to Happy relay for sessionRPC (approve/deny permissions) |
 | `StateFile` | Write/read `state.json` for pre-seeding permission state |
 | `wait.ts` | Polling `waitFor()` + `waitForExit()` utilities |

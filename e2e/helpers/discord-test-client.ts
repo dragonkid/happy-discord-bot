@@ -90,6 +90,20 @@ export class DiscordTestClient {
         return msg;
     }
 
+    async sendMessageWithFiles(
+        text: string,
+        files: Array<{ content: Buffer; name: string }>,
+    ): Promise<Message> {
+        if (!this.channel) throw new Error('Not connected');
+        const msg = await this.channel.send({
+            content: text,
+            files: files.map((f) => ({ attachment: f.content, name: f.name })),
+        });
+        const names = files.map((f) => f.name).join(', ');
+        console.log(`[TestClient] Sent: "${text}" with files: [${names}]`);
+        return msg;
+    }
+
     async waitForBotMessage(
         predicate: (content: string, msg: Message) => boolean,
         timeout = 60_000,

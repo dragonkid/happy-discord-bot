@@ -69,10 +69,29 @@ async function main(): Promise<void> {
             text = text.replaceAll(mentionPrefix, '').trim();
         }
 
-        if (!text) return;
+        // Upload attachments if present
+        const handleMessage = async () => {
+            if (message.attachments.size > 0) {
+                const attachments = [...message.attachments.values()].map((a) => ({
+                    url: a.url,
+                    name: a.name,
+                    contentType: a.contentType,
+                    size: a.size,
+                }));
+                const hints = await bridge.uploadAttachments(attachments);
+                if (hints.length > 0) {
+                    const hintBlock = hints.join('\n');
+                    text = text ? `${text}\n\n${hintBlock}` : hintBlock;
+                }
+            }
 
-        bridge.setLastUserMessageId(message.id);
-        bridge.sendMessage(text).catch((err) => {
+            if (!text) return;
+
+            bridge.setLastUserMessageId(message.id);
+            await bridge.sendMessage(text);
+        };
+
+        handleMessage().catch((err) => {
             console.error('[Bridge] Failed to forward message:', err);
             discord.send('⚠️ Failed to send message to CLI.').catch(() => {});
         });
