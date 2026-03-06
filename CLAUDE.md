@@ -17,23 +17,41 @@ Three-layer communication through Happy relay:
 
 Bot connects as `user-scoped` client (monitors all sessions), unlike `session-scoped` (single session).
 
+### Thread per Session
+
+Each Claude Code session maps to a Discord thread. Main channel serves as thread container + status summaries.
+
+```
+Main Channel (status summaries only)
+  +-- Thread: "happy-discord-bot @ macbook" -> session abc123
+  +-- Thread: "my-project @ macbook"        -> session def456
+```
+
+- **Thread creation:** Auto-created on bot connect for sessions without threads, and on `/new` session creation. Anchor message sent to main channel, thread created on it.
+- **Thread naming:** `{directoryName} @ {host}` from session metadata (e.g. `happy-discord-bot @ macbook`).
+- **Message routing:** Messages in a thread auto-route to the bound session and auto-switch `activeSession`. Main channel messages fallback to active session.
+- **Command resolution:** `/stop`, `/compact`, `/mode`, `/archive`, `/delete` in a thread resolve to that thread's session via `resolveSessionFromContext()`. Explicit `session` parameter overrides.
+- **Thread lifecycle:** `/archive` archives thread, `/delete` deletes thread + removes mapping.
+- **Persistence:** Thread mapping (`sessionId -> threadId`) saved in `state.json` under `threads` field, restored on bot restart.
+- **Output routing:** All bot output (text, permissions, TodoWrite, typing, emoji) routes to session's thread when available, falls back to main channel.
+
 ## Key Files
 
 ```
 src/
-├── index.ts              # Entry point, message forwarding + mention filtering
+├── index.ts              # Entry point, message forwarding + thread routing
 ├── config.ts             # Env var loading (incl. requireMention)
-├── bridge.ts             # Glue: Happy events ↔ Discord messages/buttons + typing/emoji
+├── bridge.ts             # Glue: Happy events ↔ Discord messages/buttons + typing/emoji + thread routing
 ├── store.ts              # Bot state persistence (~/.happy-discord-bot/state.json)
 ├── happy/
 │   ├── client.ts         # HappyClient: Socket.IO + sessionRPC + machineRPC + HTTP
-│   ├── session-metadata.ts  # Session metadata decryption + directory extraction
+│   ├── session-metadata.ts  # Session metadata decryption + directory extraction + threadName
 │   ├── permission-cache.ts  # Tool approval caching (allowedTools, BashLiterals)
 │   ├── state-tracker.ts  # agentState monitoring, permission request detection
 │   └── types.ts          # RPC request/response types
 ├── discord/
-│   ├── bot.ts            # Discord client init + event routing + typing/reaction methods
-│   ├── commands.ts       # Slash command handlers
+│   ├── bot.ts            # Discord client init + event routing + typing/reaction + thread CRUD
+│   ├── commands.ts       # Slash command handlers (thread-aware session resolution)
 │   ├── buttons.ts        # Button builders (permission, AskUserQuestion, session, ExitPlanMode, NewSession)
 │   ├── interactions.ts   # Button interaction handlers (ask, session, ExitPlanMode, NewSession)
 │   ├── formatter.ts      # Code fence-aware message chunking, code blocks, diff formatting
@@ -85,7 +103,7 @@ Two independent signal sources:
 - **Ephemeral activity** (`ephemeral` Socket.IO event, `{ type: 'activity', thinking: boolean }`) → typing loop (8s interval) + 🤔 emoji
 - **Session protocol** (`new-message` with `role: 'session'`, `ev.t: 'tool-call-start'`/`'tool-call-end'`) → 🔧 emoji
 
-Both react on user's last Discord message (`lastUserMsgId`). `/send` commands have no message ID — typing only.
+Both react on user's last Discord message (`lastUserMsgId`). Thread-aware: typing and emoji route to the thread when `lastUserMsgThreadId` is set. `/send` commands have no message ID — typing only.
 
 ### TodoWrite Progress Display
 Intercepts `tool-call-start` events for `TodoWrite` in session protocol messages. Formats the todo list and sends/edits a pinned Discord message.
@@ -123,6 +141,7 @@ When a Discord message includes attachments (images, PDFs, code files, etc.), th
 - Both default to current active session; optional `session` parameter accepts session ID prefix
 - `/archive` executes directly; `/delete` shows "Confirm Delete" / "Cancel" buttons first
 - Deleting the active session clears `activeSessionId`
+- Both also manage the associated Discord thread: `/archive` archives the thread, `/delete` deletes the thread and removes the thread mapping
 
 ### machineRPC Encryption
 Bot reads two credential files:
@@ -185,7 +204,7 @@ npm run test:e2e         # E2E smoke tests (requires .env.e2e, real services)
 ## Testing
 
 - Framework: Vitest
-- 12 test suites, 297 tests
+- 13 test suites, 353 tests
 - Test files: `src/**/__tests__/*.test.ts`
 - All Happy/Discord dependencies mocked (no real connections needed)
 
