@@ -354,6 +354,28 @@ export class Bridge {
         return target;
     }
 
+    async cleanupArchivedSessions(): Promise<number> {
+        const all = await listSessions(this.config.happy, this.config.credentials);
+        const archived = all.filter((s) => !s.active);
+        let count = 0;
+        for (const session of archived) {
+            try {
+                await apiDeleteSession(this.config.happy, this.config.credentials, session.id);
+                const fullId = this.resolveFullSessionId(session.id);
+                const threadId = this.getThreadId(fullId);
+                if (threadId) {
+                    await this.discord.deleteThread(threadId).catch(() => {});
+                    this.removeThread(fullId);
+                }
+                count++;
+            } catch (err) {
+                console.error(`[Bridge] Failed to delete archived session ${session.id.slice(0, 8)}:`, err);
+            }
+        }
+        if (count > 0) this.persistModes();
+        return count;
+    }
+
     /** Process a raw update from the Happy relay. Public for testing. */
     processUpdate(data: unknown): void {
         const update = data as {

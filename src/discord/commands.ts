@@ -4,7 +4,7 @@ import {
     type RESTPostAPIChatInputApplicationCommandsJSONBody,
 } from 'discord.js';
 import type { Bridge } from '../bridge.js';
-import { buildSessionButtons, buildNewSessionMenu, buildDeleteConfirmButtons } from './buttons.js';
+import { buildSessionButtons, buildNewSessionMenu, buildDeleteConfirmButtons, buildCleanupConfirmButtons } from './buttons.js';
 import { extractDirectories, threadName } from '../happy/session-metadata.js';
 import type { PermissionMode } from '../happy/types.js';
 
@@ -63,7 +63,11 @@ const deleteCmd = new SlashCommandBuilder()
         opt.setName('session').setDescription('Session ID prefix (default: current)').setRequired(false),
     );
 
-const allCommands = [sessions, send, stop, compact, mode, newSession, archive, deleteCmd];
+const cleanup = new SlashCommandBuilder()
+    .setName('cleanup')
+    .setDescription('Delete all archived sessions and their threads');
+
+const allCommands = [sessions, send, stop, compact, mode, newSession, archive, deleteCmd, cleanup];
 
 export const commandDefinitions: RESTPostAPIChatInputApplicationCommandsJSONBody[] =
     allCommands.map((cmd) => cmd.toJSON());
@@ -92,6 +96,8 @@ export async function handleCommand(
             return handleArchive(interaction, bridge);
         case 'delete':
             return handleDelete(interaction, bridge);
+        case 'cleanup':
+            return handleCleanup(interaction, bridge);
         default:
             await interaction.reply({ content: `Unknown command: ${interaction.commandName}`, ephemeral: true });
     }
@@ -99,25 +105,17 @@ export async function handleCommand(
 
 // --- Handlers ---
 
-const E2E_PATH_PATTERN = /^\/(?:private\/)?tmp\/e2e-/;
-
 async function handleSessions(interaction: ChatInputCommandInteraction, bridge: Bridge): Promise<void> {
     await interaction.deferReply();
     const sessions = await bridge.listAllSessions();
 
-    // Filter out E2E test sessions
-    const filtered = sessions.filter((s) => {
-        const meta = s.metadata as { path?: string } | null;
-        return !meta?.path || !E2E_PATH_PATTERN.test(meta.path);
-    });
-
-    if (filtered.length === 0) {
+    if (sessions.length === 0) {
         await interaction.editReply('No sessions found.');
         return;
     }
 
     // Sort: active first (by activeAt desc), then inactive (by activeAt desc)
-    const sorted = [...filtered].sort((a, b) => {
+    const sorted = [...sessions].sort((a, b) => {
         if (a.active !== b.active) return a.active ? -1 : 1;
         return b.activeAt - a.activeAt;
     });
@@ -268,6 +266,26 @@ async function handleDelete(interaction: ChatInputCommandInteraction, bridge: Br
             await interaction.channel.delete().catch(() => {});
             return;
         }
+        const detail = err instanceof Error ? err.message : 'Unknown error';
+        await interaction.editReply(`Failed: ${detail}`);
+    }
+}
+
+async function handleCleanup(interaction: ChatInputCommandInteraction, bridge: Bridge): Promise<void> {
+    await interaction.deferReply();
+    try {
+        const all = await bridge.listAllSessions();
+        const archivedCount = all.filter((s) => !s.active).length;
+        if (archivedCount === 0) {
+            await interaction.editReply('No archived sessions to clean up.');
+            return;
+        }
+        const buttons = buildCleanupConfirmButtons();
+        await interaction.editReply({
+            content: `⚠️ Delete ${archivedCount} archived session(s) and their threads? This is irreversible.`,
+            components: buttons,
+        });
+    } catch (err) {
         const detail = err instanceof Error ? err.message : 'Unknown error';
         await interaction.editReply(`Failed: ${detail}`);
     }

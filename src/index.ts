@@ -2,7 +2,7 @@ import { loadBotConfig } from './config.js';
 import { HappyClient } from './happy/client.js';
 import { DiscordBot } from './discord/bot.js';
 import { handleCommand } from './discord/commands.js';
-import { parseButtonId, parseExitPlanButtonId, parsePlanModalId, parseNewSessionSelect, parseCustomPathButton, parseCustomPathModal, buildCustomPathModal, parseDeleteButtonId } from './discord/buttons.js';
+import { parseButtonId, parseExitPlanButtonId, parsePlanModalId, parseNewSessionSelect, parseCustomPathButton, parseCustomPathModal, buildCustomPathModal, parseDeleteButtonId, parseCleanupButtonId } from './discord/buttons.js';
 import { parseAskButtonId, parseSessionButtonId, handleAskButton, handleSessionButton, handleExitPlanButton, handleNewSessionSelect, handleNewSessionModal, handleDeleteButton } from './discord/interactions.js';
 import { Bridge } from './bridge.js';
 import { StateTracker } from './happy/state-tracker.js';
@@ -260,6 +260,31 @@ async function main(): Promise<void> {
                     console.error('[Discord] Delete button error:', err);
                     await interaction.editReply({
                         content: `${interaction.message.content}\n\n*Error processing delete*`,
+                        components: [],
+                    }).catch(() => {});
+                }
+                return;
+            }
+
+            // --- Cleanup confirmation buttons ---
+            const cleanupParsed = parseCleanupButtonId(interaction.customId);
+            if (cleanupParsed) {
+                await interaction.deferUpdate();
+                try {
+                    if (cleanupParsed.action === 'cancel') {
+                        await interaction.editReply({
+                            content: `${interaction.message.content}\n\n*Cancelled*`,
+                            components: [],
+                        });
+                    } else {
+                        await interaction.editReply({ content: 'Cleaning up...', components: [] });
+                        const count = await bridge.cleanupArchivedSessions();
+                        await interaction.editReply({ content: `Cleaned up ${count} archived session(s).`, components: [] });
+                    }
+                } catch (err) {
+                    console.error('[Discord] Cleanup button error:', err);
+                    await interaction.editReply({
+                        content: `${interaction.message.content}\n\n*Error during cleanup*`,
                         components: [],
                     }).catch(() => {});
                 }

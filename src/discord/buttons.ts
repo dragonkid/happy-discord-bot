@@ -389,3 +389,34 @@ export function parseDeleteButtonId(customId: string): ParsedDeleteButtonId | nu
 
     return { sessionId, action: action as DeleteAction };
 }
+
+// --- Cleanup buttons ---
+
+const CLEANUP_PREFIX = 'cleanup:';
+
+export type CleanupAction = 'confirm' | 'cancel';
+
+export interface ParsedCleanupButtonId {
+    action: CleanupAction;
+}
+
+export function buildCleanupConfirmButtons(): ActionRowBuilder<ButtonBuilder>[] {
+    const confirm = new ButtonBuilder()
+        .setCustomId(`${CLEANUP_PREFIX}confirm`)
+        .setLabel('Confirm Cleanup')
+        .setStyle(ButtonStyle.Danger);
+
+    const cancel = new ButtonBuilder()
+        .setCustomId(`${CLEANUP_PREFIX}cancel`)
+        .setLabel('Cancel')
+        .setStyle(ButtonStyle.Secondary);
+
+    return [new ActionRowBuilder<ButtonBuilder>().addComponents(confirm, cancel)];
+}
+
+export function parseCleanupButtonId(customId: string): ParsedCleanupButtonId | null {
+    if (!customId.startsWith(CLEANUP_PREFIX)) return null;
+    const action = customId.slice(CLEANUP_PREFIX.length);
+    if (action !== 'confirm' && action !== 'cancel') return null;
+    return { action };
+}
