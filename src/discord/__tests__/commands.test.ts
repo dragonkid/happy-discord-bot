@@ -62,11 +62,11 @@ describe('commands', () => {
     });
 
     describe('handleCommand', () => {
-        it('/sessions calls bridge.listSessions and formats result', async () => {
+        it('/sessions calls bridge.listAllSessions and formats result', async () => {
             const bridge = makeMockBridge();
-            vi.mocked(bridge.listSessions).mockResolvedValueOnce([
-                { id: 'sess-1', active: true, activeAt: 1000 },
-                { id: 'sess-2', active: true, activeAt: 2000 },
+            vi.mocked(bridge.listAllSessions).mockResolvedValueOnce([
+                { id: 'sess-1', active: true, activeAt: 1000, metadata: null },
+                { id: 'sess-2', active: true, activeAt: 2000, metadata: null },
             ] as any);
             Object.defineProperty(bridge, 'activeSession', { value: 'sess-2' });
 
@@ -74,7 +74,7 @@ describe('commands', () => {
             await handleCommand(interaction as any, bridge);
 
             expect(interaction.deferReply).toHaveBeenCalled();
-            expect(bridge.listSessions).toHaveBeenCalled();
+            expect(bridge.listAllSessions).toHaveBeenCalled();
             expect(interaction.editReply).toHaveBeenCalledWith(
                 expect.objectContaining({
                     content: expect.stringContaining('sess-1'),
@@ -83,13 +83,14 @@ describe('commands', () => {
             );
         });
 
-        it('/sessions shows "no active sessions" when empty', async () => {
+        it('/sessions shows "no sessions found" when empty', async () => {
             const bridge = makeMockBridge();
+            vi.mocked(bridge.listAllSessions).mockResolvedValueOnce([]);
             const interaction = mockInteraction('sessions');
             await handleCommand(interaction as any, bridge);
 
             expect(interaction.editReply).toHaveBeenCalledWith(
-                expect.stringContaining('No active sessions'),
+                expect.stringContaining('No sessions found'),
             );
         });
 

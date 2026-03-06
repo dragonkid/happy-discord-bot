@@ -5,7 +5,7 @@ import {
 } from 'discord.js';
 import type { Bridge } from '../bridge.js';
 import { buildSessionButtons, buildNewSessionMenu, buildDeleteConfirmButtons } from './buttons.js';
-import { extractDirectories } from '../happy/session-metadata.js';
+import { extractDirectories, threadName } from '../happy/session-metadata.js';
 import type { PermissionMode } from '../happy/types.js';
 
 // --- Command definitions ---
@@ -101,20 +101,30 @@ export async function handleCommand(
 
 async function handleSessions(interaction: ChatInputCommandInteraction, bridge: Bridge): Promise<void> {
     await interaction.deferReply();
-    const sessions = await bridge.listSessions();
+    const sessions = await bridge.listAllSessions();
 
     if (sessions.length === 0) {
-        await interaction.editReply('No active sessions.');
+        await interaction.editReply('No sessions found.');
         return;
     }
 
-    const lines = sessions.map((s) => {
-        const marker = s.id === bridge.activeSession ? ' ← current' : '';
-        const time = new Date(s.activeAt).toLocaleTimeString();
-        return `• \`${s.id.slice(0, 8)}\` (active ${time})${marker}`;
+    // Sort: active first (by activeAt desc), then inactive (by activeAt desc)
+    const sorted = [...sessions].sort((a, b) => {
+        if (a.active !== b.active) return a.active ? -1 : 1;
+        return b.activeAt - a.activeAt;
     });
 
-    const buttons = buildSessionButtons(sessions, bridge.activeSession);
+    const lines = sorted.map((s) => {
+        const name = threadName(s.metadata, s.id);
+        const marker = s.id === bridge.activeSession ? ' **← current**' : '';
+        const status = s.active ? '' : ' (archived)';
+        return `${s.active ? '🟢' : '⚪'} \`${s.id.slice(0, 8)}\` ${name}${status}${marker}`;
+    });
+
+    const activeSessions = sorted.filter((s) => s.active);
+    const buttons = activeSessions.length > 0
+        ? buildSessionButtons(activeSessions, bridge.activeSession)
+        : [];
 
     await interaction.editReply({
         content: lines.join('\n'),
