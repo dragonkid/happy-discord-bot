@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync, unlinkSync, mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 import { deriveContentKeyPair, decodeBase64, encodeBase64 } from './encryption.js';
 import type { Config } from './config.js';
 
@@ -10,6 +10,8 @@ export type Credentials = {
         publicKey: Uint8Array;
         secretKey: Uint8Array;
     };
+    /** Machine key from access.key (dataKey mode). Used for machineRPC. */
+    machineKey?: Uint8Array;
 };
 
 export function readCredentials(config: Config): Credentials | null {
@@ -19,10 +21,27 @@ export function readCredentials(config: Config): Credentials | null {
         if (!parsed.token || !parsed.secret) return null;
         const secret = decodeBase64(parsed.secret);
         const contentKeyPair = deriveContentKeyPair(secret);
+
+        // Try to read machineKey from access.key (daemon credential, dataKey mode)
+        let machineKey: Uint8Array | undefined;
+        try {
+            const accessKeyPath = join(dirname(config.credentialPath), 'access.key');
+            const accessRaw = readFileSync(accessKeyPath, 'utf-8');
+            const accessParsed = JSON.parse(accessRaw) as {
+                encryption?: { machineKey?: string };
+            };
+            if (accessParsed.encryption?.machineKey) {
+                machineKey = decodeBase64(accessParsed.encryption.machineKey);
+            }
+        } catch {
+            // access.key not found or not readable — machineKey stays undefined
+        }
+
         return {
             token: parsed.token,
             secret,
             contentKeyPair,
+            machineKey,
         };
     } catch {
         return null;

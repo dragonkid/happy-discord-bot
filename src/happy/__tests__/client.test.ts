@@ -383,10 +383,15 @@ describe('HappyClient', () => {
             ).rejects.toThrow('Not connected');
         });
 
-        it('falls back to dataKey decryption when legacy decrypt returns null', async () => {
-            client.connect();
+        it('uses machineKey with dataKey variant when available', async () => {
+            const machineKey = new Uint8Array(32).fill(0xab);
+            const clientWithMachineKey = new HappyClient(testConfig, {
+                ...testCredentials,
+                machineKey,
+            });
+            clientWithMachineKey.connect();
 
-            const { decrypt } = await import('../../vendor/encryption.js');
+            const { encrypt } = await import('../../vendor/encryption.js');
             const responseData = { sessionId: 'new-sess-123' };
             const encodedResponse = Buffer.from(
                 JSON.stringify(responseData),
@@ -397,37 +402,10 @@ describe('HappyClient', () => {
                 result: encodedResponse,
             });
 
-            // First call (legacy) returns null, second call (dataKey) returns data
-            vi.mocked(decrypt)
-                .mockReturnValueOnce(null)
-                .mockReturnValueOnce(responseData);
-
-            const result = await client.machineRPC('machine-1', 'spawn', {});
+            const result = await clientWithMachineKey.machineRPC('machine-1', 'spawn', {});
 
             expect(result).toEqual(responseData);
-            expect(decrypt).toHaveBeenCalledTimes(2);
-            expect(decrypt).toHaveBeenNthCalledWith(1, testCredentials.secret, 'legacy', expect.any(Uint8Array));
-            expect(decrypt).toHaveBeenNthCalledWith(2, testCredentials.secret, 'dataKey', expect.any(Uint8Array));
-        });
-
-        it('returns undefined when both legacy and dataKey decrypt fail', async () => {
-            client.connect();
-
-            const { decrypt } = await import('../../vendor/encryption.js');
-            const encodedResponse = Buffer.from('garbage').toString('base64');
-
-            mockSocket.emitWithAck.mockResolvedValueOnce({
-                ok: true,
-                result: encodedResponse,
-            });
-
-            vi.mocked(decrypt)
-                .mockReturnValueOnce(null)
-                .mockReturnValueOnce(null);
-
-            const result = await client.machineRPC('machine-1', 'spawn', {});
-
-            expect(result).toBeUndefined();
+            expect(encrypt).toHaveBeenCalledWith(machineKey, 'dataKey', {});
         });
     });
 

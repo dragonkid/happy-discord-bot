@@ -123,12 +123,21 @@ export class HappyClient extends EventEmitter<HappyClientEvents> {
         method: string,
         params: A,
     ): Promise<R> {
-        // Machine RPC tries legacy first, then dataKey fallback
-        // Daemon may use either variant depending on its encryption config
-        return this.encryptedRPCWithFallback<R>(
+        // Daemon may use machineKey (dataKey mode) or secret (legacy mode)
+        const machineKey = this.credentials.machineKey;
+        if (machineKey) {
+            return this.encryptedRPC<R>(
+                `${machineId}:${method}`,
+                params,
+                machineKey,
+                'dataKey',
+            );
+        }
+        return this.encryptedRPC<R>(
             `${machineId}:${method}`,
             params,
             this.credentials.secret,
+            'legacy',
         );
     }
 
@@ -173,44 +182,6 @@ export class HappyClient extends EventEmitter<HappyClientEvents> {
         }
 
         const decrypted = decrypt(key, variant, decodeBase64(result.result));
-        if (decrypted === null) {
-            return undefined as R;
-        }
-        return decrypted as R;
-    }
-
-    /**
-     * Machine RPC with encryption variant fallback.
-     * Sends params with legacy encryption, but the daemon may respond with
-     * either legacy or dataKey encryption depending on its config.
-     * Tries legacy decrypt first, falls back to dataKey on failure.
-     */
-    private async encryptedRPCWithFallback<R>(
-        method: string,
-        params: unknown,
-        key: Uint8Array,
-    ): Promise<R> {
-        if (!this.socket) {
-            throw new Error('Not connected');
-        }
-
-        const encrypted = encodeBase64(encrypt(key, 'legacy', params));
-        const payload: RpcCallPayload = { method, params: encrypted };
-        const result: RpcResult = await this.socket
-            .emitWithAck('rpc-call', payload);
-
-        if (!result.ok) {
-            throw new Error(`RPC failed [${method}]: ${result.error ?? 'unknown error'}`);
-        }
-        if (!result.result) {
-            return undefined as R;
-        }
-
-        const raw = decodeBase64(result.result);
-
-        // Try legacy first, then dataKey fallback
-        const decrypted = decrypt(key, 'legacy', raw)
-            ?? decrypt(key, 'dataKey', raw);
         if (decrypted === null) {
             return undefined as R;
         }

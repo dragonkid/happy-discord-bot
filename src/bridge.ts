@@ -209,13 +209,11 @@ export class Bridge {
     }
 
     async createNewSession(machineId: string, directory: string): Promise<string> {
-        console.log(`[Bridge] createNewSession: machineId=${machineId}, directory=${directory}`);
         const result = await this.happy.machineRPC<{ sessionId: string }>(
             machineId,
             'spawn-happy-session',
             { directory, approvedNewDirectoryCreation: true },
         );
-        console.log(`[Bridge] machineRPC result:`, JSON.stringify(result));
 
         const sessionId = (result as { sessionId?: string } | undefined)?.sessionId;
         if (!sessionId) {
