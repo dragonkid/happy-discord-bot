@@ -1288,6 +1288,18 @@ describe('Bridge', () => {
             expect(hints[0]).toContain('missing.png');
         });
 
+        it('should handle fetch network error gracefully', async () => {
+            bridge.setActiveSession('sess-1');
+            vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ENOTFOUND')));
+
+            const attachment = makeAttachment({ name: 'unreachable.png' });
+            const hints = await bridge.uploadAttachments([attachment]);
+
+            expect(hints).toHaveLength(1);
+            expect(hints[0]).toContain('Failed to download');
+            expect(hints[0]).toContain('unreachable.png');
+        });
+
         it('should handle writeFile RPC failure gracefully', async () => {
             bridge.setActiveSession('sess-1');
             (happy.sessionRPC as ReturnType<typeof vi.fn>).mockImplementation(
