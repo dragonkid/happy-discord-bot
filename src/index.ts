@@ -48,6 +48,8 @@ async function main(): Promise<void> {
     console.log(`[Store] Loaded ${Object.keys(savedState.sessions).length} saved session(s)`);
     const bridge = new Bridge(happy, discord, config, stateTracker, permissionCache);
     bridge.setStore(store);
+    bridge.loadThreadMap(savedState.threads);
+    console.log(`[Store] Loaded ${Object.keys(savedState.threads).length} saved thread(s)`);
     await bridge.start();
 
     if (bridge.activeSession) {
