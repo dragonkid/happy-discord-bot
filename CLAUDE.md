@@ -233,6 +233,7 @@ Real end-to-end tests using a second Discord bot + live Happy relay. Located in 
 | `smoke-tool-signals.test.ts` | Typing indicator + 🔧 emoji during tool calls | No |
 | `smoke-todowrite.test.ts` | TodoWrite progress display (best-effort) | No |
 | `smoke-attachment.test.ts` | Attachment upload via writeFile RPC + Claude reads file | No |
+| `smoke-thread.test.ts` | Thread creation + thread messaging + restart recovery | No |
 
 **E2E helper classes (`e2e/helpers/`):**
 

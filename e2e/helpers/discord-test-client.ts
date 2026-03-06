@@ -4,6 +4,7 @@ import {
     Events,
     type Message,
     type TextChannel,
+    type ThreadChannel,
     ChannelType,
 } from 'discord.js';
 import { waitFor } from './wait.js';
@@ -15,6 +16,7 @@ export class DiscordTestClient {
     private typingEvents: Array<{ userId: string; timestamp: Date }> = [];
     private reactionEvents: Array<{ userId: string; emoji: string; messageId: string; added: boolean }> = [];
     private messageUpdateEvents: Array<{ messageId: string; content: string; timestamp: Date }> = [];
+    private createdThreads: Array<{ id: string; name: string }> = [];
 
     constructor(
         private readonly token: string,
@@ -33,18 +35,29 @@ export class DiscordTestClient {
 
     async start(): Promise<void> {
         this.client.on(Events.MessageCreate, (msg) => {
-            if (msg.channelId !== this.channelId) return;
+            // Accept messages from main channel OR its child threads
+            const inMainChannel = msg.channelId === this.channelId;
+            const inChildThread = msg.channel.isThread() && msg.channel.parentId === this.channelId;
+            if (!inMainChannel && !inChildThread) return;
             if (msg.author.id === this.client.user?.id) return;
             this.collectedMessages.push(msg);
         });
 
+        this.client.on(Events.ThreadCreate, (thread) => {
+            if (thread.parentId !== this.channelId) return;
+            console.log(`[TestClient] Thread created: ${thread.name} (${thread.id})`);
+            this.createdThreads.push({ id: thread.id, name: thread.name });
+        });
+
         this.client.on(Events.TypingStart, (typing) => {
-            if (typing.channel.id !== this.channelId) return;
+            const ch = typing.channel;
+            if (ch.id !== this.channelId && !(ch.isThread() && ch.parentId === this.channelId)) return;
             this.typingEvents.push({ userId: typing.user?.id ?? '', timestamp: new Date() });
         });
 
         this.client.on(Events.MessageReactionAdd, (reaction, user) => {
-            if (reaction.message.channelId !== this.channelId) return;
+            const ch = reaction.message.channel;
+            if (ch.id !== this.channelId && !(ch.isThread() && ch.parentId === this.channelId)) return;
             this.reactionEvents.push({
                 userId: user.id,
                 emoji: reaction.emoji.name ?? '',
@@ -54,7 +67,8 @@ export class DiscordTestClient {
         });
 
         this.client.on(Events.MessageReactionRemove, (reaction, user) => {
-            if (reaction.message.channelId !== this.channelId) return;
+            const ch = reaction.message.channel;
+            if (ch.id !== this.channelId && !(ch.isThread() && ch.parentId === this.channelId)) return;
             this.reactionEvents.push({
                 userId: user.id,
                 emoji: reaction.emoji.name ?? '',
@@ -64,7 +78,8 @@ export class DiscordTestClient {
         });
 
         this.client.on(Events.MessageUpdate, (_oldMsg, newMsg) => {
-            if (newMsg.channelId !== this.channelId) return;
+            const ch = newMsg.channel;
+            if (ch.id !== this.channelId && !(ch.isThread() && ch.parentId === this.channelId)) return;
             if (newMsg.author?.id === this.client.user?.id) return;
             this.messageUpdateEvents.push({
                 messageId: newMsg.id,
@@ -175,11 +190,57 @@ export class DiscordTestClient {
         );
     }
 
+    async waitForThread(
+        predicate: (thread: { name: string; id: string }) => boolean,
+        timeout = 30_000,
+    ): Promise<{ name: string; id: string }> {
+        return waitFor(
+            () => this.createdThreads.find(predicate),
+            { timeout, interval: 1000, label: 'thread creation' },
+        );
+    }
+
+    getLatestThread(): { name: string; id: string } | undefined {
+        return this.createdThreads[this.createdThreads.length - 1];
+    }
+
+    async sendMessageInThread(threadId: string, text: string): Promise<Message> {
+        const thread = await this.client.channels.fetch(threadId);
+        if (!thread?.isThread()) throw new Error(`Channel ${threadId} is not a thread`);
+        const msg = await (thread as ThreadChannel).send(text);
+        console.log(`[TestClient] Sent to thread ${threadId}: "${text}"`);
+        return msg;
+    }
+
+    async waitForBotMessageInThread(
+        threadId: string,
+        predicate: (content: string, msg: Message) => boolean,
+        timeout = 60_000,
+    ): Promise<Message> {
+        const baseline = this.collectedMessages.length;
+        return waitFor(
+            () => {
+                const newMsgs = this.collectedMessages.slice(baseline);
+                return newMsgs.find((m) => m.channelId === threadId && predicate(m.content, m));
+            },
+            {
+                timeout,
+                interval: 1000,
+                label: 'bot message in thread',
+                context: () => {
+                    const recent = this.collectedMessages.slice(-5);
+                    return `Recent messages:\n${recent.map((m) => `  [${m.author.username}@${m.channelId.slice(0, 8)}] ${m.content.slice(0, 100)}`).join('\n')}`;
+                },
+            },
+        );
+    }
+
     clearMessages(): void {
         this.collectedMessages = [];
         this.typingEvents = [];
         this.reactionEvents = [];
         this.messageUpdateEvents = [];
+        this.createdThreads = [];
     }
 
     get userId(): string {
