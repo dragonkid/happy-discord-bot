@@ -1316,7 +1316,7 @@ describe('Bridge', () => {
 
             expect(hints).toHaveLength(2);
             const bashCalls = (happy.sessionRPC as ReturnType<typeof vi.fn>).mock.calls
-                .filter(([, method]: [string, string]) => method === 'bash');
+                .filter((call) => call[1] === 'bash');
             expect(bashCalls).toHaveLength(1);
         });
 
