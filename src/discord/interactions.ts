@@ -14,7 +14,7 @@ export async function handleAskButton(
 ): Promise<void> {
     if (askParsed.sessionId !== bridge.activeSession) {
         await interaction.editReply({
-            content: `${interaction.message.content}\n*Session no longer active*`,
+            content: `(Session no longer active) ${interaction.message.content}`,
             components: [],
         });
         return;
@@ -24,7 +24,7 @@ export async function handleAskButton(
     const request = pending.find((r) => r.id === askParsed.requestId);
     if (!request) {
         await interaction.editReply({
-            content: `${interaction.message.content}\n*Request expired*`,
+            content: `(Request expired) ${interaction.message.content}`,
             components: [],
         });
         return;
@@ -41,7 +41,7 @@ export async function handleAskButton(
         await bridge.handleAskUserAnswer(askParsed.sessionId, askParsed.requestId, answers);
 
         await interaction.editReply({
-            content: `${interaction.message.content}\n*Selected: ${label}*`,
+            content: `(Selected: ${label}) ${interaction.message.content}`,
             components: [],
         });
     } else if (askParsed.type === 'toggle') {
@@ -80,16 +80,16 @@ export async function handleAskButton(
 
         if (Object.keys(answers).length === 0) {
             await interaction.editReply({
-                content: `${interaction.message.content}\n*No options selected — please select at least one.*`,
+                content: `(No options selected) ${interaction.message.content}`,
             });
             return;
         }
 
         await bridge.handleAskUserAnswer(askParsed.sessionId, askParsed.requestId, answers);
 
-        const displayText = Object.entries(answers).map(([h, l]) => `${h}: ${l}`).join('\n');
+        const displayText = Object.entries(answers).map(([h, l]) => `${h}: ${l}`).join(', ');
         await interaction.editReply({
-            content: `${interaction.message.content}\n*Selected: ${displayText}*`,
+            content: `(Selected: ${displayText}) ${interaction.message.content}`,
             components: [],
         });
     }
@@ -115,7 +115,7 @@ export async function handleExitPlanButton(
 ): Promise<void> {
     if (parsed.sessionId !== bridge.activeSession) {
         await interaction.editReply({
-            content: `${interaction.message.content}\n*Session no longer active*`,
+            content: `(Session no longer active) ${interaction.message.content}`,
             components: [],
         });
         return;
@@ -125,7 +125,7 @@ export async function handleExitPlanButton(
     const request = pending.find((r) => r.id === parsed.requestId);
     if (!request) {
         await interaction.editReply({
-            content: `${interaction.message.content}\n*Request expired*`,
+            content: `(Request expired) ${interaction.message.content}`,
             components: [],
         });
         return;
@@ -135,7 +135,7 @@ export async function handleExitPlanButton(
         case 'approve':
             await bridge.approvePermission(parsed.sessionId, parsed.requestId);
             await interaction.editReply({
-                content: `${interaction.message.content}\n*Approved*`,
+                content: `(Approved) ${interaction.message.content}`,
                 components: [],
             });
             break;
@@ -144,7 +144,7 @@ export async function handleExitPlanButton(
             await bridge.approvePermission(parsed.sessionId, parsed.requestId, 'acceptEdits');
             bridge.permissions.applyApproval([], 'acceptEdits');
             await interaction.editReply({
-                content: `${interaction.message.content}\n*Approved (accept all edits)*`,
+                content: `(Approved - accept all edits) ${interaction.message.content}`,
                 components: [],
             });
             break;
@@ -232,7 +232,7 @@ export async function handleDeleteButton(
 ): Promise<void> {
     if (parsed.action === 'cancel') {
         await interaction.editReply({
-            content: `${interaction.message.content}\n*Cancelled*`,
+            content: `(Cancelled) ${interaction.message.content}`,
             components: [],
         });
         return;
