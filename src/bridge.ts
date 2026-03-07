@@ -409,7 +409,10 @@ export class Bridge {
             console.error('[Bridge] Failed to scan Discord threads for cleanup:', err);
         }
 
-        if (sessionCount > 0 || threadCount > 0) this.persistModes();
+        // Clean up stale session permission data from state.json
+        this.permissionCache.retainSessions(activeIds);
+
+        this.persistModes();
         return { sessions: sessionCount, threads: threadCount };
     }
 
