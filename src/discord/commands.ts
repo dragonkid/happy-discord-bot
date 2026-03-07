@@ -180,7 +180,7 @@ async function handleCompact(interaction: ChatInputCommandInteraction, bridge: B
             bridge.persistModes();
         }
         await bridge.compactSession();
-        await interaction.editReply('Compact requested.');
+        await interaction.editReply('Compacting session... Result will appear below.');
     } catch (err) {
         const detail = err instanceof Error ? err.message : 'Unknown error';
         await interaction.editReply(`Failed to compact: ${detail}`);
