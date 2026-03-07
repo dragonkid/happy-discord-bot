@@ -274,24 +274,9 @@ async function handleDelete(interaction: ChatInputCommandInteraction, bridge: Br
 async function handleCleanup(interaction: ChatInputCommandInteraction, bridge: Bridge): Promise<void> {
     await interaction.deferReply();
     try {
-        const all = await bridge.listAllSessions();
-        const archivedCount = all.filter((s) => !s.active).length;
-        const activeIds = new Set(all.filter((s) => s.active).map((s) => s.id));
-        const orphanThreadCount = Object.keys(bridge.getThreadMap())
-            .filter((sid) => !activeIds.has(sid)).length;
-
-        if (archivedCount === 0 && orphanThreadCount === 0) {
-            await interaction.editReply('Nothing to clean up.');
-            return;
-        }
-
-        const parts = [];
-        if (archivedCount > 0) parts.push(`${archivedCount} archived session(s)`);
-        if (orphanThreadCount > 0) parts.push(`${orphanThreadCount} orphan thread(s)`);
-
         const buttons = buildCleanupConfirmButtons();
         await interaction.editReply({
-            content: `⚠️ Delete ${parts.join(' and ')}? This is irreversible.`,
+            content: '⚠️ Delete all archived sessions and orphan threads? This is irreversible.',
             components: buttons,
         });
     } catch (err) {

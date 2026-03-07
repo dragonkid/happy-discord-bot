@@ -237,6 +237,21 @@ export class DiscordBot {
         await message.unpin();
     }
 
+    /** List all threads (active + archived) in the main channel. */
+    async listThreads(): Promise<Array<{ id: string; name: string }>> {
+        const channel = this.requireChannel();
+        const active = await channel.threads.fetchActive();
+        const archived = await channel.threads.fetchArchived();
+        const threads: Array<{ id: string; name: string }> = [];
+        for (const t of active.threads.values()) {
+            threads.push({ id: t.id, name: t.name });
+        }
+        for (const t of archived.threads.values()) {
+            threads.push({ id: t.id, name: t.name });
+        }
+        return threads;
+    }
+
     destroy(): void {
         this.client.destroy();
         this.channel = null;

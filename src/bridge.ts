@@ -379,14 +379,34 @@ export class Bridge {
             }
         }
 
-        // Clean up orphan threads (mapped to sessions that no longer exist)
+        // Clean up orphan threads: from thread map + from Discord channel
         let threadCount = 0;
-        for (const [sessionId, threadId] of this.sessionToThread.entries()) {
+        const activeThreadIds = new Set(
+            Array.from(this.sessionToThread.entries())
+                .filter(([sid]) => activeIds.has(sid))
+                .map(([, tid]) => tid),
+        );
+
+        // 1. Remove orphan entries from thread map
+        for (const [sessionId, threadId] of [...this.sessionToThread.entries()]) {
             if (!activeIds.has(sessionId)) {
                 await this.discord.deleteThread(threadId).catch(() => {});
                 this.removeThread(sessionId);
                 threadCount++;
             }
+        }
+
+        // 2. Scan Discord channel for threads not linked to any active session
+        try {
+            const discordThreads = await this.discord.listThreads();
+            for (const thread of discordThreads) {
+                if (!activeThreadIds.has(thread.id)) {
+                    await this.discord.deleteThread(thread.id).catch(() => {});
+                    threadCount++;
+                }
+            }
+        } catch (err) {
+            console.error('[Bridge] Failed to scan Discord threads for cleanup:', err);
         }
 
         if (sessionCount > 0 || threadCount > 0) this.persistModes();
