@@ -271,7 +271,7 @@ async function handleDelete(interaction: ChatInputCommandInteraction, bridge: Br
     }
 }
 
-async function handleCleanup(interaction: ChatInputCommandInteraction, bridge: Bridge): Promise<void> {
+async function handleCleanup(interaction: ChatInputCommandInteraction, _bridge: Bridge): Promise<void> {
     await interaction.deferReply();
     try {
         const buttons = buildCleanupConfirmButtons();
