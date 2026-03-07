@@ -207,6 +207,38 @@ describe('handleNewSessionModal', () => {
         expect(bridge.createNewSession).toHaveBeenCalledWith('machine-1', '/Users/user/custom-dir');
     });
 
+    it('expands ~ to HOME in custom directory path', async () => {
+        const bridge = makeMockBridge('sess-1');
+        (bridge as any).createNewSession = vi.fn().mockResolvedValue('new-sess');
+        const interaction = makeMockModalInteraction('~/Coding/happy-discord-bot');
+
+        const originalHome = process.env.HOME;
+        process.env.HOME = '/Users/testuser';
+        try {
+            await handleNewSessionModal(interaction, 'machine-1', bridge);
+        } finally {
+            process.env.HOME = originalHome;
+        }
+
+        expect(bridge.createNewSession).toHaveBeenCalledWith('machine-1', '/Users/testuser/Coding/happy-discord-bot');
+    });
+
+    it('expands bare ~ to HOME', async () => {
+        const bridge = makeMockBridge('sess-1');
+        (bridge as any).createNewSession = vi.fn().mockResolvedValue('new-sess');
+        const interaction = makeMockModalInteraction('~');
+
+        const originalHome = process.env.HOME;
+        process.env.HOME = '/Users/testuser';
+        try {
+            await handleNewSessionModal(interaction, 'machine-1', bridge);
+        } finally {
+            process.env.HOME = originalHome;
+        }
+
+        expect(bridge.createNewSession).toHaveBeenCalledWith('machine-1', '/Users/testuser');
+    });
+
     it('shows error for empty directory', async () => {
         const bridge = makeMockBridge('sess-1');
         const interaction = makeMockModalInteraction('   ');

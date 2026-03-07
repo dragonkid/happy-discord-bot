@@ -190,12 +190,18 @@ export async function handleNewSessionSelect(
     }
 }
 
+function expandHome(p: string): string {
+    if (p === '~') return process.env.HOME ?? p;
+    if (p.startsWith('~/')) return (process.env.HOME ?? '') + p.slice(1);
+    return p;
+}
+
 export async function handleNewSessionModal(
     interaction: ModalSubmitInteraction,
     machineId: string,
     bridge: Bridge,
 ): Promise<void> {
-    const directory = interaction.fields.getTextInputValue('directory').trim();
+    const directory = expandHome(interaction.fields.getTextInputValue('directory').trim());
     if (!directory) {
         await interaction.editReply({
             content: 'Please provide a directory path.',
