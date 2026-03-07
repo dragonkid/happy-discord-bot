@@ -723,8 +723,8 @@ describe('Bridge', () => {
 
     describe('disconnect notifications', () => {
         it('sends disconnect warning to Discord after debounce period', async () => {
-            const handlers = new Map<string, Function>();
-            vi.mocked(happy.on).mockImplementation(((event: string, handler: Function) => {
+            const handlers = new Map<string, (...args: unknown[]) => unknown>();
+            vi.mocked(happy.on).mockImplementation(((event: string, handler: (...args: unknown[]) => unknown) => {
                 handlers.set(event, handler);
                 return happy;
             }) as any);
@@ -746,8 +746,8 @@ describe('Bridge', () => {
         });
 
         it('cancels disconnect notification if reconnected within debounce', async () => {
-            const handlers = new Map<string, Function>();
-            vi.mocked(happy.on).mockImplementation(((event: string, handler: Function) => {
+            const handlers = new Map<string, (...args: unknown[]) => unknown>();
+            vi.mocked(happy.on).mockImplementation(((event: string, handler: (...args: unknown[]) => unknown) => {
                 handlers.set(event, handler);
                 return happy;
             }) as any);
@@ -770,8 +770,8 @@ describe('Bridge', () => {
         });
 
         it('sends reconnect notice after debounce already fired', async () => {
-            const handlers = new Map<string, Function>();
-            vi.mocked(happy.on).mockImplementation(((event: string, handler: Function) => {
+            const handlers = new Map<string, (...args: unknown[]) => unknown>();
+            vi.mocked(happy.on).mockImplementation(((event: string, handler: (...args: unknown[]) => unknown) => {
                 handlers.set(event, handler);
                 return happy;
             }) as any);
@@ -793,8 +793,8 @@ describe('Bridge', () => {
         });
 
         it('does not send reconnect notice on initial connect', async () => {
-            const handlers = new Map<string, Function>();
-            vi.mocked(happy.on).mockImplementation(((event: string, handler: Function) => {
+            const handlers = new Map<string, (...args: unknown[]) => unknown>();
+            vi.mocked(happy.on).mockImplementation(((event: string, handler: (...args: unknown[]) => unknown) => {
                 handlers.set(event, handler);
                 return happy;
             }) as any);
