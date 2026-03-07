@@ -278,8 +278,12 @@ async function main(): Promise<void> {
                         });
                     } else {
                         await interaction.editReply({ content: 'Cleaning up...', components: [] });
-                        const count = await bridge.cleanupArchivedSessions();
-                        await interaction.editReply({ content: `Cleaned up ${count} archived session(s).`, components: [] });
+                        const result = await bridge.cleanupArchivedSessions();
+                        const parts = [];
+                        if (result.sessions > 0) parts.push(`${result.sessions} session(s)`);
+                        if (result.threads > 0) parts.push(`${result.threads} orphan thread(s)`);
+                        const summary = parts.length > 0 ? parts.join(', ') : 'nothing to clean';
+                        await interaction.editReply({ content: `Cleaned up ${summary}.`, components: [] });
                     }
                 } catch (err) {
                     console.error('[Discord] Cleanup button error:', err);

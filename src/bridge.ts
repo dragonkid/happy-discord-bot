@@ -354,10 +354,12 @@ export class Bridge {
         return target;
     }
 
-    async cleanupArchivedSessions(): Promise<number> {
+    async cleanupArchivedSessions(): Promise<{ sessions: number; threads: number }> {
         const all = await listSessions(this.config.happy, this.config.credentials);
         const archived = all.filter((s) => !s.active);
-        let count = 0;
+        const activeIds = new Set(all.filter((s) => s.active).map((s) => s.id));
+        let sessionCount = 0;
+
         for (const session of archived) {
             try {
                 await apiDeleteSession(this.config.happy, this.config.credentials, session.id);
@@ -367,7 +369,7 @@ export class Bridge {
                     await this.discord.deleteThread(threadId).catch(() => {});
                     this.removeThread(fullId);
                 }
-                count++;
+                sessionCount++;
             } catch (err) {
                 // 404 = already deleted, skip silently
                 const status = (err as { status?: number }).status;
@@ -376,8 +378,19 @@ export class Bridge {
                 }
             }
         }
-        if (count > 0) this.persistModes();
-        return count;
+
+        // Clean up orphan threads (mapped to sessions that no longer exist)
+        let threadCount = 0;
+        for (const [sessionId, threadId] of this.sessionToThread.entries()) {
+            if (!activeIds.has(sessionId)) {
+                await this.discord.deleteThread(threadId).catch(() => {});
+                this.removeThread(sessionId);
+                threadCount++;
+            }
+        }
+
+        if (sessionCount > 0 || threadCount > 0) this.persistModes();
+        return { sessions: sessionCount, threads: threadCount };
     }
 
     /** Process a raw update from the Happy relay. Public for testing. */
