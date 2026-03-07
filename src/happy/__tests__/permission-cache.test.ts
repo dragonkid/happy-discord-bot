@@ -169,4 +169,28 @@ describe('PermissionCache', () => {
             expect(all.s2.mode).toBe('plan');
         });
     });
+
+    describe('retainSessions', () => {
+        it('removes sessions not in the active set', () => {
+            cache.setMode('acceptEdits');
+            cache.saveSession('s1');
+            cache.reset();
+            cache.setMode('plan');
+            cache.saveSession('s2');
+            cache.reset();
+            cache.saveSession('s3');
+
+            const removed = cache.retainSessions(new Set(['s2']));
+            expect(removed).toBe(2);
+            const all = cache.getAllSessions();
+            expect(Object.keys(all)).toEqual(['s2']);
+        });
+
+        it('returns 0 when all sessions are active', () => {
+            cache.saveSession('s1');
+            cache.saveSession('s2');
+            const removed = cache.retainSessions(new Set(['s1', 's2']));
+            expect(removed).toBe(0);
+        });
+    });
 });

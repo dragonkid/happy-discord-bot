@@ -2,7 +2,7 @@ import { loadBotConfig } from './config.js';
 import { HappyClient } from './happy/client.js';
 import { DiscordBot } from './discord/bot.js';
 import { handleCommand } from './discord/commands.js';
-import { parseButtonId, parseExitPlanButtonId, parsePlanModalId, parseNewSessionSelect, parseCustomPathButton, parseCustomPathModal, buildCustomPathModal, parseDeleteButtonId } from './discord/buttons.js';
+import { parseButtonId, parseExitPlanButtonId, parsePlanModalId, parseNewSessionSelect, parseCustomPathButton, parseCustomPathModal, buildCustomPathModal, parseDeleteButtonId, parseCleanupButtonId } from './discord/buttons.js';
 import { parseAskButtonId, parseSessionButtonId, handleAskButton, handleSessionButton, handleExitPlanButton, handleNewSessionSelect, handleNewSessionModal, handleDeleteButton } from './discord/interactions.js';
 import { Bridge } from './bridge.js';
 import { StateTracker } from './happy/state-tracker.js';
@@ -48,6 +48,8 @@ async function main(): Promise<void> {
     console.log(`[Store] Loaded ${Object.keys(savedState.sessions).length} saved session(s)`);
     const bridge = new Bridge(happy, discord, config, stateTracker, permissionCache);
     bridge.setStore(store);
+    bridge.loadThreadMap(savedState.threads);
+    console.log(`[Store] Loaded ${Object.keys(savedState.threads).length} saved thread(s)`);
     await bridge.start();
 
     if (bridge.activeSession) {
@@ -57,7 +59,18 @@ async function main(): Promise<void> {
     }
 
     discord.onMessage((message) => {
-        if (message.author.id !== config.discord.userId || message.channelId !== config.discord.channelId) return;
+        if (message.author.id !== config.discord.userId) return;
+
+        // Check if message is in a known thread -> route to that session
+        const threadSessionId = bridge.getSessionByThread(message.channelId);
+        if (threadSessionId) {
+            if (bridge.activeSession !== threadSessionId) {
+                bridge.setActiveSession(threadSessionId);
+                bridge.persistModes();
+            }
+        } else if (message.channelId !== config.discord.channelId) {
+            return;
+        }
 
         let text = message.content;
 
@@ -87,13 +100,18 @@ async function main(): Promise<void> {
 
             if (!text) return;
 
-            bridge.setLastUserMessageId(message.id);
+            const threadId = threadSessionId ? message.channelId : undefined;
+            bridge.setLastUserMessageId(message.id, threadId);
             await bridge.sendMessage(text);
         };
 
         handleMessage().catch((err) => {
             console.error('[Bridge] Failed to forward message:', err);
-            discord.send('⚠️ Failed to send message to CLI.').catch(() => {});
+            if (threadSessionId) {
+                discord.sendToThread(message.channelId, '\u26a0\ufe0f Failed to send message to CLI.').catch(() => {});
+            } else {
+                discord.send('\u26a0\ufe0f Failed to send message to CLI.').catch(() => {});
+            }
         });
     });
 
@@ -248,6 +266,35 @@ async function main(): Promise<void> {
                 return;
             }
 
+            // --- Cleanup confirmation buttons ---
+            const cleanupParsed = parseCleanupButtonId(interaction.customId);
+            if (cleanupParsed) {
+                await interaction.deferUpdate();
+                try {
+                    if (cleanupParsed.action === 'cancel') {
+                        await interaction.editReply({
+                            content: `${interaction.message.content}\n\n*Cancelled*`,
+                            components: [],
+                        });
+                    } else {
+                        await interaction.editReply({ content: 'Cleaning up...', components: [] });
+                        const result = await bridge.cleanupArchivedSessions();
+                        const parts = [];
+                        if (result.sessions > 0) parts.push(`${result.sessions} session(s)`);
+                        if (result.threads > 0) parts.push(`${result.threads} orphan thread(s)`);
+                        const summary = parts.length > 0 ? parts.join(', ') : 'nothing to clean';
+                        await interaction.editReply({ content: `Cleaned up ${summary}.`, components: [] });
+                    }
+                } catch (err) {
+                    console.error('[Discord] Cleanup button error:', err);
+                    await interaction.editReply({
+                        content: `${interaction.message.content}\n\n*Error during cleanup*`,
+                        components: [],
+                    }).catch(() => {});
+                }
+                return;
+            }
+
             // --- Permission buttons ---
             const parsed = parseButtonId(interaction.customId);
             if (!parsed) return;
@@ -385,6 +432,9 @@ async function main(): Promise<void> {
 
     await discord.start();
     console.log('[Discord] Bot online');
+
+    // Create threads for sessions that don't have one (requires Discord bot to be online)
+    await bridge.ensureThreadsForSessions();
 
     // --- Graceful shutdown ---
     process.on('SIGINT', () => {

@@ -36,6 +36,19 @@ function makeMockDiscord(): DiscordBot {
         editMessage: vi.fn().mockResolvedValue(undefined),
         pinMessage: vi.fn().mockResolvedValue(undefined),
         unpinMessage: vi.fn().mockResolvedValue(undefined),
+        sendToThread: vi.fn().mockResolvedValue([{ id: 'thread-msg-1' }]),
+        sendToThreadWithButtons: vi.fn().mockResolvedValue({}),
+        sendToThreadWithAttachment: vi.fn().mockResolvedValue({}),
+        sendTypingInThread: vi.fn().mockResolvedValue(undefined),
+        reactInThread: vi.fn().mockResolvedValue(undefined),
+        removeReactionInThread: vi.fn().mockResolvedValue(undefined),
+        editMessageInThread: vi.fn().mockResolvedValue(undefined),
+        pinMessageInThread: vi.fn().mockResolvedValue(undefined),
+        unpinMessageInThread: vi.fn().mockResolvedValue(undefined),
+        createThread: vi.fn().mockResolvedValue('thread-1'),
+        archiveThread: vi.fn().mockResolvedValue(undefined),
+        deleteThread: vi.fn().mockResolvedValue(undefined),
+        listThreads: vi.fn().mockResolvedValue([]),
     } as unknown as DiscordBot;
 }
 
@@ -710,8 +723,8 @@ describe('Bridge', () => {
 
     describe('disconnect notifications', () => {
         it('sends disconnect warning to Discord after debounce period', async () => {
-            const handlers = new Map<string, Function>();
-            vi.mocked(happy.on).mockImplementation(((event: string, handler: Function) => {
+            const handlers = new Map<string, (...args: unknown[]) => unknown>();
+            vi.mocked(happy.on).mockImplementation(((event: string, handler: (...args: unknown[]) => unknown) => {
                 handlers.set(event, handler);
                 return happy;
             }) as any);
@@ -733,8 +746,8 @@ describe('Bridge', () => {
         });
 
         it('cancels disconnect notification if reconnected within debounce', async () => {
-            const handlers = new Map<string, Function>();
-            vi.mocked(happy.on).mockImplementation(((event: string, handler: Function) => {
+            const handlers = new Map<string, (...args: unknown[]) => unknown>();
+            vi.mocked(happy.on).mockImplementation(((event: string, handler: (...args: unknown[]) => unknown) => {
                 handlers.set(event, handler);
                 return happy;
             }) as any);
@@ -757,8 +770,8 @@ describe('Bridge', () => {
         });
 
         it('sends reconnect notice after debounce already fired', async () => {
-            const handlers = new Map<string, Function>();
-            vi.mocked(happy.on).mockImplementation(((event: string, handler: Function) => {
+            const handlers = new Map<string, (...args: unknown[]) => unknown>();
+            vi.mocked(happy.on).mockImplementation(((event: string, handler: (...args: unknown[]) => unknown) => {
                 handlers.set(event, handler);
                 return happy;
             }) as any);
@@ -780,8 +793,8 @@ describe('Bridge', () => {
         });
 
         it('does not send reconnect notice on initial connect', async () => {
-            const handlers = new Map<string, Function>();
-            vi.mocked(happy.on).mockImplementation(((event: string, handler: Function) => {
+            const handlers = new Map<string, (...args: unknown[]) => unknown>();
+            vi.mocked(happy.on).mockImplementation(((event: string, handler: (...args: unknown[]) => unknown) => {
                 handlers.set(event, handler);
                 return happy;
             }) as any);
@@ -952,14 +965,14 @@ describe('Bridge', () => {
             permissionCache.setMode('acceptEdits');
             permissionCache.applyApproval(['Edit']);
             bridge.persistModes();
-            expect(mockStore.save).toHaveBeenCalledWith({
+            expect(mockStore.save).toHaveBeenCalledWith(expect.objectContaining({
                 sessions: expect.objectContaining({
                     'sess-1': expect.objectContaining({
                         mode: 'acceptEdits',
                         allowedTools: expect.arrayContaining(['Edit']),
                     }),
                 }),
-            });
+            }));
         });
 
         it('persistModes is no-op without store', () => {
@@ -1402,6 +1415,602 @@ describe('Bridge', () => {
 
         it('throws when no active session and no sessionId provided', async () => {
             await expect(bridge.deleteSession()).rejects.toThrow('No active session');
+        });
+    });
+
+    describe('Thread routing', () => {
+        it('getThreadId returns null for session without thread', () => {
+            bridge.setActiveSession('sess-1');
+            expect(bridge.getThreadId('sess-1')).toBeNull();
+        });
+
+        it('setThread stores mapping and getThreadId returns it', () => {
+            bridge.setThread('sess-1', 'thread-1');
+            expect(bridge.getThreadId('sess-1')).toBe('thread-1');
+        });
+
+        it('getSessionByThread returns sessionId for known thread', () => {
+            bridge.setThread('sess-1', 'thread-1');
+            expect(bridge.getSessionByThread('thread-1')).toBe('sess-1');
+        });
+
+        it('getSessionByThread returns null for unknown thread', () => {
+            expect(bridge.getSessionByThread('unknown')).toBeNull();
+        });
+
+        it('removeThread clears mapping', () => {
+            bridge.setThread('sess-1', 'thread-1');
+            bridge.removeThread('sess-1');
+            expect(bridge.getThreadId('sess-1')).toBeNull();
+            expect(bridge.getSessionByThread('thread-1')).toBeNull();
+        });
+
+        it('getThreadMap returns all mappings', () => {
+            bridge.setThread('s1', 't1');
+            bridge.setThread('s2', 't2');
+            expect(bridge.getThreadMap()).toEqual({ s1: 't1', s2: 't2' });
+        });
+
+        it('loadThreadMap restores mappings', () => {
+            bridge.loadThreadMap({ s1: 't1', s2: 't2' });
+            expect(bridge.getThreadId('s1')).toBe('t1');
+            expect(bridge.getSessionByThread('t2')).toBe('s2');
+        });
+    });
+
+    describe('Thread-aware message output', () => {
+        it('sends agent text to thread when thread exists (legacy format)', async () => {
+            bridge.setActiveSession('sess-1');
+            bridge.setThread('sess-1', 'thread-1');
+
+            const assistantContent = {
+                role: 'agent',
+                content: {
+                    type: 'output',
+                    data: {
+                        type: 'assistant',
+                        message: {
+                            role: 'assistant',
+                            content: [{ type: 'text', text: 'Hello from thread!' }],
+                        },
+                    },
+                },
+            };
+            const encrypted = Buffer.from(JSON.stringify(assistantContent)).toString('base64');
+
+            bridge.processUpdate({
+                body: {
+                    t: 'new-message',
+                    sid: 'sess-1',
+                    message: {
+                        id: 'msg-1',
+                        seq: 1,
+                        content: { c: encrypted, t: 'encrypted' },
+                        createdAt: Date.now(),
+                        updatedAt: Date.now(),
+                    },
+                },
+            });
+
+            await vi.waitFor(() => {
+                expect(discord.sendToThread).toHaveBeenCalledWith('thread-1', 'Hello from thread!');
+            });
+            expect(discord.send).not.toHaveBeenCalled();
+        });
+
+        it('sends session protocol text to thread when thread exists', async () => {
+            bridge.setActiveSession('sess-1');
+            bridge.setThread('sess-1', 'thread-1');
+
+            const sessionContent = {
+                role: 'session',
+                content: {
+                    role: 'agent',
+                    ev: { t: 'text', text: 'Session text in thread' },
+                },
+            };
+            const encrypted = Buffer.from(JSON.stringify(sessionContent)).toString('base64');
+
+            bridge.processUpdate({
+                body: {
+                    t: 'new-message',
+                    sid: 'sess-1',
+                    message: {
+                        id: 'msg-2',
+                        seq: 2,
+                        content: { c: encrypted, t: 'encrypted' },
+                        createdAt: Date.now(),
+                        updatedAt: Date.now(),
+                    },
+                },
+            });
+
+            await vi.waitFor(() => {
+                expect(discord.sendToThread).toHaveBeenCalledWith('thread-1', 'Session text in thread');
+            });
+            expect(discord.send).not.toHaveBeenCalled();
+        });
+
+        it('sends agent text to main channel when no thread', async () => {
+            bridge.setActiveSession('sess-1');
+
+            const assistantContent = {
+                role: 'agent',
+                content: {
+                    type: 'output',
+                    data: {
+                        type: 'assistant',
+                        message: {
+                            role: 'assistant',
+                            content: [{ type: 'text', text: 'Hello from main!' }],
+                        },
+                    },
+                },
+            };
+            const encrypted = Buffer.from(JSON.stringify(assistantContent)).toString('base64');
+
+            bridge.processUpdate({
+                body: {
+                    t: 'new-message',
+                    sid: 'sess-1',
+                    message: {
+                        id: 'msg-3',
+                        seq: 3,
+                        content: { c: encrypted, t: 'encrypted' },
+                        createdAt: Date.now(),
+                        updatedAt: Date.now(),
+                    },
+                },
+            });
+
+            await vi.waitFor(() => {
+                expect(discord.send).toHaveBeenCalledWith('Hello from main!');
+            });
+            expect(discord.sendToThread).not.toHaveBeenCalled();
+        });
+
+        it('sends permission buttons to thread when thread exists', async () => {
+            await bridge.start();
+            bridge.setActiveSession('sess-1');
+            bridge.setThread('sess-1', 'thread-1');
+
+            const agentState = {
+                requests: {
+                    'req-1': { id: 'req-1', tool: 'Edit', arguments: { file_path: '/x' }, createdAt: 1000 },
+                },
+            };
+            const encrypted = Buffer.from(JSON.stringify(agentState)).toString('base64');
+
+            bridge.processUpdate({
+                body: {
+                    t: 'update-session',
+                    id: 'sess-1',
+                    agentState: { version: 1, value: encrypted },
+                },
+            });
+
+            await vi.waitFor(() => {
+                expect(discord.sendToThreadWithButtons).toHaveBeenCalledWith(
+                    'thread-1', expect.any(String), expect.any(Array),
+                );
+            });
+            expect(discord.sendWithButtons).not.toHaveBeenCalled();
+        });
+
+        it('sends AskUserQuestion buttons to thread when thread exists', async () => {
+            await bridge.start();
+            bridge.setActiveSession('sess-1');
+            bridge.setThread('sess-1', 'thread-1');
+
+            const agentState = {
+                requests: {
+                    'req-1': {
+                        id: 'req-1',
+                        tool: 'AskUserQuestion',
+                        arguments: {
+                            questions: [{
+                                question: 'Which DB?',
+                                header: 'Database',
+                                options: [
+                                    { label: 'PostgreSQL', description: 'Relational' },
+                                ],
+                                multiSelect: false,
+                            }],
+                        },
+                        createdAt: 1000,
+                    },
+                },
+            };
+            const encrypted = Buffer.from(JSON.stringify(agentState)).toString('base64');
+
+            bridge.processUpdate({
+                body: {
+                    t: 'update-session',
+                    id: 'sess-1',
+                    agentState: { version: 1, value: encrypted },
+                },
+            });
+
+            await vi.waitFor(() => {
+                expect(discord.sendToThreadWithButtons).toHaveBeenCalledWith(
+                    'thread-1', expect.stringContaining('Which DB?'), expect.any(Array),
+                );
+            });
+            expect(discord.sendWithButtons).not.toHaveBeenCalled();
+        });
+
+        it('sends ExitPlanMode attachment to thread when thread exists', async () => {
+            await bridge.start();
+            bridge.setActiveSession('sess-1');
+            bridge.setThread('sess-1', 'thread-1');
+
+            const agentState = {
+                requests: {
+                    'req-plan': {
+                        id: 'req-plan',
+                        tool: 'ExitPlanMode',
+                        arguments: { plan: 'The plan' },
+                        createdAt: 1000,
+                    },
+                },
+            };
+            const encrypted = Buffer.from(JSON.stringify(agentState)).toString('base64');
+
+            bridge.processUpdate({
+                body: {
+                    t: 'update-session',
+                    id: 'sess-1',
+                    agentState: { version: 1, value: encrypted },
+                },
+            });
+
+            await vi.waitFor(() => {
+                expect(discord.sendToThreadWithAttachment).toHaveBeenCalledWith(
+                    'thread-1',
+                    expect.stringContaining('Plan Proposal'),
+                    expect.any(Buffer),
+                    'plan.md',
+                    expect.any(Array),
+                );
+            });
+            expect(discord.sendWithAttachmentAndButtons).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('Thread-aware typing and emoji', () => {
+        it('sends typing to thread when active session has thread', async () => {
+            bridge.setActiveSession('sess-1');
+            bridge.setThread('sess-1', 'thread-1');
+            bridge.handleEphemeralActivity('sess-1', true);
+
+            expect(discord.sendTypingInThread).toHaveBeenCalledWith('thread-1');
+            expect(discord.sendTyping).not.toHaveBeenCalled();
+        });
+
+        it('sends typing to main channel when no thread', async () => {
+            bridge.setActiveSession('sess-1');
+            bridge.handleEphemeralActivity('sess-1', true);
+
+            expect(discord.sendTyping).toHaveBeenCalled();
+            expect(discord.sendTypingInThread).not.toHaveBeenCalled();
+        });
+
+        it('adds thinking emoji in thread when threadId is set via setLastUserMessageId', async () => {
+            bridge.setActiveSession('sess-1');
+            bridge.setThread('sess-1', 'thread-1');
+            bridge.setLastUserMessageId('msg-u1', 'thread-1');
+            bridge.handleEphemeralActivity('sess-1', true);
+
+            expect(discord.reactInThread).toHaveBeenCalledWith('thread-1', 'msg-u1', '🤔');
+            expect(discord.reactToMessage).not.toHaveBeenCalled();
+        });
+
+        it('removes thinking emoji in thread', async () => {
+            bridge.setActiveSession('sess-1');
+            bridge.setThread('sess-1', 'thread-1');
+            bridge.setLastUserMessageId('msg-u1', 'thread-1');
+            bridge.handleEphemeralActivity('sess-1', true);
+            vi.clearAllMocks();
+            bridge.handleEphemeralActivity('sess-1', false);
+
+            expect(discord.removeReactionInThread).toHaveBeenCalledWith('thread-1', 'msg-u1', '🤔');
+            expect(discord.removeReaction).not.toHaveBeenCalled();
+        });
+
+        it('setActiveSession resets lastUserMsgThreadId', async () => {
+            bridge.setActiveSession('sess-1');
+            bridge.setThread('sess-1', 'thread-1');
+            bridge.setLastUserMessageId('msg-u1', 'thread-1');
+            bridge.handleEphemeralActivity('sess-1', true);
+            vi.clearAllMocks();
+
+            // Switch session clears thread context
+            bridge.setActiveSession('sess-2');
+            bridge.setLastUserMessageId('msg-u2');
+            bridge.handleEphemeralActivity('sess-2', true);
+
+            // Should use main channel methods since lastUserMsgThreadId was reset
+            expect(discord.reactToMessage).toHaveBeenCalledWith('msg-u2', '🤔');
+            expect(discord.reactInThread).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('Thread-aware TodoWrite', () => {
+        function sendToolCallStart(sessionId: string, name: string, args: Record<string, unknown>) {
+            const content = {
+                role: 'session',
+                content: {
+                    role: 'agent',
+                    ev: { t: 'tool-call-start', name, args },
+                },
+            };
+            const encrypted = Buffer.from(JSON.stringify(content)).toString('base64');
+            bridge.processUpdate({
+                body: {
+                    t: 'new-message',
+                    sid: sessionId,
+                    message: {
+                        id: `msg-${Date.now()}`,
+                        seq: 1,
+                        content: { c: encrypted, t: 'encrypted' },
+                        createdAt: Date.now(),
+                        updatedAt: Date.now(),
+                    },
+                },
+            });
+        }
+
+        it('sends and pins todo message in thread', async () => {
+            bridge.setActiveSession('sess-1');
+            bridge.setThread('sess-1', 'thread-1');
+
+            sendToolCallStart('sess-1', 'TodoWrite', {
+                todos: [{ id: '1', content: 'Task A', status: 'pending' }],
+            });
+            await vi.advanceTimersByTimeAsync(0);
+
+            expect(discord.sendToThread).toHaveBeenCalledWith('thread-1', expect.stringContaining('📋 Tasks'));
+            expect(discord.pinMessageInThread).toHaveBeenCalledWith('thread-1', 'thread-msg-1');
+            expect(discord.send).not.toHaveBeenCalled();
+            expect(discord.pinMessage).not.toHaveBeenCalled();
+        });
+
+        it('edits todo message in thread on subsequent TodoWrite', async () => {
+            bridge.setActiveSession('sess-1');
+            bridge.setThread('sess-1', 'thread-1');
+
+            sendToolCallStart('sess-1', 'TodoWrite', {
+                todos: [{ id: '1', content: 'Task A', status: 'pending' }],
+            });
+            await vi.advanceTimersByTimeAsync(0);
+
+            sendToolCallStart('sess-1', 'TodoWrite', {
+                todos: [{ id: '1', content: 'Task A', status: 'completed' }],
+            });
+            await vi.advanceTimersByTimeAsync(0);
+
+            expect(discord.editMessageInThread).toHaveBeenCalledWith(
+                'thread-1', 'thread-msg-1', expect.stringContaining('📋 Tasks'),
+            );
+            expect(discord.unpinMessageInThread).toHaveBeenCalledWith('thread-1', 'thread-msg-1');
+            expect(discord.editMessage).not.toHaveBeenCalled();
+            expect(discord.unpinMessage).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('Thread-aware tool use emoji', () => {
+        it('adds tool use emoji in thread', async () => {
+            bridge.setActiveSession('sess-1');
+            bridge.setThread('sess-1', 'thread-1');
+            bridge.setLastUserMessageId('msg-u1', 'thread-1');
+
+            const content = {
+                role: 'session',
+                content: { role: 'agent', ev: { t: 'tool-call-start', name: 'Bash', args: {} } },
+            };
+            const encrypted = Buffer.from(JSON.stringify(content)).toString('base64');
+            bridge.processUpdate({
+                body: {
+                    t: 'new-message',
+                    sid: 'sess-1',
+                    message: {
+                        id: 'msg-t1',
+                        seq: 1,
+                        content: { c: encrypted, t: 'encrypted' },
+                        createdAt: Date.now(),
+                        updatedAt: Date.now(),
+                    },
+                },
+            });
+
+            await vi.advanceTimersByTimeAsync(0);
+            expect(discord.reactInThread).toHaveBeenCalledWith('thread-1', 'msg-u1', '🔧');
+            expect(discord.reactToMessage).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('persistModes with threads', () => {
+        it('persistModes saves thread map', () => {
+            const mockStore = { save: vi.fn().mockResolvedValue(undefined), load: vi.fn() };
+            bridge.setThread('s1', 't1');
+            bridge.setStore(mockStore as any);
+            bridge.setActiveSession('sess-1');
+            bridge.persistModes();
+            expect(mockStore.save).toHaveBeenCalledWith(
+                expect.objectContaining({ threads: { s1: 't1' } }),
+            );
+        });
+    });
+
+    describe('ensureThread', () => {
+        it('creates thread and stores mapping', async () => {
+            bridge.setActiveSession('sess-1');
+            const threadId = await bridge.ensureThread('sess-1', { path: '/Users/user/my-project', machineId: 'abc', host: 'macbook' });
+            expect(discord.createThread).toHaveBeenCalledWith('my-project @ macbook');
+            expect(threadId).toBe('thread-1');
+            expect(bridge.getThreadId('sess-1')).toBe('thread-1');
+        });
+
+        it('returns existing thread if already mapped', async () => {
+            bridge.setThread('sess-1', 'existing-thread');
+            const threadId = await bridge.ensureThread('sess-1', { path: '/a/b', machineId: 'x', host: 'y' });
+            expect(discord.createThread).not.toHaveBeenCalled();
+            expect(threadId).toBe('existing-thread');
+        });
+
+        it('uses fallback name for invalid metadata', async () => {
+            bridge.setActiveSession('sess-1');
+            await bridge.ensureThread('sess-1', null);
+            expect(discord.createThread).toHaveBeenCalledWith('session-sess-1');
+        });
+    });
+
+    describe('Thread lifecycle', () => {
+        it('archiveSession archives the thread', async () => {
+            bridge.setActiveSession('sess-1');
+            bridge.setThread('sess-1', 'thread-1');
+            await bridge.archiveSession('sess-1');
+            expect(happy.sessionRPC).toHaveBeenCalledWith('sess-1', 'killSession', {});
+            expect(discord.archiveThread).toHaveBeenCalledWith('thread-1');
+        });
+
+        it('deleteSession deletes the thread and removes mapping', async () => {
+            bridge.setActiveSession('sess-1');
+            bridge.setThread('sess-1', 'thread-1');
+            await bridge.deleteSession('sess-1');
+            expect(discord.deleteThread).toHaveBeenCalledWith('thread-1');
+            expect(bridge.getThreadId('sess-1')).toBeNull();
+        });
+
+        it('archiveSession without thread still archives session', async () => {
+            bridge.setActiveSession('sess-1');
+            await bridge.archiveSession('sess-1');
+            expect(happy.sessionRPC).toHaveBeenCalledWith('sess-1', 'killSession', {});
+            expect(discord.archiveThread).not.toHaveBeenCalled();
+        });
+
+        it('deleteSession without thread still deletes session', async () => {
+            bridge.setActiveSession('sess-1');
+            await bridge.deleteSession('sess-1');
+            expect(discord.deleteThread).not.toHaveBeenCalled();
+        });
+
+        it('deleteSession clears activeSessionId when deleting active session', async () => {
+            bridge.setActiveSession('sess-1');
+            bridge.setThread('sess-1', 'thread-1');
+            await bridge.deleteSession('sess-1');
+            expect(bridge.activeSession).toBeNull();
+        });
+
+        it('deleteSession persists modes after cleanup', async () => {
+            const mockStore = { save: vi.fn().mockResolvedValue(undefined), load: vi.fn() };
+            bridge.setStore(mockStore as any);
+            bridge.setActiveSession('sess-1');
+            bridge.setThread('sess-1', 'thread-1');
+            await bridge.deleteSession('sess-1');
+            expect(mockStore.save).toHaveBeenCalled();
+        });
+
+        it('deleteSession resolves prefix to full session ID for thread cleanup', async () => {
+            bridge.setActiveSession('sess-full-id-abc123');
+            bridge.setThread('sess-full-id-abc123', 'thread-1');
+            await bridge.deleteSession('sess-full');
+            expect(discord.deleteThread).toHaveBeenCalledWith('thread-1');
+            expect(bridge.getThreadId('sess-full-id-abc123')).toBeNull();
+        });
+
+        it('archiveSession resolves prefix to full session ID for thread archive', async () => {
+            bridge.setActiveSession('sess-full-id-abc123');
+            bridge.setThread('sess-full-id-abc123', 'thread-1');
+            await bridge.archiveSession('sess-full');
+            expect(discord.archiveThread).toHaveBeenCalledWith('thread-1');
+        });
+    });
+
+    describe('cleanupArchivedSessions', () => {
+        it('deletes archived sessions and their threads', async () => {
+            const { listSessions } = await import('../vendor/api.js');
+            const { deleteSession: apiDelete } = await import('../vendor/api.js');
+            vi.mocked(listSessions).mockResolvedValueOnce([
+                { id: 'active-1', active: true },
+                { id: 'archived-1', active: false },
+                { id: 'archived-2', active: false },
+            ] as any);
+
+            bridge.setActiveSession('active-1');
+            bridge.setThread('archived-1', 'thread-a');
+
+            const result = await bridge.cleanupArchivedSessions();
+            expect(result.sessions).toBe(2);
+            expect(apiDelete).toHaveBeenCalledTimes(2);
+            expect(discord.deleteThread).toHaveBeenCalledWith('thread-a');
+            expect(bridge.getThreadId('archived-1')).toBeNull();
+        });
+
+        it('silences 404 errors from already-deleted sessions', async () => {
+            const { listSessions } = await import('../vendor/api.js');
+            const { deleteSession: apiDelete } = await import('../vendor/api.js');
+            vi.mocked(listSessions).mockResolvedValueOnce([
+                { id: 'gone-1', active: false },
+            ] as any);
+            const err = new Error('Not found') as any;
+            err.status = 404;
+            vi.mocked(apiDelete).mockRejectedValueOnce(err);
+
+            const result = await bridge.cleanupArchivedSessions();
+            expect(result.sessions).toBe(0);
+        });
+
+        it('removes orphan threads from thread map', async () => {
+            const { listSessions } = await import('../vendor/api.js');
+            vi.mocked(listSessions).mockResolvedValueOnce([
+                { id: 'active-1', active: true },
+            ] as any);
+
+            bridge.setActiveSession('active-1');
+            bridge.setThread('active-1', 'thread-active');
+            bridge.setThread('stale-1', 'thread-stale');
+
+            const result = await bridge.cleanupArchivedSessions();
+            expect(result.threads).toBeGreaterThanOrEqual(1);
+            expect(discord.deleteThread).toHaveBeenCalledWith('thread-stale');
+            expect(bridge.getThreadId('stale-1')).toBeNull();
+            // Active thread should remain
+            expect(bridge.getThreadId('active-1')).toBe('thread-active');
+        });
+
+        it('scans Discord channel for untracked orphan threads', async () => {
+            const { listSessions } = await import('../vendor/api.js');
+            vi.mocked(listSessions).mockResolvedValueOnce([
+                { id: 'active-1', active: true },
+            ] as any);
+            bridge.setActiveSession('active-1');
+            bridge.setThread('active-1', 'thread-active');
+
+            vi.mocked(discord.listThreads).mockResolvedValueOnce([
+                { id: 'thread-active', name: 'active' },
+                { id: 'thread-orphan', name: 'orphan' },
+            ]);
+
+            const result = await bridge.cleanupArchivedSessions();
+            expect(discord.deleteThread).toHaveBeenCalledWith('thread-orphan');
+            expect(result.threads).toBeGreaterThanOrEqual(1);
+        });
+
+        it('purges stale permission data from cache', async () => {
+            const { listSessions } = await import('../vendor/api.js');
+            vi.mocked(listSessions).mockResolvedValueOnce([
+                { id: 'active-1', active: true },
+            ] as any);
+
+            bridge.setActiveSession('active-1');
+            bridge.permissions.saveSession('active-1');
+            bridge.permissions.saveSession('stale-1');
+
+            await bridge.cleanupArchivedSessions();
+            const all = bridge.permissions.getAllSessions();
+            expect(all['active-1']).toBeDefined();
+            expect(all['stale-1']).toBeUndefined();
         });
     });
 });

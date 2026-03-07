@@ -19,7 +19,7 @@ describe('Store', () => {
 
     it('load returns empty state when file does not exist', async () => {
         const state = await store.load();
-        expect(state).toEqual({ sessions: {} });
+        expect(state).toEqual({ sessions: {}, threads: {} });
     });
 
     it('save then load round-trips session permissions', async () => {
@@ -27,6 +27,7 @@ describe('Store', () => {
             sessions: {
                 s1: { mode: 'acceptEdits', allowedTools: ['Edit'], bashLiterals: [], bashPrefixes: [] },
             },
+            threads: {},
         });
         const state = await store.load();
         expect(state.sessions.s1).toEqual({
@@ -42,6 +43,7 @@ describe('Store', () => {
         const nestedStore = new Store(nested);
         await nestedStore.save({
             sessions: { s1: { mode: 'plan', allowedTools: [], bashLiterals: [], bashPrefixes: [] } },
+            threads: {},
         });
         const state = await nestedStore.load();
         expect(state.sessions.s1.mode).toBe('plan');
@@ -51,15 +53,17 @@ describe('Store', () => {
         await mkdir(dir, { recursive: true });
         await writeFile(join(dir, 'state.json'), 'not json');
         const state = await store.load();
-        expect(state).toEqual({ sessions: {} });
+        expect(state).toEqual({ sessions: {}, threads: {} });
     });
 
     it('save overwrites previous state', async () => {
         await store.save({
             sessions: { s1: { mode: 'acceptEdits', allowedTools: [], bashLiterals: [], bashPrefixes: [] } },
+            threads: {},
         });
         await store.save({
             sessions: { s2: { mode: 'bypassPermissions', allowedTools: ['Glob'], bashLiterals: ['git status'], bashPrefixes: ['npm'] } },
+            threads: {},
         });
         const state = await store.load();
         expect(state.sessions.s1).toBeUndefined();
@@ -69,5 +73,21 @@ describe('Store', () => {
             bashLiterals: ['git status'],
             bashPrefixes: ['npm'],
         });
+    });
+
+    it('save and load round-trips thread mapping', async () => {
+        await store.save({
+            sessions: {},
+            threads: { 'sess-1': 'thread-1', 'sess-2': 'thread-2' },
+        });
+        const state = await store.load();
+        expect(state.threads).toEqual({ 'sess-1': 'thread-1', 'sess-2': 'thread-2' });
+    });
+
+    it('load returns empty threads when field is missing', async () => {
+        await mkdir(dir, { recursive: true });
+        await writeFile(join(dir, 'state.json'), JSON.stringify({ sessions: {} }));
+        const state = await store.load();
+        expect(state.threads).toEqual({});
     });
 });

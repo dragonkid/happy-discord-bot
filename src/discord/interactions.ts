@@ -237,7 +237,13 @@ export async function handleDeleteButton(
         await interaction.editReply({
             content: `Session \`${deletedId.slice(0, 8)}\` deleted.`,
             components: [],
-        });
+        }).catch(() => {});
+
+        // Fallback: if deleteSession didn't find the thread via session ID prefix,
+        // delete the thread directly when the button was clicked inside one.
+        if (interaction.channel?.isThread()) {
+            await interaction.channel.delete().catch(() => {});
+        }
     } catch (err) {
         const detail = err instanceof Error ? err.message : 'Unknown error';
         await interaction.editReply({

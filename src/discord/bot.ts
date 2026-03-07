@@ -4,6 +4,7 @@ import {
     Events,
     AttachmentBuilder,
     type TextChannel,
+    type ThreadChannel,
     type Interaction,
     type ActionRowBuilder,
     type ButtonBuilder,
@@ -138,6 +139,119 @@ export class DiscordBot {
         await message.unpin();
     }
 
+    /** Create a thread from an anchor message in the main channel. Returns thread ID. */
+    async createThread(name: string): Promise<string> {
+        const channel = this.requireChannel();
+        const anchor = await channel.send(`--- ${name} ---`);
+        const thread = await anchor.startThread({ name });
+        return thread.id;
+    }
+
+    /** Send text to a thread, auto-chunking if needed. */
+    async sendToThread(threadId: string, text: string): Promise<Message[]> {
+        const thread = await this.fetchThread(threadId);
+        const chunks = chunkMessage(text);
+        const messages: Message[] = [];
+        for (const chunk of chunks) {
+            messages.push(await thread.send(chunk));
+        }
+        return messages;
+    }
+
+    /** Send a message with button action rows to a thread. */
+    async sendToThreadWithButtons(
+        threadId: string,
+        text: string,
+        components: ActionRowBuilder<ButtonBuilder>[],
+    ): Promise<Message> {
+        const thread = await this.fetchThread(threadId);
+        return thread.send({ content: text, components });
+    }
+
+    /** Send a message with a file attachment and button action rows to a thread. */
+    async sendToThreadWithAttachment(
+        threadId: string,
+        text: string,
+        fileContent: Buffer,
+        fileName: string,
+        components: ActionRowBuilder<ButtonBuilder>[],
+    ): Promise<Message> {
+        const thread = await this.fetchThread(threadId);
+        const attachment = new AttachmentBuilder(fileContent, { name: fileName });
+        return thread.send({ content: text, files: [attachment], components });
+    }
+
+    /** Archive a thread. */
+    async archiveThread(threadId: string): Promise<void> {
+        const thread = await this.fetchThread(threadId);
+        await thread.setArchived(true);
+    }
+
+    /** Delete a thread. */
+    async deleteThread(threadId: string): Promise<void> {
+        const thread = await this.fetchThread(threadId);
+        await thread.delete();
+    }
+
+    /** Send typing indicator to a thread. */
+    async sendTypingInThread(threadId: string): Promise<void> {
+        const thread = await this.fetchThread(threadId);
+        await thread.sendTyping();
+    }
+
+    /** Add an emoji reaction to a message in a thread. */
+    async reactInThread(threadId: string, messageId: string, emoji: string): Promise<void> {
+        const thread = await this.fetchThread(threadId);
+        const message = await thread.messages.fetch(messageId);
+        await message.react(emoji);
+    }
+
+    /** Remove the bot's emoji reaction from a message in a thread. */
+    async removeReactionInThread(threadId: string, messageId: string, emoji: string): Promise<void> {
+        const thread = await this.fetchThread(threadId);
+        const message = await thread.messages.fetch(messageId);
+        const reaction = message.reactions.resolve(emoji);
+        if (reaction) {
+            await reaction.users.remove(this.client.user?.id);
+        }
+    }
+
+    /** Edit a message's content in a thread. */
+    async editMessageInThread(threadId: string, messageId: string, content: string): Promise<void> {
+        const thread = await this.fetchThread(threadId);
+        const message = await thread.messages.fetch(messageId);
+        await message.edit({ content });
+    }
+
+    /** Pin a message in a thread. */
+    async pinMessageInThread(threadId: string, messageId: string): Promise<void> {
+        const thread = await this.fetchThread(threadId);
+        const message = await thread.messages.fetch(messageId);
+        await message.pin();
+    }
+
+    /** Unpin a message from a thread. */
+    async unpinMessageInThread(threadId: string, messageId: string): Promise<void> {
+        const thread = await this.fetchThread(threadId);
+        const message = await thread.messages.fetch(messageId);
+        await message.unpin();
+    }
+
+    /** List all threads (active + archived) in the main channel. */
+    async listThreads(): Promise<Array<{ id: string; name: string }>> {
+        const channel = this.requireChannel();
+        const active = await channel.threads.fetchActive();
+        const archived = await channel.threads.fetchArchived();
+        const threads: Array<{ id: string; name: string }> = [];
+        for (const t of active.threads.values()) {
+            threads.push({ id: t.id, name: t.name });
+        }
+        for (const t of archived.threads.values()) {
+            threads.push({ id: t.id, name: t.name });
+        }
+        return threads;
+    }
+
     destroy(): void {
         this.client.destroy();
         this.channel = null;
@@ -146,6 +260,14 @@ export class DiscordBot {
     /** The authorized user ID. */
     get userId(): string {
         return this.config.userId;
+    }
+
+    private async fetchThread(threadId: string): Promise<ThreadChannel> {
+        const ch = await this.client.channels.fetch(threadId);
+        if (!ch?.isThread()) {
+            throw new Error(`Channel ${threadId} is not a thread`);
+        }
+        return ch as ThreadChannel;
     }
 
     private requireChannel(): TextChannel {

@@ -11,6 +11,7 @@ export interface SessionPermissions {
 
 export interface BotState {
     sessions: Record<string, SessionPermissions>;
+    threads: Record<string, string>;
 }
 
 const STATE_FILE = 'state.json';
@@ -28,9 +29,9 @@ export class Store {
         try {
             const raw = await readFile(this.filePath, 'utf-8');
             const parsed = JSON.parse(raw) as Partial<BotState>;
-            return { sessions: parsed.sessions ?? {} };
+            return { sessions: parsed.sessions ?? {}, threads: parsed.threads ?? {} };
         } catch {
-            return { sessions: {} };
+            return { sessions: {}, threads: {} };
         }
     }
 

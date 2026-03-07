@@ -87,6 +87,23 @@ export class PermissionCache {
         return Object.fromEntries(this.sessionStates);
     }
 
+    /** Remove a session's saved permission state. */
+    removeSession(sessionId: string): void {
+        this.sessionStates.delete(sessionId);
+    }
+
+    /** Remove all sessions not in the given set of active IDs. */
+    retainSessions(activeIds: ReadonlySet<string>): number {
+        let removed = 0;
+        for (const id of [...this.sessionStates.keys()]) {
+            if (!activeIds.has(id)) {
+                this.sessionStates.delete(id);
+                removed++;
+            }
+        }
+        return removed;
+    }
+
     private parseTool(permission: string): void {
         if (permission === 'Bash') return; // plain Bash ignored
 

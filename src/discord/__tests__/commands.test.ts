@@ -3,12 +3,14 @@ import { commandDefinitions, handleCommand } from '../commands.js';
 import type { Bridge } from '../../bridge.js';
 
 // Minimal interaction mock
-function mockInteraction(name: string, options: Record<string, string> = {}) {
+function mockInteraction(name: string, options: Record<string, string> = {}, channelId = 'ch-main') {
     return {
         commandName: name,
+        channelId,
         user: { id: 'u-1' },
         options: {
             getString: vi.fn((key: string, _required?: boolean) => options[key] ?? null),
+            data: [],
         },
         reply: vi.fn().mockResolvedValue(undefined),
         deferReply: vi.fn().mockResolvedValue(undefined),
@@ -27,6 +29,8 @@ function makeMockBridge(): Bridge {
         stopSession: vi.fn().mockResolvedValue(undefined),
         compactSession: vi.fn().mockResolvedValue(undefined),
         persistModes: vi.fn(),
+        setActiveSession: vi.fn(),
+        getSessionByThread: vi.fn().mockReturnValue(null),
         activeSession: null,
         permissions: {
             setMode: vi.fn(),
@@ -58,11 +62,11 @@ describe('commands', () => {
     });
 
     describe('handleCommand', () => {
-        it('/sessions calls bridge.listSessions and formats result', async () => {
+        it('/sessions calls bridge.listAllSessions and formats result', async () => {
             const bridge = makeMockBridge();
-            vi.mocked(bridge.listSessions).mockResolvedValueOnce([
-                { id: 'sess-1', active: true, activeAt: 1000 },
-                { id: 'sess-2', active: true, activeAt: 2000 },
+            vi.mocked(bridge.listAllSessions).mockResolvedValueOnce([
+                { id: 'sess-1', active: true, activeAt: 1000, metadata: null },
+                { id: 'sess-2', active: true, activeAt: 2000, metadata: null },
             ] as any);
             Object.defineProperty(bridge, 'activeSession', { value: 'sess-2' });
 
@@ -70,7 +74,7 @@ describe('commands', () => {
             await handleCommand(interaction as any, bridge);
 
             expect(interaction.deferReply).toHaveBeenCalled();
-            expect(bridge.listSessions).toHaveBeenCalled();
+            expect(bridge.listAllSessions).toHaveBeenCalled();
             expect(interaction.editReply).toHaveBeenCalledWith(
                 expect.objectContaining({
                     content: expect.stringContaining('sess-1'),
@@ -79,13 +83,14 @@ describe('commands', () => {
             );
         });
 
-        it('/sessions shows "no active sessions" when empty', async () => {
+        it('/sessions shows "no sessions found" when empty', async () => {
             const bridge = makeMockBridge();
+            vi.mocked(bridge.listAllSessions).mockResolvedValueOnce([]);
             const interaction = mockInteraction('sessions');
             await handleCommand(interaction as any, bridge);
 
             expect(interaction.editReply).toHaveBeenCalledWith(
-                expect.stringContaining('No active sessions'),
+                expect.stringContaining('No sessions found'),
             );
         });
 
@@ -112,14 +117,16 @@ describe('commands', () => {
 
         it('/stop calls bridge.stopSession', async () => {
             const bridge = makeMockBridge();
+            Object.defineProperty(bridge, 'activeSession', { value: 'sess-1', writable: true });
             const interaction = mockInteraction('stop');
             await handleCommand(interaction as any, bridge);
 
-            expect(bridge.stopSession).toHaveBeenCalled();
+            expect(bridge.stopSession).toHaveBeenCalledWith('sess-1');
         });
 
         it('/compact calls bridge.compactSession', async () => {
             const bridge = makeMockBridge();
+            Object.defineProperty(bridge, 'activeSession', { value: 'sess-1', writable: true });
             const interaction = mockInteraction('compact');
             await handleCommand(interaction as any, bridge);
 
@@ -259,6 +266,85 @@ describe('commands', () => {
 
             expect(interaction.editReply).toHaveBeenCalledWith(
                 expect.stringContaining('Failed'),
+            );
+        });
+    });
+
+    describe('thread-aware command resolution', () => {
+        it('/stop in a thread targets that thread session', async () => {
+            const bridge = makeMockBridge();
+            Object.defineProperty(bridge, 'activeSession', { value: 'active-sess', writable: true });
+            vi.mocked(bridge.getSessionByThread).mockReturnValue('thread-sess');
+            const interaction = mockInteraction('stop', {}, 'thread-1');
+            await handleCommand(interaction as any, bridge);
+            expect(bridge.stopSession).toHaveBeenCalledWith('thread-sess');
+        });
+
+        it('/stop in main channel targets active session', async () => {
+            const bridge = makeMockBridge();
+            Object.defineProperty(bridge, 'activeSession', { value: 'active-sess', writable: true });
+            const interaction = mockInteraction('stop');
+            await handleCommand(interaction as any, bridge);
+            expect(bridge.stopSession).toHaveBeenCalledWith('active-sess');
+        });
+
+        it('/stop with no active session and no thread errors', async () => {
+            const bridge = makeMockBridge();
+            const interaction = mockInteraction('stop');
+            await handleCommand(interaction as any, bridge);
+            expect(interaction.editReply).toHaveBeenCalledWith(
+                expect.stringContaining('No active session'),
+            );
+        });
+
+        it('/archive in a thread targets that thread session', async () => {
+            const bridge = makeMockBridge();
+            Object.defineProperty(bridge, 'activeSession', { value: 'active-sess', writable: true });
+            vi.mocked(bridge.getSessionByThread).mockReturnValue('thread-sess');
+            const interaction = mockInteraction('archive', {}, 'thread-1');
+            await handleCommand(interaction as any, bridge);
+            expect(bridge.archiveSession).toHaveBeenCalledWith('thread-sess');
+        });
+
+        it('/archive with explicit session param ignores thread context', async () => {
+            const bridge = makeMockBridge();
+            Object.defineProperty(bridge, 'activeSession', { value: 'active-sess', writable: true });
+            vi.mocked(bridge.getSessionByThread).mockReturnValue('thread-sess');
+            const interaction = mockInteraction('archive', { session: 'explicit-sess' }, 'thread-1');
+            await handleCommand(interaction as any, bridge);
+            expect(bridge.archiveSession).toHaveBeenCalledWith('explicit-sess');
+        });
+
+        it('/compact in a thread switches active session then compacts', async () => {
+            const bridge = makeMockBridge();
+            Object.defineProperty(bridge, 'activeSession', { value: 'active-sess', writable: true });
+            vi.mocked(bridge.getSessionByThread).mockReturnValue('thread-sess');
+            const interaction = mockInteraction('compact', {}, 'thread-1');
+            await handleCommand(interaction as any, bridge);
+            expect(bridge.setActiveSession).toHaveBeenCalledWith('thread-sess');
+            expect(bridge.compactSession).toHaveBeenCalled();
+        });
+
+        it('/mode in a thread switches to thread session', async () => {
+            const bridge = makeMockBridge();
+            Object.defineProperty(bridge, 'activeSession', { value: 'active-sess', writable: true });
+            vi.mocked(bridge.getSessionByThread).mockReturnValue('thread-sess');
+            const interaction = mockInteraction('mode', { mode: 'acceptEdits' }, 'thread-1');
+            await handleCommand(interaction as any, bridge);
+            expect(bridge.setActiveSession).toHaveBeenCalledWith('thread-sess');
+            expect(bridge.permissions.setMode).toHaveBeenCalledWith('acceptEdits');
+        });
+
+        it('/delete in a thread targets that thread session', async () => {
+            const bridge = makeMockBridge();
+            Object.defineProperty(bridge, 'activeSession', { value: 'active-sess', writable: true });
+            vi.mocked(bridge.getSessionByThread).mockReturnValue('thread-sess');
+            const interaction = mockInteraction('delete', {}, 'thread-1');
+            await handleCommand(interaction as any, bridge);
+            expect(interaction.editReply).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    content: expect.stringContaining('thread-s'),
+                }),
             );
         });
     });
