@@ -30,7 +30,7 @@ Main Channel (status summaries only)
 - **Thread creation:** Auto-created on bot connect for sessions without threads, and on `/new` session creation. Anchor message sent to main channel, thread created on it.
 - **Thread naming:** `{directoryName} @ {host}` from session metadata (e.g. `happy-discord-bot @ macbook`).
 - **Message routing:** Messages in a thread auto-route to the bound session and auto-switch `activeSession`. Main channel messages fallback to active session.
-- **Command resolution:** `/stop`, `/compact`, `/mode`, `/archive`, `/delete` in a thread resolve to that thread's session via `resolveSessionFromContext()`. Explicit `session` parameter overrides.
+- **Command resolution:** `/stop`, `/compact`, `/mode`, `/archive`, `/delete` in a thread resolve to that thread's session via `resolveSessionFromContext()`. Explicit `session` parameter overrides. `/usage` in a thread auto-scopes to that session via `getSessionByThread()`.
 - **Thread lifecycle:** `/archive` archives thread, `/delete` deletes thread + removes mapping.
 - **Persistence:** Thread mapping (`sessionId -> threadId`) saved in `state.json` under `threads` field, restored on bot restart.
 - **Output routing:** All bot output (text, permissions, TodoWrite, typing, emoji) routes to session's thread when available, falls back to main channel.
@@ -46,6 +46,7 @@ src/
 ├── happy/
 │   ├── client.ts         # HappyClient: Socket.IO + sessionRPC + machineRPC + HTTP
 │   ├── session-metadata.ts  # Session metadata decryption + directory extraction + threadName
+│   ├── usage.ts          # REST API wrapper for /v1/usage/query (token/cost)
 │   ├── permission-cache.ts  # Tool approval caching (allowedTools, BashLiterals)
 │   ├── state-tracker.ts  # agentState monitoring, permission request detection
 │   └── types.ts          # RPC request/response types
@@ -143,6 +144,13 @@ When a Discord message includes attachments (images, PDFs, code files, etc.), th
 - Deleting the active session clears `activeSessionId`
 - Both also manage the associated Discord thread: `/archive` archives the thread, `/delete` deletes the thread and removes the thread mapping
 
+### /usage Token Usage Query
+- `/usage` — In a thread: query that session's all-time usage. In main channel: query today's all-account usage (by hour).
+- `/usage [period]` — Explicit period (`today`, `7d`, `30d`) queries all-account usage.
+- Data source: `POST /v1/usage/query` REST API on relay server (server-side aggregation).
+- Reply is ephemeral (only visible to command user).
+- Output: session summary (tokens in/out/cache + cost) or time-grouped table with totals.
+
 ### machineRPC Encryption
 Bot reads two credential files:
 - `~/.happy/agent.key` → `{token, secret}` (legacy XSalsa20-Poly1305)
@@ -204,7 +212,7 @@ npm run test:e2e         # E2E smoke tests (requires .env.e2e, real services)
 ## Testing
 
 - Framework: Vitest
-- 13 test suites, 353 tests
+- 13 test suites, 380 tests
 - Test files: `src/**/__tests__/*.test.ts`
 - All Happy/Discord dependencies mocked (no real connections needed)
 
@@ -234,6 +242,7 @@ Real end-to-end tests using a second Discord bot + live Happy relay. Located in 
 | `smoke-todowrite.test.ts` | TodoWrite progress display (best-effort) | No |
 | `smoke-attachment.test.ts` | Attachment upload via writeFile RPC + Claude reads file | No |
 | `smoke-thread.test.ts` | Thread creation + thread messaging + restart recovery | No |
+| `smoke-usage.test.ts` | Usage data pipeline: message → relay usage API has token/cost data | No |
 
 **E2E helper classes (`e2e/helpers/`):**
 

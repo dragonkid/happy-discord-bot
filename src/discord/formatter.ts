@@ -1,4 +1,5 @@
 import type { AskUserQuestionItem } from '../happy/types.js';
+import type { UsageResult } from '../happy/usage.js';
 
 const DISCORD_MAX = 2000;
 
@@ -173,4 +174,85 @@ export function formatTodoWrite(todos: readonly TodoItem[]): string {
     });
 
     return `${header}\n\`\`\`\n${lines.join('\n')}\n\`\`\``;
+}
+
+type UsagePeriod = 'session' | 'today' | '7d' | '30d';
+
+const PERIOD_LABELS: Record<UsagePeriod, string> = {
+    session: 'Session',
+    today: 'Today',
+    '7d': 'Last 7 days',
+    '30d': 'Last 30 days',
+};
+
+function fmtTokens(n: number): string {
+    return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+function fmtCost(n: number): string {
+    return `$${n.toFixed(2)}`;
+}
+
+export function formatUsage(result: UsageResult, period: UsagePeriod, sessionId?: string): string {
+    if (result.usage.length === 0) {
+        const label = period === 'session' && sessionId
+            ? `Session ${sessionId.slice(0, 8)}`
+            : PERIOD_LABELS[period];
+        return `📊 ${label} — No usage data found.`;
+    }
+
+    if (period === 'session') {
+        const totals = result.usage.reduce(
+            (acc, dp) => ({
+                tokens: acc.tokens + dp.tokens.total,
+                input: acc.input + dp.tokens.input,
+                output: acc.output + dp.tokens.output,
+                cacheCreation: acc.cacheCreation + dp.tokens.cache_creation,
+                cacheRead: acc.cacheRead + dp.tokens.cache_read,
+                cost: acc.cost + dp.cost.total,
+                costIn: acc.costIn + dp.cost.input,
+                costOut: acc.costOut + dp.cost.output,
+            }),
+            { tokens: 0, input: 0, output: 0, cacheCreation: 0, cacheRead: 0, cost: 0, costIn: 0, costOut: 0 },
+        );
+
+        const sid = sessionId ? ` ${sessionId.slice(0, 8)}` : '';
+        const lines = [
+            `📊 Session${sid}`,
+            '',
+            `Tokens:  ${fmtTokens(totals.tokens)} (${fmtTokens(totals.input)} in / ${fmtTokens(totals.output)} out)`,
+            `Cache:   ${fmtTokens(totals.cacheCreation)} created / ${fmtTokens(totals.cacheRead)} read`,
+            `Cost:    ${fmtCost(totals.cost)} (${fmtCost(totals.costIn)} in / ${fmtCost(totals.costOut)} out)`,
+        ];
+        return lines.join('\n');
+    }
+
+    const label = PERIOD_LABELS[period];
+    const isHourly = result.groupBy === 'hour';
+
+    const timeCol = isHourly ? 'Hour ' : 'Date  ';
+    const rows = result.usage.map((dp) => {
+        const d = new Date(dp.timestamp * 1000);
+        const time = isHourly
+            ? `${String(d.getHours()).padStart(2, '0')}:00`
+            : `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
+        return { time, tokens: dp.tokens.total, cost: dp.cost.total };
+    });
+
+    const totalTokens = rows.reduce((s, r) => s + r.tokens, 0);
+    const totalCost = rows.reduce((s, r) => s + r.cost, 0);
+
+    const tokW = Math.max(6, ...rows.map((r) => fmtTokens(r.tokens).length), fmtTokens(totalTokens).length);
+    const costW = Math.max(4, ...rows.map((r) => fmtCost(r.cost).length), fmtCost(totalCost).length);
+
+    const headerLine = `${timeCol}  ${'Tokens'.padStart(tokW)}  ${'Cost'.padStart(costW)}`;
+    const dataLines = rows.map((r) =>
+        `${r.time.padEnd(timeCol.length)}  ${fmtTokens(r.tokens).padStart(tokW)}  ${fmtCost(r.cost).padStart(costW)}`,
+    );
+    const separator = '─'.repeat(headerLine.length);
+    const totalLine = `${'Total'.padEnd(timeCol.length)}  ${fmtTokens(totalTokens).padStart(tokW)}  ${fmtCost(totalCost).padStart(costW)}`;
+
+    const table = [headerLine, ...dataLines, separator, totalLine].join('\n');
+
+    return `📊 Usage — ${label}\n\n\`\`\`\n${table}\n\`\`\``;
 }

@@ -7,6 +7,8 @@ import type { Bridge } from '../bridge.js';
 import { buildSessionButtons, buildNewSessionMenu, buildDeleteConfirmButtons, buildCleanupConfirmButtons } from './buttons.js';
 import { extractDirectories, threadName } from '../happy/session-metadata.js';
 import type { PermissionMode } from '../happy/types.js';
+import { queryUsage } from '../happy/usage.js';
+import { formatUsage } from './formatter.js';
 
 // --- Command definitions ---
 
@@ -67,7 +69,22 @@ const cleanup = new SlashCommandBuilder()
     .setName('cleanup')
     .setDescription('Delete all archived sessions and their threads');
 
-const allCommands = [sessions, send, stop, compact, mode, newSession, archive, deleteCmd, cleanup];
+const usage = new SlashCommandBuilder()
+    .setName('usage')
+    .setDescription('Show token usage and cost')
+    .addStringOption((opt) =>
+        opt
+            .setName('period')
+            .setDescription('Time period (default: session in thread, today in channel)')
+            .setRequired(false)
+            .addChoices(
+                { name: 'today', value: 'today' },
+                { name: '7 days', value: '7d' },
+                { name: '30 days', value: '30d' },
+            ),
+    );
+
+const allCommands = [sessions, send, stop, compact, mode, newSession, archive, deleteCmd, cleanup, usage];
 
 export const commandDefinitions: RESTPostAPIChatInputApplicationCommandsJSONBody[] =
     allCommands.map((cmd) => cmd.toJSON());
@@ -98,6 +115,8 @@ export async function handleCommand(
             return handleDelete(interaction, bridge);
         case 'cleanup':
             return handleCleanup(interaction, bridge);
+        case 'usage':
+            return handleUsage(interaction, bridge);
         default:
             await interaction.reply({ content: `Unknown command: ${interaction.commandName}`, ephemeral: true });
     }
@@ -283,4 +302,40 @@ async function handleCleanup(interaction: ChatInputCommandInteraction, _bridge: 
         const detail = err instanceof Error ? err.message : 'Unknown error';
         await interaction.editReply(`Failed: ${detail}`);
     }
+}
+
+async function handleUsage(interaction: ChatInputCommandInteraction, bridge: Bridge): Promise<void> {
+    await interaction.deferReply({ ephemeral: true });
+    try {
+        const period = interaction.options.getString('period') as 'today' | '7d' | '30d' | null;
+        const threadSession = bridge.getSessionByThread(interaction.channelId);
+
+        if (period) {
+            const now = Math.floor(Date.now() / 1000);
+            const startTime = period === 'today'
+                ? todayMidnight()
+                : period === '7d'
+                    ? now - 7 * 86400
+                    : now - 30 * 86400;
+            const groupBy = period === 'today' ? 'hour' as const : 'day' as const;
+
+            const result = await queryUsage(bridge.happyClient, { startTime, groupBy });
+            await interaction.editReply(formatUsage(result, period));
+        } else if (threadSession) {
+            const result = await queryUsage(bridge.happyClient, { sessionId: threadSession });
+            await interaction.editReply(formatUsage(result, 'session', threadSession));
+        } else {
+            const result = await queryUsage(bridge.happyClient, { startTime: todayMidnight(), groupBy: 'hour' });
+            await interaction.editReply(formatUsage(result, 'today'));
+        }
+    } catch (err) {
+        const detail = err instanceof Error ? err.message : 'Unknown error';
+        await interaction.editReply(`Failed to query usage: ${detail}`);
+    }
+}
+
+function todayMidnight(): number {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return Math.floor(d.getTime() / 1000);
 }

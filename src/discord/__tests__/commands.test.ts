@@ -2,6 +2,12 @@ import { describe, it, expect, vi } from 'vitest';
 import { commandDefinitions, handleCommand } from '../commands.js';
 import type { Bridge } from '../../bridge.js';
 
+vi.mock('../../happy/usage.js', () => ({
+    queryUsage: vi.fn(),
+}));
+
+import { queryUsage } from '../../happy/usage.js';
+
 // Minimal interaction mock
 function mockInteraction(name: string, options: Record<string, string> = {}, channelId = 'ch-main') {
     return {
@@ -31,6 +37,7 @@ function makeMockBridge(): Bridge {
         persistModes: vi.fn(),
         setActiveSession: vi.fn(),
         getSessionByThread: vi.fn().mockReturnValue(null),
+        happyClient: { request: vi.fn() },
         activeSession: null,
         permissions: {
             setMode: vi.fn(),
@@ -345,6 +352,102 @@ describe('commands', () => {
                 expect.objectContaining({
                     content: expect.stringContaining('thread-s'),
                 }),
+            );
+        });
+    });
+
+    describe('/usage', () => {
+        it('includes /usage command definition', () => {
+            expect(commandDefinitions.find((c: { name: string }) => c.name === 'usage')).toBeDefined();
+        });
+
+        it('queries session usage when in a thread', async () => {
+            const bridge = makeMockBridge();
+            vi.mocked(bridge.getSessionByThread).mockReturnValue('thread-sess-123');
+            vi.mocked(queryUsage).mockResolvedValueOnce({
+                usage: [{
+                    timestamp: 1709712345,
+                    tokens: { total: 5000, input: 2000, output: 3000, cache_creation: 0, cache_read: 0 },
+                    cost: { total: 0.08, input: 0.03, output: 0.05 },
+                    reportCount: 2,
+                }],
+                groupBy: 'day',
+                totalReports: 2,
+            });
+
+            const interaction = mockInteraction('usage', {}, 'thread-1');
+            await handleCommand(interaction as any, bridge);
+
+            expect(queryUsage).toHaveBeenCalledWith(
+                expect.anything(),
+                expect.objectContaining({ sessionId: 'thread-sess-123' }),
+            );
+            expect(interaction.editReply).toHaveBeenCalledWith(
+                expect.stringContaining('5,000'),
+            );
+        });
+
+        it('queries today usage in main channel with no period', async () => {
+            const bridge = makeMockBridge();
+            vi.mocked(queryUsage).mockResolvedValueOnce({
+                usage: [],
+                groupBy: 'hour',
+                totalReports: 0,
+            });
+
+            const interaction = mockInteraction('usage');
+            await handleCommand(interaction as any, bridge);
+
+            expect(queryUsage).toHaveBeenCalledWith(
+                expect.anything(),
+                expect.objectContaining({ groupBy: 'hour' }),
+            );
+        });
+
+        it('queries 7d usage when period specified', async () => {
+            const bridge = makeMockBridge();
+            vi.mocked(queryUsage).mockResolvedValueOnce({
+                usage: [],
+                groupBy: 'day',
+                totalReports: 0,
+            });
+
+            const interaction = mockInteraction('usage', { period: '7d' });
+            await handleCommand(interaction as any, bridge);
+
+            expect(queryUsage).toHaveBeenCalledWith(
+                expect.anything(),
+                expect.objectContaining({ groupBy: 'day' }),
+            );
+        });
+
+        it('shows error on API failure', async () => {
+            const bridge = makeMockBridge();
+            vi.mocked(queryUsage).mockRejectedValueOnce(new Error('Usage query failed (500)'));
+
+            const interaction = mockInteraction('usage');
+            await handleCommand(interaction as any, bridge);
+
+            expect(interaction.editReply).toHaveBeenCalledWith(
+                expect.stringContaining('Failed'),
+            );
+        });
+
+        it('queries all-account when period specified even in thread', async () => {
+            const bridge = makeMockBridge();
+            vi.mocked(bridge.getSessionByThread).mockReturnValue('thread-sess-123');
+            vi.mocked(queryUsage).mockResolvedValueOnce({
+                usage: [],
+                groupBy: 'day',
+                totalReports: 0,
+            });
+
+            const interaction = mockInteraction('usage', { period: '7d' }, 'thread-1');
+            await handleCommand(interaction as any, bridge);
+
+            expect(queryUsage).toHaveBeenCalledWith(
+                expect.anything(),
+                expect.not.objectContaining({ sessionId: expect.anything() }),
             );
         });
     });

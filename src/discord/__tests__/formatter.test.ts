@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { chunkMessage, codeBlock, diffBlock, truncate, formatPermissionRequest, formatAskUserQuestion, formatExitPlanMode, formatTodoWrite } from '../formatter.js';
+import { chunkMessage, codeBlock, diffBlock, truncate, formatPermissionRequest, formatAskUserQuestion, formatExitPlanMode, formatTodoWrite, formatUsage } from '../formatter.js';
+import type { UsageResult } from '../../happy/usage.js';
 
 describe('formatter', () => {
     describe('chunkMessage', () => {
@@ -290,6 +291,91 @@ describe('formatter', () => {
 
         it('returns empty string for empty todos array', () => {
             expect(formatTodoWrite([])).toBe('');
+        });
+    });
+
+    describe('formatUsage', () => {
+        const sessionResult: UsageResult = {
+            usage: [
+                {
+                    timestamp: 1709712345,
+                    tokens: { total: 12450, input: 4200, output: 8250, cache_creation: 1500, cache_read: 3200 },
+                    cost: { total: 0.18, input: 0.04, output: 0.12 },
+                    reportCount: 5,
+                },
+            ],
+            groupBy: 'day',
+            totalReports: 5,
+        };
+
+        it('formats session summary with totals', () => {
+            const result = formatUsage(sessionResult, 'session', 'abc12345678');
+            expect(result).toContain('abc12345');
+            expect(result).toContain('12,450');
+            expect(result).toContain('4,200');
+            expect(result).toContain('8,250');
+            expect(result).toContain('1,500');
+            expect(result).toContain('3,200');
+            expect(result).toContain('$0.18');
+        });
+
+        it('formats today table grouped by hour', () => {
+            const hourResult: UsageResult = {
+                usage: [
+                    {
+                        timestamp: 1709726400,
+                        tokens: { total: 3200, input: 1000, output: 2200, cache_creation: 0, cache_read: 0 },
+                        cost: { total: 0.04, input: 0.01, output: 0.03 },
+                        reportCount: 2,
+                    },
+                    {
+                        timestamp: 1709730000,
+                        tokens: { total: 8100, input: 3000, output: 5100, cache_creation: 0, cache_read: 0 },
+                        cost: { total: 0.12, input: 0.04, output: 0.08 },
+                        reportCount: 3,
+                    },
+                ],
+                groupBy: 'hour',
+                totalReports: 5,
+            };
+            const result = formatUsage(hourResult, 'today');
+            expect(result).toContain('Today');
+            expect(result).toContain('3,200');
+            expect(result).toContain('8,100');
+            expect(result).toContain('11,300');
+            expect(result).toContain('$0.16');
+            expect(result).toContain('```');
+        });
+
+        it('formats 7d table grouped by day', () => {
+            const dayResult: UsageResult = {
+                usage: [
+                    {
+                        timestamp: 1709596800,
+                        tokens: { total: 5200, input: 2000, output: 3200, cache_creation: 0, cache_read: 0 },
+                        cost: { total: 0.08, input: 0.03, output: 0.05 },
+                        reportCount: 3,
+                    },
+                ],
+                groupBy: 'day',
+                totalReports: 3,
+            };
+            const result = formatUsage(dayResult, '7d');
+            expect(result).toContain('Last 7 days');
+            expect(result).toContain('5,200');
+            expect(result).toContain('$0.08');
+        });
+
+        it('formats 30d label', () => {
+            const result = formatUsage({ usage: [], groupBy: 'day', totalReports: 0 }, '30d');
+            expect(result).toContain('Last 30 days');
+            expect(result).toContain('No usage data');
+        });
+
+        it('returns empty message for no data', () => {
+            const empty: UsageResult = { usage: [], groupBy: 'day', totalReports: 0 };
+            const result = formatUsage(empty, 'session', 'abc12345');
+            expect(result).toContain('No usage data');
         });
     });
 });
