@@ -60,12 +60,6 @@ describe('commands', () => {
         it('includes /sessions command', () => {
             expect(commandDefinitions.find((c: { name: string }) => c.name === 'sessions')).toBeDefined();
         });
-
-        it('includes /send command with message option', () => {
-            const send = commandDefinitions.find((c: { name: string }) => c.name === 'send');
-            expect(send).toBeDefined();
-            expect(send!.options).toBeDefined();
-        });
     });
 
     describe('handleCommand', () => {
@@ -98,27 +92,6 @@ describe('commands', () => {
 
             expect(interaction.editReply).toHaveBeenCalledWith(
                 expect.stringContaining('No sessions found'),
-            );
-        });
-
-        it('/send calls bridge.sendMessage', async () => {
-            const bridge = makeMockBridge();
-            const interaction = mockInteraction('send', { message: 'hello' });
-            await handleCommand(interaction as any, bridge);
-
-            expect(bridge.sendMessage).toHaveBeenCalledWith('hello');
-            expect(interaction.editReply).toHaveBeenCalledWith(
-                expect.stringContaining('Sent'),
-            );
-        });
-
-        it('/send replies with error when no message', async () => {
-            const bridge = makeMockBridge();
-            const interaction = mockInteraction('send');
-            await handleCommand(interaction as any, bridge);
-
-            expect(interaction.reply).toHaveBeenCalledWith(
-                expect.objectContaining({ content: expect.stringContaining('message') }),
             );
         });
 

@@ -16,13 +16,6 @@ const sessions = new SlashCommandBuilder()
     .setName('sessions')
     .setDescription('List active Claude Code sessions');
 
-const send = new SlashCommandBuilder()
-    .setName('send')
-    .setDescription('Send a message to the active Claude Code session')
-    .addStringOption((opt) =>
-        opt.setName('message').setDescription('Message text').setRequired(true),
-    );
-
 const stop = new SlashCommandBuilder()
     .setName('stop')
     .setDescription('Abort the current Claude Code operation');
@@ -84,7 +77,7 @@ const usage = new SlashCommandBuilder()
             ),
     );
 
-const allCommands = [sessions, send, stop, compact, mode, newSession, archive, deleteCmd, cleanup, usage];
+const allCommands = [sessions, stop, compact, mode, newSession, archive, deleteCmd, cleanup, usage];
 
 export const commandDefinitions: RESTPostAPIChatInputApplicationCommandsJSONBody[] =
     allCommands.map((cmd) => cmd.toJSON());
@@ -99,8 +92,6 @@ export async function handleCommand(
     switch (interaction.commandName) {
         case 'sessions':
             return handleSessions(interaction, bridge);
-        case 'send':
-            return handleSend(interaction, bridge);
         case 'stop':
             return handleStop(interaction, bridge);
         case 'compact':
@@ -166,23 +157,6 @@ async function handleSessions(interaction: ChatInputCommandInteraction, bridge: 
         content,
         components: buttons,
     });
-}
-
-async function handleSend(interaction: ChatInputCommandInteraction, bridge: Bridge): Promise<void> {
-    const message = interaction.options.getString('message');
-    if (!message) {
-        await interaction.reply({ content: 'Please provide a message.', ephemeral: true });
-        return;
-    }
-
-    await interaction.deferReply();
-    try {
-        await bridge.sendMessage(message);
-        await interaction.editReply(`Sent: "${message}"`);
-    } catch (err) {
-        const detail = err instanceof Error ? err.message : 'Unknown error';
-        await interaction.editReply(`Failed to send: ${detail}`);
-    }
 }
 
 async function handleStop(interaction: ChatInputCommandInteraction, bridge: Bridge): Promise<void> {
