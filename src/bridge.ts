@@ -85,6 +85,10 @@ export class Bridge {
         return this.activeSessionId;
     }
 
+    get happyClient(): HappyClient {
+        return this.happy;
+    }
+
     get permissions(): PermissionCache {
         return this.permissionCache;
     }
