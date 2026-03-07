@@ -22,6 +22,7 @@ import {
     NEW_SESSION_MODAL_PREFIX,
     buildDeleteConfirmButtons,
     parseDeleteButtonId,
+    parseCleanupButtonId,
 } from '../buttons.js';
 import { ButtonStyle, type APIButtonComponentWithCustomId } from 'discord.js';
 
@@ -421,6 +422,24 @@ describe('Delete confirmation buttons', () => {
 
         it('returns null for malformed button', () => {
             expect(parseDeleteButtonId('delete:incomplete')).toBeNull();
+        });
+    });
+
+    describe('parseCleanupButtonId', () => {
+        it('parses confirm action', () => {
+            expect(parseCleanupButtonId('cleanup:confirm')).toEqual({ action: 'confirm' });
+        });
+
+        it('parses cancel action', () => {
+            expect(parseCleanupButtonId('cleanup:cancel')).toEqual({ action: 'cancel' });
+        });
+
+        it('returns null for non-cleanup prefix', () => {
+            expect(parseCleanupButtonId('delete:sess-1:confirm')).toBeNull();
+        });
+
+        it('returns null for invalid action', () => {
+            expect(parseCleanupButtonId('cleanup:invalid')).toBeNull();
         });
     });
 });

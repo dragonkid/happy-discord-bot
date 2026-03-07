@@ -48,6 +48,7 @@ function makeMockDiscord(): DiscordBot {
         createThread: vi.fn().mockResolvedValue('thread-1'),
         archiveThread: vi.fn().mockResolvedValue(undefined),
         deleteThread: vi.fn().mockResolvedValue(undefined),
+        listThreads: vi.fn().mockResolvedValue([]),
     } as unknown as DiscordBot;
 }
 
@@ -1923,6 +1924,93 @@ describe('Bridge', () => {
             bridge.setThread('sess-full-id-abc123', 'thread-1');
             await bridge.archiveSession('sess-full');
             expect(discord.archiveThread).toHaveBeenCalledWith('thread-1');
+        });
+    });
+
+    describe('cleanupArchivedSessions', () => {
+        it('deletes archived sessions and their threads', async () => {
+            const { listSessions } = await import('../vendor/api.js');
+            const { deleteSession: apiDelete } = await import('../vendor/api.js');
+            vi.mocked(listSessions).mockResolvedValueOnce([
+                { id: 'active-1', active: true },
+                { id: 'archived-1', active: false },
+                { id: 'archived-2', active: false },
+            ] as any);
+
+            bridge.setActiveSession('active-1');
+            bridge.setThread('archived-1', 'thread-a');
+
+            const result = await bridge.cleanupArchivedSessions();
+            expect(result.sessions).toBe(2);
+            expect(apiDelete).toHaveBeenCalledTimes(2);
+            expect(discord.deleteThread).toHaveBeenCalledWith('thread-a');
+            expect(bridge.getThreadId('archived-1')).toBeNull();
+        });
+
+        it('silences 404 errors from already-deleted sessions', async () => {
+            const { listSessions } = await import('../vendor/api.js');
+            const { deleteSession: apiDelete } = await import('../vendor/api.js');
+            vi.mocked(listSessions).mockResolvedValueOnce([
+                { id: 'gone-1', active: false },
+            ] as any);
+            const err = new Error('Not found') as any;
+            err.status = 404;
+            vi.mocked(apiDelete).mockRejectedValueOnce(err);
+
+            const result = await bridge.cleanupArchivedSessions();
+            expect(result.sessions).toBe(0);
+        });
+
+        it('removes orphan threads from thread map', async () => {
+            const { listSessions } = await import('../vendor/api.js');
+            vi.mocked(listSessions).mockResolvedValueOnce([
+                { id: 'active-1', active: true },
+            ] as any);
+
+            bridge.setActiveSession('active-1');
+            bridge.setThread('active-1', 'thread-active');
+            bridge.setThread('stale-1', 'thread-stale');
+
+            const result = await bridge.cleanupArchivedSessions();
+            expect(result.threads).toBeGreaterThanOrEqual(1);
+            expect(discord.deleteThread).toHaveBeenCalledWith('thread-stale');
+            expect(bridge.getThreadId('stale-1')).toBeNull();
+            // Active thread should remain
+            expect(bridge.getThreadId('active-1')).toBe('thread-active');
+        });
+
+        it('scans Discord channel for untracked orphan threads', async () => {
+            const { listSessions } = await import('../vendor/api.js');
+            vi.mocked(listSessions).mockResolvedValueOnce([
+                { id: 'active-1', active: true },
+            ] as any);
+            bridge.setActiveSession('active-1');
+            bridge.setThread('active-1', 'thread-active');
+
+            vi.mocked(discord.listThreads).mockResolvedValueOnce([
+                { id: 'thread-active', name: 'active' },
+                { id: 'thread-orphan', name: 'orphan' },
+            ]);
+
+            const result = await bridge.cleanupArchivedSessions();
+            expect(discord.deleteThread).toHaveBeenCalledWith('thread-orphan');
+            expect(result.threads).toBeGreaterThanOrEqual(1);
+        });
+
+        it('purges stale permission data from cache', async () => {
+            const { listSessions } = await import('../vendor/api.js');
+            vi.mocked(listSessions).mockResolvedValueOnce([
+                { id: 'active-1', active: true },
+            ] as any);
+
+            bridge.setActiveSession('active-1');
+            bridge.permissions.saveSession('active-1');
+            bridge.permissions.saveSession('stale-1');
+
+            await bridge.cleanupArchivedSessions();
+            const all = bridge.permissions.getAllSessions();
+            expect(all['active-1']).toBeDefined();
+            expect(all['stale-1']).toBeUndefined();
         });
     });
 });
