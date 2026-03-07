@@ -185,9 +185,9 @@ async function main(): Promise<void> {
                     if (!isTimeout) {
                         console.error('[Discord] AskUserQuestion button error:', err);
                     }
-                    const label = isTimeout ? '*Request expired*' : '*Error processing answer*';
+                    const label = isTimeout ? '(Request expired)' : '(Error processing answer)';
                     await interaction.editReply({
-                        content: `${interaction.message.content}\n\n${label}`,
+                        content: `${label} ${interaction.message.content}`,
                         components: [],
                     }).catch(() => {});
                 }
@@ -203,7 +203,7 @@ async function main(): Promise<void> {
                 } catch (err) {
                     console.error('[Discord] Session switch error:', err);
                     await interaction.editReply({
-                        content: `${interaction.message.content}\n\n*Error switching session*`,
+                        content: `(Error switching session) ${interaction.message.content}`,
                         components: [],
                     }).catch(() => {});
                 }
@@ -221,7 +221,7 @@ async function main(): Promise<void> {
 
                     if (!isActive || !hasRequest) {
                         await interaction.update({
-                            content: `${interaction.message.content}\n\n*${!isActive ? 'Session no longer active' : 'Request expired'}*`,
+                            content: `(${!isActive ? 'Session no longer active' : 'Request expired'}) ${interaction.message.content}`,
                             components: [],
                         });
                         return;
@@ -242,7 +242,7 @@ async function main(): Promise<void> {
                     } catch (err) {
                         console.error('[Discord] ExitPlanMode button error:', err);
                         await interaction.editReply({
-                            content: `${interaction.message.content}\n\n*Error processing plan approval*`,
+                            content: `(Error processing plan approval) ${interaction.message.content}`,
                             components: [],
                         }).catch(() => {});
                     }
@@ -259,7 +259,7 @@ async function main(): Promise<void> {
                 } catch (err) {
                     console.error('[Discord] Delete button error:', err);
                     await interaction.editReply({
-                        content: `${interaction.message.content}\n\n*Error processing delete*`,
+                        content: `(Error processing delete) ${interaction.message.content}`,
                         components: [],
                     }).catch(() => {});
                 }
@@ -273,7 +273,7 @@ async function main(): Promise<void> {
                 try {
                     if (cleanupParsed.action === 'cancel') {
                         await interaction.editReply({
-                            content: `${interaction.message.content}\n\n*Cancelled*`,
+                            content: `(Cancelled) ${interaction.message.content}`,
                             components: [],
                         });
                     } else {
@@ -288,7 +288,7 @@ async function main(): Promise<void> {
                 } catch (err) {
                     console.error('[Discord] Cleanup button error:', err);
                     await interaction.editReply({
-                        content: `${interaction.message.content}\n\n*Error during cleanup*`,
+                        content: `(Error during cleanup) ${interaction.message.content}`,
                         components: [],
                     }).catch(() => {});
                 }
@@ -308,7 +308,7 @@ async function main(): Promise<void> {
                 // Validate session is still active
                 if (sessionId !== bridge.activeSession) {
                     await interaction.editReply({
-                        content: `${interaction.message.content}\n\n*Session no longer active*`,
+                        content: `(Session no longer active) ${interaction.message.content}`,
                         components: [],
                     });
                     return;
@@ -344,11 +344,11 @@ async function main(): Promise<void> {
                 }
 
                 const status = action === 'no' ? 'Denied' : 'Approved';
-                const label = action === 'allow-edits' ? ' (accept all edits)'
-                            : action === 'for-tool' ? ` (for ${toolName})`
+                const label = action === 'allow-edits' ? ' - accept all edits'
+                            : action === 'for-tool' ? ` - for ${toolName}`
                             : '';
                 await interaction.editReply({
-                    content: `${interaction.message.content}\n\n*${status}${label}*`,
+                    content: `(${status}${label}) ${interaction.message.content}`,
                     components: [],
                 });
             } catch (err) {
@@ -357,9 +357,9 @@ async function main(): Promise<void> {
                 if (!isExpired) {
                     console.error('[Discord] Button error:', err);
                 }
-                const label = isExpired ? '*Request expired*' : '*Error processing approval*';
+                const label = isExpired ? '(Request expired)' : '(Error processing approval)';
                 await interaction.editReply({
-                    content: `${interaction.message.content}\n\n${label}`,
+                    content: `${label} ${interaction.message.content}`,
                     components: [],
                 }).catch(() => {});
             }
@@ -400,13 +400,13 @@ async function main(): Promise<void> {
                     const reason = feedback.trim() || undefined;
                     await bridge.denyPermission(modalParsed.sessionId, modalParsed.requestId, reason);
                     await interaction.editReply({
-                        content: `${interaction.message?.content ?? ''}\n\n*Rejected${reason ? `: ${reason}` : ''}*`,
+                        content: `(Rejected${reason ? `: ${reason}` : ''}) ${interaction.message?.content ?? ''}`,
                         components: [],
                     });
                 } catch (err) {
                     console.error('[Discord] Plan reject modal error:', err);
                     await interaction.editReply({
-                        content: `${interaction.message?.content ?? ''}\n\n*Error processing rejection*`,
+                        content: `(Error processing rejection) ${interaction.message?.content ?? ''}`,
                         components: [],
                     }).catch(() => {});
                 }
