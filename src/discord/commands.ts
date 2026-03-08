@@ -179,8 +179,8 @@ async function handleCompact(interaction: ChatInputCommandInteraction, bridge: B
             bridge.setActiveSession(sessionId);
             bridge.persistModes();
         }
-        await bridge.compactSession();
-        await interaction.editReply('Compacting session... Result will appear below.');
+        const reply = await interaction.editReply('Compacting session...');
+        await bridge.compactSession(reply.id, interaction.channelId);
     } catch (err) {
         const detail = err instanceof Error ? err.message : 'Unknown error';
         await interaction.editReply(`Failed to compact: ${detail}`);

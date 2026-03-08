@@ -84,6 +84,21 @@ async function main(): Promise<void> {
 
         // Upload attachments if present
         const handleMessage = async () => {
+            // Handle message reference (reply)
+            if (message.reference?.messageId) {
+                try {
+                    const channel = await message.client.channels.fetch(message.channelId);
+                    if (channel?.isTextBased()) {
+                        const refMsg = await channel.messages.fetch(message.reference.messageId);
+                        const refContent = refMsg.content || '[attachment/embed]';
+                        const quotedText = refContent.split('\n').map(line => `> ${line}`).join('\n');
+                        text = `${quotedText}\n\n${text}`;
+                    }
+                } catch (err) {
+                    console.error('[Bridge] Failed to fetch referenced message:', err);
+                }
+            }
+
             if (message.attachments.size > 0) {
                 const attachments = [...message.attachments.values()].map((a) => ({
                     url: a.url,

@@ -20,7 +20,7 @@ function mockInteraction(name: string, options: Record<string, string> = {}, cha
         },
         reply: vi.fn().mockResolvedValue(undefined),
         deferReply: vi.fn().mockResolvedValue(undefined),
-        editReply: vi.fn().mockResolvedValue(undefined),
+        editReply: vi.fn().mockResolvedValue({ id: 'msg-123' }),
     };
 }
 
