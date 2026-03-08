@@ -50,6 +50,7 @@ export class Bridge {
     private lastUserMsgThreadId: string | null = null;
     private isThinking = false;
     private todoMessageId: string | null = null;
+    private pendingCompactReply: { messageId: string; threadId?: string } | null = null;
 
     constructor(
         happy: HappyClient,
@@ -457,8 +458,12 @@ export class Bridge {
         await this.happy.sessionRPC(target, 'abort', {});
     }
 
-    async compactSession(): Promise<void> {
+    async compactSession(messageId: string, channelId: string): Promise<void> {
         await this.sendMessage('/compact');
+        const sessionId = this.activeSessionId;
+        if (!sessionId) return;
+        const threadId = this.getThreadId(sessionId);
+        this.pendingCompactReply = { messageId, threadId: threadId || undefined };
     }
 
     async approvePermission(
@@ -801,6 +806,11 @@ export class Bridge {
                         await this.sendToSession(sessionId, text);
                     }
                 }
+            } else if (agentContent?.type === 'event') {
+                const eventData = agentContent.data as { type?: string; message?: string };
+                if (eventData?.type === 'message' && eventData.message === 'Compaction completed') {
+                    await this.handleCompactionComplete();
+                }
             } else {
                 console.log(`[Bridge] Unhandled agent message type: ${agentContent?.type ?? 'unknown'}`,
                     JSON.stringify(agentContent).slice(0, 200));
@@ -833,6 +843,23 @@ export class Bridge {
             } else if (envelope.ev?.t === 'tool-call-end') {
                 this.updateToolUseEmoji(false);
             }
+        }
+    }
+
+    private async handleCompactionComplete(): Promise<void> {
+        if (!this.pendingCompactReply) return;
+
+        const { messageId, threadId } = this.pendingCompactReply;
+        this.pendingCompactReply = null;
+
+        try {
+            if (threadId) {
+                await this.discord.editMessageInThread(threadId, messageId, '✅ Compaction complete');
+            } else {
+                await this.discord.editMessage(messageId, '✅ Compaction complete');
+            }
+        } catch (err) {
+            console.error('[Bridge] Failed to update compact message:', err);
         }
     }
 

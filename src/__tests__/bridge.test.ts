@@ -510,7 +510,7 @@ describe('Bridge', () => {
         it('sends user message with /compact text', async () => {
             bridge.setActiveSession('sess-1');
             const sendSpy = vi.spyOn(bridge, 'sendMessage').mockResolvedValue();
-            await bridge.compactSession();
+            await bridge.compactSession('msg-123', 'channel-456');
             expect(sendSpy).toHaveBeenCalledWith('/compact');
         });
     });
