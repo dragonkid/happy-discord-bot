@@ -1,7 +1,7 @@
 import { loadBotConfig } from './config.js';
 import { HappyClient } from './happy/client.js';
 import { DiscordBot } from './discord/bot.js';
-import { handleCommand } from './discord/commands.js';
+import { handleCommand, handleSkillsAutocomplete } from './discord/commands.js';
 import { parseButtonId, parseExitPlanButtonId, parsePlanModalId, parseNewSessionSelect, parseCustomPathButton, parseCustomPathModal, buildCustomPathModal, parseDeleteButtonId, parseCleanupButtonId } from './discord/buttons.js';
 import { parseAskButtonId, parseSessionButtonId, handleAskButton, handleSessionButton, handleExitPlanButton, handleNewSessionSelect, handleNewSessionModal, handleDeleteButton } from './discord/interactions.js';
 import { Bridge } from './bridge.js';
@@ -51,6 +51,12 @@ async function main(): Promise<void> {
     bridge.loadThreadMap(savedState.threads);
     console.log(`[Store] Loaded ${Object.keys(savedState.threads).length} saved thread(s)`);
     await bridge.start();
+
+    // Scan skills: global (personal + plugins) + all session project dirs
+    await bridge.skillRegistry.scanGlobal();
+    for (const dir of bridge.getAllProjectDirs()) {
+        await bridge.skillRegistry.scanProject(dir);
+    }
 
     if (bridge.activeSession) {
         console.log(`[Bridge] Active session: ${bridge.activeSession}`);
@@ -131,6 +137,21 @@ async function main(): Promise<void> {
     });
 
     discord.onInteraction(async (interaction) => {
+        // Autocomplete
+        if (interaction.isAutocomplete()) {
+            if (interaction.commandName === 'skills') {
+                try {
+                    const threadId = interaction.channelId;
+                    const projectDir = bridge.getProjectDirForThread(threadId)
+                        ?? (bridge.activeSession ? bridge.getSessionProjectDir(bridge.activeSession) : undefined);
+                    await handleSkillsAutocomplete(interaction, bridge.skillRegistry, projectDir);
+                } catch (err) {
+                    console.error('[Discord] Autocomplete error:', err);
+                }
+            }
+            return;
+        }
+
         // Slash commands
         if (interaction.isChatInputCommand()) {
             if (interaction.user.id !== config.discord.userId) {

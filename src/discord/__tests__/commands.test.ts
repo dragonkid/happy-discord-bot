@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { commandDefinitions, handleCommand } from '../commands.js';
+import { commandDefinitions, handleCommand, handleSkillsAutocomplete } from '../commands.js';
 import type { Bridge } from '../../bridge.js';
 
 vi.mock('../../happy/usage.js', () => ({
@@ -37,11 +37,20 @@ function makeMockBridge(): Bridge {
         persistModes: vi.fn(),
         setActiveSession: vi.fn(),
         getSessionByThread: vi.fn().mockReturnValue(null),
+        getProjectDirForThread: vi.fn().mockReturnValue(undefined),
+        getSessionProjectDir: vi.fn().mockReturnValue(undefined),
+        getAllProjectDirs: vi.fn().mockReturnValue([]),
         happyClient: { request: vi.fn() },
         activeSession: null,
         permissions: {
             setMode: vi.fn(),
             mode: 'default',
+        },
+        skillRegistry: {
+            scanGlobal: vi.fn().mockResolvedValue(undefined),
+            scanProject: vi.fn().mockResolvedValue(undefined),
+            getForSession: vi.fn().mockReturnValue([]),
+            search: vi.fn().mockReturnValue([]),
         },
     } as unknown as Bridge;
 }
@@ -422,6 +431,105 @@ describe('commands', () => {
                 expect.anything(),
                 expect.not.objectContaining({ sessionId: expect.anything() }),
             );
+        });
+    });
+
+    describe('/skills', () => {
+        it('includes skills command in definitions', () => {
+            const skillsCmd = commandDefinitions.find((c: { name: string }) => c.name === 'skills');
+            expect(skillsCmd).toBeDefined();
+        });
+
+        it('lists all skills when no args', async () => {
+            const interaction = mockInteraction('skills');
+            const bridge = makeMockBridge();
+            vi.mocked(bridge.skillRegistry.getForSession as ReturnType<typeof vi.fn>).mockReturnValue([
+                { name: 'commit', description: 'Create commit', type: 'command', source: 'personal' },
+                { name: 'tdd', description: 'Test driven', type: 'skill', source: 'plugin', pluginName: 'ecc' },
+            ]);
+            await handleCommand(interaction as any, bridge);
+            expect(interaction.editReply).toHaveBeenCalledWith(expect.stringContaining('commit'));
+        });
+
+        it('reloads registry when name is reload', async () => {
+            const interaction = mockInteraction('skills', { name: 'reload' });
+            const bridge = makeMockBridge();
+            vi.mocked(bridge.skillRegistry.getForSession as ReturnType<typeof vi.fn>).mockReturnValue([
+                { name: 'a', description: 'b', type: 'skill', source: 'personal' },
+            ]);
+            await handleCommand(interaction as any, bridge);
+            expect(bridge.skillRegistry.scanGlobal).toHaveBeenCalled();
+            expect(interaction.editReply).toHaveBeenCalledWith(expect.stringContaining('Reloaded'));
+        });
+
+        it('sends skill invocation to session', async () => {
+            const interaction = mockInteraction('skills', { name: 'commit', args: '-m fix' });
+            const bridge = makeMockBridge();
+            Object.defineProperty(bridge, 'activeSession', { value: 'sess-1' });
+            await handleCommand(interaction as any, bridge);
+            expect(bridge.sendMessage).toHaveBeenCalledWith('/commit -m fix');
+        });
+
+        it('sends skill without args', async () => {
+            const interaction = mockInteraction('skills', { name: 'tdd' });
+            const bridge = makeMockBridge();
+            Object.defineProperty(bridge, 'activeSession', { value: 'sess-1' });
+            await handleCommand(interaction as any, bridge);
+            expect(bridge.sendMessage).toHaveBeenCalledWith('/tdd');
+        });
+
+        it('returns error when no active session', async () => {
+            const interaction = mockInteraction('skills', { name: 'commit' });
+            const bridge = makeMockBridge();
+            await handleCommand(interaction as any, bridge);
+            expect(interaction.editReply).toHaveBeenCalledWith(expect.stringContaining('No active session'));
+        });
+    });
+
+    describe('handleSkillsAutocomplete', () => {
+        function mockAutocomplete(focused: string) {
+            return {
+                commandName: 'skills',
+                options: { getFocused: vi.fn().mockReturnValue(focused) },
+                respond: vi.fn().mockResolvedValue(undefined),
+            };
+        }
+
+        it('returns matching skills from registry', async () => {
+            const registry = {
+                search: vi.fn().mockReturnValue([
+                    { name: 'commit', description: 'Create commit', type: 'command', source: 'personal' },
+                ]),
+            };
+            const interaction = mockAutocomplete('comm');
+            await handleSkillsAutocomplete(interaction as any, registry as any, '/projects/app');
+            expect(registry.search).toHaveBeenCalledWith('comm', '/projects/app');
+            expect(interaction.respond).toHaveBeenCalledWith(
+                expect.arrayContaining([expect.objectContaining({ value: 'commit' })]),
+            );
+        });
+
+        it('includes reload option when query matches', async () => {
+            const registry = { search: vi.fn().mockReturnValue([]) };
+            const interaction = mockAutocomplete('rel');
+            await handleSkillsAutocomplete(interaction as any, registry as any);
+            expect(interaction.respond).toHaveBeenCalledWith(
+                expect.arrayContaining([expect.objectContaining({ value: 'reload' })]),
+            );
+        });
+
+        it('truncates display name to 100 chars', async () => {
+            const registry = {
+                search: vi.fn().mockReturnValue([
+                    { name: 'test', description: 'A'.repeat(200), type: 'skill', source: 'personal' },
+                ]),
+            };
+            const interaction = mockAutocomplete('test');
+            await handleSkillsAutocomplete(interaction as any, registry as any);
+            const call = interaction.respond.mock.calls[0][0];
+            // First is reload, second is the actual skill
+            const skillChoice = call.find((c: { value: string }) => c.value === 'test');
+            expect(skillChoice.name.length).toBeLessThanOrEqual(100);
         });
     });
 });
