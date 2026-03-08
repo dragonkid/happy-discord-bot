@@ -690,6 +690,9 @@ export class Bridge {
         sessionId: string,
         request: PermissionRequest,
     ): Promise<void> {
+        // Wait briefly to allow any pending text messages to be sent first
+        await new Promise(resolve => setTimeout(resolve, 500));
+
         // AskUserQuestion gets special UI
         if (request.tool === 'AskUserQuestion') {
             const input = request.arguments as AskUserQuestionInput;
