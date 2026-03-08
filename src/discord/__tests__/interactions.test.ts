@@ -81,7 +81,7 @@ describe('handleExitPlanButton', () => {
 
         expect(bridge.approvePermission).toHaveBeenCalledWith('sess-1', 'req-plan');
         expect(interaction.editReply).toHaveBeenCalledWith(expect.objectContaining({
-            content: expect.stringContaining('*Approved*'),
+            content: expect.stringContaining('✅ (Approved)'),
             components: [],
         }));
     });
@@ -94,7 +94,7 @@ describe('handleExitPlanButton', () => {
         expect(bridge.approvePermission).toHaveBeenCalledWith('sess-1', 'req-plan', 'acceptEdits');
         expect(bridge.permissions.applyApproval).toHaveBeenCalledWith([], 'acceptEdits');
         expect(interaction.editReply).toHaveBeenCalledWith(expect.objectContaining({
-            content: expect.stringContaining('Approved (allow all edits)'),
+            content: expect.stringContaining('✅ (Approved - accept all edits)'),
             components: [],
         }));
     });
