@@ -349,7 +349,15 @@ async function handleSkills(interaction: ChatInputCommandInteraction, bridge: Br
             const prefix = e.source === 'plugin' ? '🔌' : e.source === 'project' ? '📁' : '👤';
             return `${prefix} \`/${e.name}\` — ${e.description || '(no description)'}`;
         });
-        const content = lines.join('\n').slice(0, 1900);
+        let content = '';
+        for (const line of lines) {
+            const next = content ? `${content}\n${line}` : line;
+            if (next.length > 1900) {
+                content += `\n... and ${lines.length - content.split('\n').length} more`;
+                break;
+            }
+            content = next;
+        }
         await interaction.editReply(content);
         return;
     }

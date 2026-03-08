@@ -371,6 +371,7 @@ export class Bridge {
         if (target === this.activeSessionId) {
             this.activeSessionId = null;
         }
+        this.sessionDirMap.delete(fullId);
         this.persistModes();
         return target;
     }
@@ -390,6 +391,7 @@ export class Bridge {
                     await this.discord.deleteThread(threadId).catch(() => {});
                     this.removeThread(fullId);
                 }
+                this.sessionDirMap.delete(fullId);
                 sessionCount++;
             } catch (err) {
                 // 404 = already deleted, skip silently

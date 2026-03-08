@@ -64,14 +64,6 @@ export class SkillRegistry {
         }
     }
 
-    /** Convenience: scan global + multiple project dirs at once. */
-    async scan(projectDirs: string[] = []): Promise<void> {
-        await this.scanGlobal();
-        for (const dir of projectDirs) {
-            await this.scanProject(dir);
-        }
-    }
-
     /** Get all entries visible to a session in the given project directory. */
     getForSession(projectDir?: string): readonly SkillEntry[] {
         const project = projectDir ? (this.projectEntries.get(projectDir) ?? []) : [];
