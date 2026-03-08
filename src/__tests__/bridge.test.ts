@@ -2013,4 +2013,64 @@ describe('Bridge', () => {
             expect(all['stale-1']).toBeUndefined();
         });
     });
+
+    describe('replayPendingPermissions', () => {
+        it('replays pending permissions from all sessions on startup', async () => {
+            const { listActiveSessions } = await import('../vendor/api.js');
+            // start() needs an initial call
+            vi.mocked(listActiveSessions).mockResolvedValueOnce([]);
+            await bridge.start();
+
+            const sessions = [
+                {
+                    id: 'sess-1',
+                    active: true,
+                    activeAt: 1000,
+                    agentState: {
+                        requests: { 'req-1': { tool: 'Bash', arguments: { command: 'ls' }, createdAt: 1000 } },
+                    },
+                    encryption: { key: new Uint8Array(32), variant: 'dataKey' as const },
+                },
+                {
+                    id: 'sess-2',
+                    active: true,
+                    activeAt: 2000,
+                    agentState: null,
+                    encryption: { key: new Uint8Array(32), variant: 'dataKey' as const },
+                },
+            ] as unknown as DecryptedSession[];
+            vi.mocked(listActiveSessions).mockResolvedValueOnce(sessions);
+
+            await bridge.replayPendingPermissions();
+
+            // handlePermissionRequest has a 500ms delay
+            await vi.advanceTimersByTimeAsync(600);
+            expect(discord.sendWithButtons).toHaveBeenCalledWith(
+                expect.stringContaining('Bash'),
+                expect.any(Array),
+            );
+        });
+
+        it('skips sessions with no pending requests', async () => {
+            const { listActiveSessions } = await import('../vendor/api.js');
+            vi.mocked(listActiveSessions).mockResolvedValueOnce([]);
+            await bridge.start();
+
+            const sessions = [
+                {
+                    id: 'sess-1',
+                    active: true,
+                    activeAt: 1000,
+                    agentState: { requests: {} },
+                    encryption: { key: new Uint8Array(32), variant: 'dataKey' as const },
+                },
+            ] as unknown as DecryptedSession[];
+            vi.mocked(listActiveSessions).mockResolvedValueOnce(sessions);
+
+            await bridge.replayPendingPermissions();
+
+            await vi.advanceTimersByTimeAsync(600);
+            expect(discord.sendWithButtons).not.toHaveBeenCalled();
+        });
+    });
 });

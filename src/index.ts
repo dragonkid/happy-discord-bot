@@ -451,6 +451,9 @@ async function main(): Promise<void> {
     // Create threads for sessions that don't have one (requires Discord bot to be online)
     await bridge.ensureThreadsForSessions();
 
+    // Replay pending permission requests from all sessions (requires threads to exist)
+    await bridge.replayPendingPermissions();
+
     // --- Graceful shutdown ---
     process.on('SIGINT', () => {
         console.log('Shutting down...');

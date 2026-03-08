@@ -297,6 +297,19 @@ export class Bridge {
         }
     }
 
+    /** Replay pending permission requests from all active sessions. Call after Discord bot is online. */
+    async replayPendingPermissions(): Promise<void> {
+        const sessions = await this.loadSessions();
+        for (const session of sessions) {
+            const state = session.agentState as AgentState | null;
+            const requests = state?.requests;
+            if (!requests || Object.keys(requests).length === 0) continue;
+
+            console.log(`[Bridge] Replaying ${Object.keys(requests).length} pending permission(s) for session ${session.id.slice(0, 8)}`);
+            this.stateTracker.handleSessionUpdate(session.id, state!);
+        }
+    }
+
     async listSessions(): Promise<DecryptedSession[]> {
         return this.loadSessions();
     }
