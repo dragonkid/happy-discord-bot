@@ -14,7 +14,7 @@ export async function handleAskButton(
 ): Promise<void> {
     if (askParsed.sessionId !== bridge.activeSession) {
         await interaction.editReply({
-            content: `(Session no longer active) ${interaction.message.content}`,
+            content: `⏰ (Session no longer active) ${interaction.message.content}`,
             components: [],
         });
         return;
@@ -24,7 +24,7 @@ export async function handleAskButton(
     const request = pending.find((r) => r.id === askParsed.requestId);
     if (!request) {
         await interaction.editReply({
-            content: `(Request expired) ${interaction.message.content}`,
+            content: `⏰ (Request expired) ${interaction.message.content}`,
             components: [],
         });
         return;
@@ -41,7 +41,7 @@ export async function handleAskButton(
         await bridge.handleAskUserAnswer(askParsed.sessionId, askParsed.requestId, answers);
 
         await interaction.editReply({
-            content: `(Selected: ${label}) ${interaction.message.content}`,
+            content: `✔️ (Selected: ${label}) ${interaction.message.content}`,
             components: [],
         });
     } else if (askParsed.type === 'toggle') {
@@ -80,7 +80,7 @@ export async function handleAskButton(
 
         if (Object.keys(answers).length === 0) {
             await interaction.editReply({
-                content: `(No options selected) ${interaction.message.content}`,
+                content: `⚠️ (No options selected) ${interaction.message.content}`,
             });
             return;
         }
@@ -89,7 +89,7 @@ export async function handleAskButton(
 
         const displayText = Object.entries(answers).map(([h, l]) => `${h}: ${l}`).join(', ');
         await interaction.editReply({
-            content: `(Selected: ${displayText}) ${interaction.message.content}`,
+            content: `✔️ (Selected: ${displayText}) ${interaction.message.content}`,
             components: [],
         });
     }
@@ -115,7 +115,7 @@ export async function handleExitPlanButton(
 ): Promise<void> {
     if (parsed.sessionId !== bridge.activeSession) {
         await interaction.editReply({
-            content: `(Session no longer active) ${interaction.message.content}`,
+            content: `⏰ (Session no longer active) ${interaction.message.content}`,
             components: [],
         });
         return;
@@ -125,7 +125,7 @@ export async function handleExitPlanButton(
     const request = pending.find((r) => r.id === parsed.requestId);
     if (!request) {
         await interaction.editReply({
-            content: `(Request expired) ${interaction.message.content}`,
+            content: `⏰ (Request expired) ${interaction.message.content}`,
             components: [],
         });
         return;
@@ -135,7 +135,7 @@ export async function handleExitPlanButton(
         case 'approve':
             await bridge.approvePermission(parsed.sessionId, parsed.requestId);
             await interaction.editReply({
-                content: `(Approved) ${interaction.message.content}`,
+                content: `✅ (Approved) ${interaction.message.content}`,
                 components: [],
             });
             break;
@@ -144,7 +144,7 @@ export async function handleExitPlanButton(
             await bridge.approvePermission(parsed.sessionId, parsed.requestId, 'acceptEdits');
             bridge.permissions.applyApproval([], 'acceptEdits');
             await interaction.editReply({
-                content: `(Approved - accept all edits) ${interaction.message.content}`,
+                content: `✅ (Approved - accept all edits) ${interaction.message.content}`,
                 components: [],
             });
             break;
@@ -232,7 +232,7 @@ export async function handleDeleteButton(
 ): Promise<void> {
     if (parsed.action === 'cancel') {
         await interaction.editReply({
-            content: `(Cancelled) ${interaction.message.content}`,
+            content: `🚫 (Cancelled) ${interaction.message.content}`,
             components: [],
         });
         return;
