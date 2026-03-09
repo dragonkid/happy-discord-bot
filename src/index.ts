@@ -139,6 +139,10 @@ async function main(): Promise<void> {
     discord.onInteraction(async (interaction) => {
         // Autocomplete
         if (interaction.isAutocomplete()) {
+            if (interaction.user.id !== config.discord.userId) {
+                await interaction.respond([]);
+                return;
+            }
             if (interaction.commandName === 'skills') {
                 try {
                     const threadId = interaction.channelId;
