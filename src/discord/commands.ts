@@ -382,6 +382,10 @@ async function handleSkills(interaction: ChatInputCommandInteraction, bridge: Br
     }
 
     // Execute: send as slash command to session
+    if (!/^[\w:.-]+$/.test(name)) {
+        await interaction.editReply('Invalid skill name.');
+        return;
+    }
     if (!bridge.activeSession) {
         await interaction.editReply('No active session. Use /sessions to connect.');
         return;

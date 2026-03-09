@@ -144,7 +144,8 @@ export class SkillRegistry {
             skillDirs.add(path.join(installPath, 'skills'));
             if (pluginJson.skills) {
                 for (const p of pluginJson.skills) {
-                    skillDirs.add(path.resolve(installPath, p));
+                    const resolved = path.resolve(installPath, p);
+                    if (resolved.startsWith(installPath)) skillDirs.add(resolved);
                 }
             }
             for (const dir of skillDirs) {
@@ -155,7 +156,8 @@ export class SkillRegistry {
             cmdDirs.add(path.join(installPath, 'commands'));
             if (pluginJson.commands) {
                 for (const p of pluginJson.commands) {
-                    cmdDirs.add(path.resolve(installPath, p));
+                    const resolved = path.resolve(installPath, p);
+                    if (resolved.startsWith(installPath)) cmdDirs.add(resolved);
                 }
             }
             for (const dir of cmdDirs) {
@@ -173,7 +175,7 @@ export class SkillRegistry {
     ): Promise<void> {
         let subdirs: string[];
         try {
-            subdirs = (await fs.readdir(dirPath)) as unknown as string[];
+            subdirs = await fs.readdir(dirPath);
         } catch {
             return;
         }
@@ -212,7 +214,7 @@ export class SkillRegistry {
     ): Promise<void> {
         let files: string[];
         try {
-            files = (await fs.readdir(dirPath)) as unknown as string[];
+            files = await fs.readdir(dirPath);
         } catch {
             return;
         }
@@ -246,7 +248,8 @@ export class SkillRegistry {
     ): Promise<{ name?: string; description?: string; userInvocable?: boolean } | null> {
         let content: string;
         try {
-            content = await fs.readFile(filePath, 'utf-8');
+            const raw = await fs.readFile(filePath, 'utf-8');
+            content = raw.slice(0, 4096);
         } catch {
             return null;
         }
