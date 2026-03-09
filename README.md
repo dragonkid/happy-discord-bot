@@ -157,6 +157,7 @@ Messages sent in a thread auto-route to the bound session. Messages in the main 
 | `/delete [session]` | Permanently delete session + data + thread (with confirmation) |
 | `/cleanup` | Batch delete archived sessions + orphan threads (with confirmation) |
 | `/usage [period]` | Token usage & cost — session-scoped in threads, account-wide in channel |
+| `/skills [name] [args]` | List, search, or invoke Claude Code skills/commands (with autocomplete) |
 
 Commands in a thread automatically resolve to that thread's session.
 

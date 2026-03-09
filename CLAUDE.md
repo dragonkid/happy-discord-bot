@@ -47,6 +47,7 @@ src/
 │   ├── client.ts         # HappyClient: Socket.IO + sessionRPC + machineRPC + HTTP
 │   ├── session-metadata.ts  # Session metadata decryption + directory extraction + threadName
 │   ├── usage.ts          # REST API wrapper for /v1/usage/query (token/cost)
+│   ├── skill-registry.ts # Skills/commands discovery (personal + project + plugins)
 │   ├── permission-cache.ts  # Tool approval caching (allowedTools, BashLiterals)
 │   ├── state-tracker.ts  # agentState monitoring, permission request detection
 │   └── types.ts          # RPC request/response types
@@ -151,6 +152,15 @@ When a Discord message includes attachments (images, PDFs, code files, etc.), th
 - Reply is ephemeral (only visible to command user).
 - Output: session summary (tokens in/out/cache + cost) or time-grouped table with totals.
 
+### /skills Command
+- `/skills` — List all available skills/commands (personal + project + plugins).
+- `/skills [name]` — Invoke a skill by sending `/<name>` to the active session.
+- `/skills [name] [args]` — Invoke with arguments: `/<name> <args>`.
+- `/skills reload` — Re-scan skills from disk (personal, plugins, project directories).
+- **Autocomplete:** Searches by name and description with relevance ranking (exact > prefix > contains).
+- **Project isolation:** Project-level skills (`.claude/skills/`, `.claude/commands/`) are per-session — each thread only sees its own session's project skills, merged with global (personal + plugin) skills.
+- **Discovery sources:** (1) `~/.claude/skills/` + `~/.claude/commands/` (personal), (2) `<projectDir>/.claude/skills/` + `.claude/commands/` (project, per session), (3) enabled plugins via `installed_plugins.json`.
+
 ### machineRPC Encryption
 Bot reads two credential files:
 - `~/.happy/agent.key` → `{token, secret}` (legacy XSalsa20-Poly1305)
@@ -212,7 +222,7 @@ npm run test:e2e         # E2E smoke tests (requires .env.e2e, real services)
 ## Testing
 
 - Framework: Vitest
-- 13 test suites, 382 tests
+- 14 test suites, 416 tests
 - Test files: `src/**/__tests__/*.test.ts`
 - All Happy/Discord dependencies mocked (no real connections needed)
 

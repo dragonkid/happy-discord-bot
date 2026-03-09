@@ -14,6 +14,7 @@ import type { TodoItem } from './discord/formatter.js';
 import { isExitPlanMode } from './happy/types.js';
 import type { PermissionRequest, PermissionResponse, PermissionMode, AgentState, AskUserQuestionInput, WriteFileResponse } from './happy/types.js';
 import { threadName } from './happy/session-metadata.js';
+import { SkillRegistry } from './happy/skill-registry.js';
 
 const DISCONNECT_DEBOUNCE_MS = 5_000;
 const TYPING_INTERVAL_MS = 8_000;
@@ -39,6 +40,8 @@ export class Bridge {
     private readonly multiSelectState = new Map<string, Set<number>>();
     private readonly sessionToThread = new Map<string, string>();
     private readonly threadToSession = new Map<string, string>();
+    private readonly sessionDirMap = new Map<string, string>();
+    readonly skillRegistry = new SkillRegistry();
     private activeSessionId: string | null = null;
     private store: Store | null = null;
     private disconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -368,6 +371,7 @@ export class Bridge {
         if (target === this.activeSessionId) {
             this.activeSessionId = null;
         }
+        this.sessionDirMap.delete(fullId);
         this.persistModes();
         return target;
     }
@@ -387,6 +391,7 @@ export class Bridge {
                     await this.discord.deleteThread(threadId).catch(() => {});
                     this.removeThread(fullId);
                 }
+                this.sessionDirMap.delete(fullId);
                 sessionCount++;
             } catch (err) {
                 // 404 = already deleted, skip silently
@@ -548,6 +553,20 @@ export class Bridge {
 
     getSessionByThread(threadId: string): string | null {
         return this.threadToSession.get(threadId) ?? null;
+    }
+
+    getSessionProjectDir(sessionId: string): string | undefined {
+        return this.sessionDirMap.get(sessionId);
+    }
+
+    getProjectDirForThread(threadId: string): string | undefined {
+        const sessionId = this.threadToSession.get(threadId);
+        if (!sessionId) return undefined;
+        return this.sessionDirMap.get(sessionId);
+    }
+
+    getAllProjectDirs(): string[] {
+        return [...new Set(this.sessionDirMap.values())];
     }
 
     getThreadMap(): Record<string, string> {
@@ -761,6 +780,10 @@ export class Bridge {
         }
         for (const session of sessions) {
             this.happy.registerSessionEncryption(session.id, session.encryption);
+            const meta = session.metadata as { path?: string } | null;
+            if (meta?.path) {
+                this.sessionDirMap.set(session.id, meta.path);
+            }
         }
         return sessions;
     }

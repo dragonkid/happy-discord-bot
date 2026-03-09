@@ -1,5 +1,6 @@
 import {
     SlashCommandBuilder,
+    type AutocompleteInteraction,
     type ChatInputCommandInteraction,
     type RESTPostAPIChatInputApplicationCommandsJSONBody,
 } from 'discord.js';
@@ -9,6 +10,7 @@ import { extractDirectories, threadName } from '../happy/session-metadata.js';
 import type { PermissionMode } from '../happy/types.js';
 import { queryUsage } from '../happy/usage.js';
 import { formatUsage } from './formatter.js';
+import type { SkillRegistry } from '../happy/skill-registry.js';
 
 // --- Command definitions ---
 
@@ -77,7 +79,17 @@ const usage = new SlashCommandBuilder()
             ),
     );
 
-const allCommands = [sessions, stop, compact, mode, newSession, archive, deleteCmd, cleanup, usage];
+const skills = new SlashCommandBuilder()
+    .setName('skills')
+    .setDescription('List, search, or invoke Claude Code skills/commands')
+    .addStringOption((opt) =>
+        opt.setName('name').setDescription('Skill/command name or "reload"').setRequired(false).setAutocomplete(true),
+    )
+    .addStringOption((opt) =>
+        opt.setName('args').setDescription('Arguments to pass to the skill').setRequired(false),
+    );
+
+const allCommands = [sessions, stop, compact, mode, newSession, archive, deleteCmd, cleanup, usage, skills];
 
 export const commandDefinitions: RESTPostAPIChatInputApplicationCommandsJSONBody[] =
     allCommands.map((cmd) => cmd.toJSON());
@@ -108,6 +120,8 @@ export async function handleCommand(
             return handleCleanup(interaction, bridge);
         case 'usage':
             return handleUsage(interaction, bridge);
+        case 'skills':
+            return handleSkills(interaction, bridge);
         default:
             await interaction.reply({ content: `Unknown command: ${interaction.commandName}`, ephemeral: true });
     }
@@ -312,4 +326,98 @@ function todayMidnight(): number {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
     return Math.floor(d.getTime() / 1000);
+}
+
+// --- /skills handler ---
+
+async function handleSkills(interaction: ChatInputCommandInteraction, bridge: Bridge): Promise<void> {
+    await interaction.deferReply();
+    const name = interaction.options.getString('name');
+    const args = interaction.options.getString('args');
+
+    const projectDir = bridge.getProjectDirForThread(interaction.channelId)
+        ?? (bridge.activeSession ? bridge.getSessionProjectDir(bridge.activeSession) : undefined);
+
+    if (!name) {
+        // List all available skills
+        const entries = bridge.skillRegistry.getForSession(projectDir);
+        if (entries.length === 0) {
+            await interaction.editReply('No skills or commands found.');
+            return;
+        }
+        const lines = entries.map((e) => {
+            const prefix = e.source === 'plugin' ? '🔌' : e.source === 'project' ? '📁' : '👤';
+            return `${prefix} \`/${e.name}\` — ${e.description || '(no description)'}`;
+        });
+
+        // Split into chunks that fit Discord's 2000-char limit
+        const chunks: string[] = [];
+        let current = '';
+        for (const line of lines) {
+            const next = current ? `${current}\n${line}` : line;
+            if (next.length > 1900) {
+                chunks.push(current);
+                current = line;
+            } else {
+                current = next;
+            }
+        }
+        if (current) chunks.push(current);
+
+        await interaction.editReply(chunks[0]);
+        for (let i = 1; i < chunks.length; i++) {
+            await interaction.followUp(chunks[i]);
+        }
+        return;
+    }
+
+    if (name === 'reload') {
+        await bridge.skillRegistry.scanGlobal();
+        for (const dir of bridge.getAllProjectDirs()) {
+            await bridge.skillRegistry.scanProject(dir);
+        }
+        const count = bridge.skillRegistry.getForSession(projectDir).length;
+        await interaction.editReply(`Reloaded — ${count} skills/commands available.`);
+        return;
+    }
+
+    // Execute: send as slash command to session
+    if (!/^[\w:.-]+$/.test(name)) {
+        await interaction.editReply('Invalid skill name.');
+        return;
+    }
+    if (!bridge.activeSession) {
+        await interaction.editReply('No active session. Use /sessions to connect.');
+        return;
+    }
+    const message = args ? `/${name} ${args}` : `/${name}`;
+    await bridge.sendMessage(message);
+    await interaction.editReply(`Sent \`${message}\``);
+}
+
+// --- /skills autocomplete ---
+
+const MAX_AUTOCOMPLETE = 25;
+
+export async function handleSkillsAutocomplete(
+    interaction: AutocompleteInteraction,
+    registry: SkillRegistry,
+    projectDir?: string,
+): Promise<void> {
+    const focused = interaction.options.getFocused();
+    const results = registry.search(focused, projectDir);
+
+    const reloadOption = { name: '🔄 reload — Re-scan skills from disk', value: 'reload' };
+    const showReload = !focused || 'reload'.includes(focused.toLowerCase());
+
+    const choices = results.map((e) => {
+        const display = `${e.name} — ${e.description || '(no description)'}`;
+        return { name: display.length > 100 ? display.slice(0, 97) + '...' : display, value: e.name };
+    });
+
+    if (showReload) {
+        choices.unshift(reloadOption);
+    }
+
+    await interaction.respond(choices.slice(0, MAX_AUTOCOMPLETE));
 }
