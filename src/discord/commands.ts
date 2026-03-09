@@ -349,16 +349,25 @@ async function handleSkills(interaction: ChatInputCommandInteraction, bridge: Br
             const prefix = e.source === 'plugin' ? '🔌' : e.source === 'project' ? '📁' : '👤';
             return `${prefix} \`/${e.name}\` — ${e.description || '(no description)'}`;
         });
-        let content = '';
+
+        // Split into chunks that fit Discord's 2000-char limit
+        const chunks: string[] = [];
+        let current = '';
         for (const line of lines) {
-            const next = content ? `${content}\n${line}` : line;
+            const next = current ? `${current}\n${line}` : line;
             if (next.length > 1900) {
-                content += `\n... and ${lines.length - content.split('\n').length} more`;
-                break;
+                chunks.push(current);
+                current = line;
+            } else {
+                current = next;
             }
-            content = next;
         }
-        await interaction.editReply(content);
+        if (current) chunks.push(current);
+
+        await interaction.editReply(chunks[0]);
+        for (let i = 1; i < chunks.length; i++) {
+            await interaction.followUp(chunks[i]);
+        }
         return;
     }
 
