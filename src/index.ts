@@ -123,7 +123,7 @@ async function main(): Promise<void> {
 
             const threadId = threadSessionId ? message.channelId : undefined;
             bridge.setLastUserMessageId(message.id, threadId);
-            await bridge.sendMessage(text);
+            await bridge.sendMessage(text, threadSessionId || undefined);
         };
 
         handleMessage().catch((err) => {

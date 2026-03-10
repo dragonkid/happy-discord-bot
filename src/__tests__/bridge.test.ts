@@ -10,13 +10,17 @@ import { PermissionCache } from '../happy/permission-cache.js';
 // --- Mock factories ---
 
 function makeMockHappy(): HappyClient {
+    const sessionKeys = new Map<string, any>();
     return {
         on: vi.fn(),
-        getSessionEncryption: vi.fn().mockReturnValue({
+        getSessionEncryption: vi.fn((sessionId: string) => sessionKeys.get(sessionId) || {
             key: new Uint8Array(32),
             variant: 'dataKey' as const,
         }),
-        registerSessionEncryption: vi.fn(),
+        getRegisteredSessionIds: vi.fn(() => Array.from(sessionKeys.keys())),
+        registerSessionEncryption: vi.fn((sessionId: string, encryption: any) => {
+            sessionKeys.set(sessionId, encryption);
+        }),
         request: vi.fn().mockResolvedValue(new Response(JSON.stringify({
             messages: [{ id: 'msg-1', seq: 1, localId: 'local-1', createdAt: Date.now(), updatedAt: Date.now() }],
         }))),
@@ -157,6 +161,29 @@ describe('Bridge', () => {
                     content: { type: 'text', text: 'hello' },
                     meta: { sentFrom: 'happy-discord-bot' },
                 },
+            );
+        });
+
+        it('uses targetSessionId parameter instead of activeSession when provided', async () => {
+            bridge.setActiveSession('sess-active');
+            happy.registerSessionEncryption('sess-target', { key: new Uint8Array(32), variant: 'dataKey' as const });
+
+            await bridge.sendMessage('hello', 'sess-target');
+
+            expect(happy.request).toHaveBeenCalledWith(
+                '/v3/sessions/sess-target/messages',
+                expect.objectContaining({ method: 'POST' }),
+            );
+        });
+
+        it('falls back to activeSession when targetSessionId not provided', async () => {
+            bridge.setActiveSession('sess-active');
+
+            await bridge.sendMessage('hello');
+
+            expect(happy.request).toHaveBeenCalledWith(
+                '/v3/sessions/sess-active/messages',
+                expect.objectContaining({ method: 'POST' }),
             );
         });
     });

@@ -131,8 +131,8 @@ export class Bridge {
         this.isThinking = thinking;
     }
 
-    async sendMessage(text: string): Promise<void> {
-        const sessionId = this.requireActiveSession();
+    async sendMessage(text: string, targetSessionId?: string): Promise<void> {
+        const sessionId = targetSessionId ?? this.requireActiveSession();
         console.log(`[Bridge] Sending message to ${sessionId.slice(0, 8)}, connected: ${this.happy.connected}`);
         const enc = this.happy.getSessionEncryption(sessionId);
         if (!enc) {
@@ -947,6 +947,10 @@ export class Bridge {
         if (this.sessionToThread.has(idOrPrefix)) return idOrPrefix;
         for (const key of this.sessionToThread.keys()) {
             if (key.startsWith(idOrPrefix)) return key;
+        }
+        // Fallback: search in registered session IDs
+        for (const sessionId of this.happy.getRegisteredSessionIds()) {
+            if (sessionId.startsWith(idOrPrefix)) return sessionId;
         }
         return idOrPrefix;
     }

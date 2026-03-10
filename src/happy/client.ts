@@ -88,6 +88,10 @@ export class HappyClient extends EventEmitter<HappyClientEvents> {
         return this.sessionKeys.get(sessionId);
     }
 
+    getRegisteredSessionIds(): string[] {
+        return Array.from(this.sessionKeys.keys());
+    }
+
     /** Register a pre-resolved encryption key for a session. */
     registerSessionEncryption(sessionId: string, encryption: SessionEncryption): void {
         this.sessionKeys.set(sessionId, encryption);
