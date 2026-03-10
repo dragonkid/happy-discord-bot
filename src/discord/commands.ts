@@ -131,6 +131,12 @@ export async function handleCommand(
 
 async function handleSessions(interaction: ChatInputCommandInteraction, bridge: Bridge): Promise<void> {
     await interaction.deferReply();
+
+    const threadSession = bridge.getSessionByThread(interaction.channelId);
+    if (threadSession && bridge.activeSession !== threadSession) {
+        bridge.setActiveSession(threadSession);
+    }
+
     const sessions = await bridge.listAllSessions();
 
     if (sessions.length === 0) {
