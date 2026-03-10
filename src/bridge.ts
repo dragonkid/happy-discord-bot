@@ -477,7 +477,7 @@ export class Bridge {
         await this.happy.sessionRPC(fullId, 'abort', {});
     }
 
-    async compactSession(messageId: string, channelId: string): Promise<void> {
+    async compactSession(messageId: string, _channelId: string): Promise<void> {
         await this.sendMessage('/compact');
         const sessionId = this.activeSessionId;
         if (!sessionId) return;
