@@ -338,6 +338,12 @@ function todayMidnight(): number {
 
 async function handleSkills(interaction: ChatInputCommandInteraction, bridge: Bridge): Promise<void> {
     await interaction.deferReply();
+
+    const threadSession = bridge.getSessionByThread(interaction.channelId);
+    if (threadSession && bridge.activeSession !== threadSession) {
+        bridge.setActiveSession(threadSession);
+    }
+
     const name = interaction.options.getString('name');
     const args = interaction.options.getString('args');
 
