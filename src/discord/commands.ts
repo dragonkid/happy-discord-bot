@@ -403,7 +403,7 @@ async function handleSkills(interaction: ChatInputCommandInteraction, bridge: Br
         return;
     }
     const message = args ? `/${name} ${args}` : `/${name}`;
-    await bridge.sendMessage(message);
+    await bridge.sendMessage(message, bridge.activeSession);
     await interaction.editReply(`Sent \`${message}\``);
 }
 

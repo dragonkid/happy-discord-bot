@@ -131,8 +131,7 @@ export class Bridge {
         this.isThinking = thinking;
     }
 
-    async sendMessage(text: string, targetSessionId?: string): Promise<void> {
-        const sessionId = targetSessionId ?? this.requireActiveSession();
+    async sendMessage(text: string, sessionId: string): Promise<void> {
         console.log(`[Bridge] Sending message to ${sessionId.slice(0, 8)}, connected: ${this.happy.connected}`);
         const enc = this.happy.getSessionEncryption(sessionId);
         if (!enc) {
@@ -478,9 +477,9 @@ export class Bridge {
     }
 
     async compactSession(messageId: string, _channelId: string): Promise<void> {
-        await this.sendMessage('/compact');
         const sessionId = this.activeSessionId;
         if (!sessionId) return;
+        await this.sendMessage('/compact', sessionId);
         const threadId = this.getThreadId(sessionId);
         this.pendingCompactReply = { messageId, threadId: threadId || undefined };
     }

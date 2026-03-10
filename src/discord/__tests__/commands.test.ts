@@ -467,7 +467,7 @@ describe('commands', () => {
             const bridge = makeMockBridge();
             Object.defineProperty(bridge, 'activeSession', { value: 'sess-1' });
             await handleCommand(interaction as any, bridge);
-            expect(bridge.sendMessage).toHaveBeenCalledWith('/commit -m fix');
+            expect(bridge.sendMessage).toHaveBeenCalledWith('/commit -m fix', 'sess-1');
         });
 
         it('sends skill without args', async () => {
@@ -475,7 +475,7 @@ describe('commands', () => {
             const bridge = makeMockBridge();
             Object.defineProperty(bridge, 'activeSession', { value: 'sess-1' });
             await handleCommand(interaction as any, bridge);
-            expect(bridge.sendMessage).toHaveBeenCalledWith('/tdd');
+            expect(bridge.sendMessage).toHaveBeenCalledWith('/tdd', 'sess-1');
         });
 
         it('returns error when no active session', async () => {

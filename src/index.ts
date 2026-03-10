@@ -121,9 +121,16 @@ async function main(): Promise<void> {
 
             if (!text) return;
 
+            // Determine target session: thread-bound session or active session
+            const targetSessionId = threadSessionId || bridge.activeSession;
+            if (!targetSessionId) {
+                console.error('[Index] No target session for message');
+                return;
+            }
+
             const threadId = threadSessionId ? message.channelId : undefined;
             bridge.setLastUserMessageId(message.id, threadId);
-            await bridge.sendMessage(text, threadSessionId || undefined);
+            await bridge.sendMessage(text, targetSessionId);
         };
 
         handleMessage().catch((err) => {

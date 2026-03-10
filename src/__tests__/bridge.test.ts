@@ -13,10 +13,7 @@ function makeMockHappy(): HappyClient {
     const sessionKeys = new Map<string, any>();
     return {
         on: vi.fn(),
-        getSessionEncryption: vi.fn((sessionId: string) => sessionKeys.get(sessionId) || {
-            key: new Uint8Array(32),
-            variant: 'dataKey' as const,
-        }),
+        getSessionEncryption: vi.fn((sessionId: string) => sessionKeys.get(sessionId)),
         getRegisteredSessionIds: vi.fn(() => Array.from(sessionKeys.keys())),
         registerSessionEncryption: vi.fn((sessionId: string, encryption: any) => {
             sessionKeys.set(sessionId, encryption);
@@ -108,6 +105,12 @@ describe('Bridge', () => {
         stateTracker = new StateTracker();
         permissionCache = new PermissionCache();
         bridge = new Bridge(happy, discord, config, stateTracker, permissionCache);
+
+        // Register common test sessions
+        happy.registerSessionEncryption('sess-1', { key: new Uint8Array(32), variant: 'dataKey' as const });
+        happy.registerSessionEncryption('sess-2', { key: new Uint8Array(32), variant: 'dataKey' as const });
+        happy.registerSessionEncryption('sess-active', { key: new Uint8Array(32), variant: 'dataKey' as const });
+        happy.registerSessionEncryption('sess-other', { key: new Uint8Array(32), variant: 'dataKey' as const });
     });
 
     afterEach(() => {
@@ -115,14 +118,14 @@ describe('Bridge', () => {
     });
 
     describe('sendMessage', () => {
-        it('throws when no active session', async () => {
-            await expect(bridge.sendMessage('hello')).rejects.toThrow('No active session');
+        it('throws when session has no encryption key', async () => {
+            await expect(bridge.sendMessage('hello', 'unknown-sess')).rejects.toThrow('No encryption key for session');
         });
 
         it('encrypts and POSTs message to relay', async () => {
             bridge.setActiveSession('sess-1');
 
-            await bridge.sendMessage('hello');
+            await bridge.sendMessage('hello', 'sess-1');
 
             expect(happy.request).toHaveBeenCalledWith(
                 '/v3/sessions/sess-1/messages',
@@ -137,7 +140,7 @@ describe('Bridge', () => {
         it('includes localId in POST body for deduplication', async () => {
             bridge.setActiveSession('sess-1');
 
-            await bridge.sendMessage('hello');
+            await bridge.sendMessage('hello', 'sess-1');
 
             const body = JSON.parse(
                 (happy.request as ReturnType<typeof vi.fn>).mock.calls[0][1].body,
@@ -151,7 +154,7 @@ describe('Bridge', () => {
             bridge.setActiveSession('sess-1');
             const { encrypt } = await import('../vendor/encryption.js');
 
-            await bridge.sendMessage('hello');
+            await bridge.sendMessage('hello', 'sess-1');
 
             expect(encrypt).toHaveBeenCalledWith(
                 expect.any(Uint8Array),
@@ -172,17 +175,6 @@ describe('Bridge', () => {
 
             expect(happy.request).toHaveBeenCalledWith(
                 '/v3/sessions/sess-target/messages',
-                expect.objectContaining({ method: 'POST' }),
-            );
-        });
-
-        it('falls back to activeSession when targetSessionId not provided', async () => {
-            bridge.setActiveSession('sess-active');
-
-            await bridge.sendMessage('hello');
-
-            expect(happy.request).toHaveBeenCalledWith(
-                '/v3/sessions/sess-active/messages',
                 expect.objectContaining({ method: 'POST' }),
             );
         });
@@ -546,7 +538,7 @@ describe('Bridge', () => {
             bridge.setActiveSession('sess-1');
             const sendSpy = vi.spyOn(bridge, 'sendMessage').mockResolvedValue();
             await bridge.compactSession('msg-123', 'channel-456');
-            expect(sendSpy).toHaveBeenCalledWith('/compact');
+            expect(sendSpy).toHaveBeenCalledWith('/compact', 'sess-1');
         });
     });
 
