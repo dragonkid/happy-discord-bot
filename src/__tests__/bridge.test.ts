@@ -504,6 +504,14 @@ describe('Bridge', () => {
         it('throws when no active session', async () => {
             await expect(bridge.stopSession()).rejects.toThrow('No active session');
         });
+
+        it('resolves prefix to full session ID before calling sessionRPC', async () => {
+            bridge.setActiveSession('sess-full-id-abc123');
+            bridge.setThread('sess-full-id-abc123', 'thread-1');
+            await bridge.stopSession('sess-full');
+
+            expect(happy.sessionRPC).toHaveBeenCalledWith('sess-full-id-abc123', 'abort', {});
+        });
     });
 
     describe('compactSession', () => {
@@ -1387,6 +1395,14 @@ describe('Bridge', () => {
 
         it('throws when no active session and no sessionId provided', async () => {
             await expect(bridge.archiveSession()).rejects.toThrow('No active session');
+        });
+
+        it('resolves prefix to full session ID before calling sessionRPC', async () => {
+            bridge.setActiveSession('sess-full-id-abc123');
+            bridge.setThread('sess-full-id-abc123', 'thread-1');
+            await bridge.archiveSession('sess-full');
+
+            expect(happy.sessionRPC).toHaveBeenCalledWith('sess-full-id-abc123', 'killSession', {});
         });
     });
 

@@ -346,8 +346,8 @@ export class Bridge {
 
     async archiveSession(sessionId?: string): Promise<string> {
         const target = sessionId ?? this.requireActiveSession();
-        await this.happy.sessionRPC(target, 'killSession', {});
         const fullId = this.resolveFullSessionId(target);
+        await this.happy.sessionRPC(fullId, 'killSession', {});
         const threadId = this.getThreadId(fullId);
         if (threadId) {
             await this.discord.archiveThread(threadId).catch((err) => {
@@ -473,7 +473,8 @@ export class Bridge {
 
     async stopSession(sessionId?: string): Promise<void> {
         const target = sessionId ?? this.requireActiveSession();
-        await this.happy.sessionRPC(target, 'abort', {});
+        const fullId = this.resolveFullSessionId(target);
+        await this.happy.sessionRPC(fullId, 'abort', {});
     }
 
     async compactSession(messageId: string, channelId: string): Promise<void> {
