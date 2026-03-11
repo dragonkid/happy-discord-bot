@@ -1595,6 +1595,76 @@ describe('Bridge', () => {
             expect(discord.send).not.toHaveBeenCalled();
         });
 
+        it('filters out skill content text events (Base directory for this skill:)', async () => {
+            bridge.setActiveSession('sess-1');
+            bridge.setThread('sess-1', 'thread-1');
+
+            const skillContent = {
+                role: 'session',
+                content: {
+                    role: 'agent',
+                    ev: {
+                        t: 'text',
+                        text: 'Base directory for this skill: /Users/user/.claude/skills/verification-loop\n\n# Verification Loop Skill\n\nA comprehensive verification system...',
+                    },
+                },
+            };
+            const encrypted = Buffer.from(JSON.stringify(skillContent)).toString('base64');
+
+            bridge.processUpdate({
+                body: {
+                    t: 'new-message',
+                    sid: 'sess-1',
+                    message: {
+                        id: 'msg-skill',
+                        seq: 10,
+                        content: { c: encrypted, t: 'encrypted' },
+                        createdAt: Date.now(),
+                        updatedAt: Date.now(),
+                    },
+                },
+            });
+
+            await vi.advanceTimersByTimeAsync(0);
+            expect(discord.sendToThread).not.toHaveBeenCalled();
+            expect(discord.send).not.toHaveBeenCalled();
+        });
+
+        it('forwards normal text that does not start with skill prefix', async () => {
+            bridge.setActiveSession('sess-1');
+            bridge.setThread('sess-1', 'thread-1');
+
+            const normalContent = {
+                role: 'session',
+                content: {
+                    role: 'agent',
+                    ev: { t: 'text', text: 'TypeScript project detected. Starting verification.' },
+                },
+            };
+            const encrypted = Buffer.from(JSON.stringify(normalContent)).toString('base64');
+
+            bridge.processUpdate({
+                body: {
+                    t: 'new-message',
+                    sid: 'sess-1',
+                    message: {
+                        id: 'msg-normal',
+                        seq: 11,
+                        content: { c: encrypted, t: 'encrypted' },
+                        createdAt: Date.now(),
+                        updatedAt: Date.now(),
+                    },
+                },
+            });
+
+            await vi.waitFor(() => {
+                expect(discord.sendToThread).toHaveBeenCalledWith(
+                    'thread-1',
+                    'TypeScript project detected. Starting verification.',
+                );
+            });
+        });
+
         it('sends agent text to main channel when no thread', async () => {
             bridge.setActiveSession('sess-1');
 

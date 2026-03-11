@@ -828,9 +828,10 @@ export class Bridge {
             return;
         }
 
-        const record = decrypted as { role?: string; content?: unknown };
-        console.log(`[Bridge] handleNewMessage: role=${record.role}`,
-            JSON.stringify(record).slice(0, 300));
+        const record = decrypted as { role?: string; content?: unknown; meta?: unknown };
+        const logSafe = JSON.stringify(record, (_key, val) =>
+            typeof val === 'string' && val.length > 120 ? val.slice(0, 120) + '...' : val);
+        console.log(`[Bridge] handleNewMessage: role=${record.role}`, logSafe);
 
         // Skip user messages (own echoes)
         if (record.role === 'user') return;
@@ -871,9 +872,11 @@ export class Bridge {
             };
             if (envelope?.role !== 'agent') return;
 
-            // Forward agent text messages to Discord (skip thinking/reasoning)
+            // Forward agent text messages to Discord (skip thinking/reasoning and skill content)
             if (envelope.ev?.t === 'text' && envelope.ev.text && !envelope.ev.thinking) {
-                await this.sendToSession(sessionId, envelope.ev.text);
+                if (!envelope.ev.text.startsWith('Base directory for this skill:')) {
+                    await this.sendToSession(sessionId, envelope.ev.text);
+                }
             }
 
             // Tool use emoji tracking + TodoWrite interception
