@@ -17,6 +17,7 @@ const daemon = new DaemonClient();
 const happy = new HappyTestClient();
 
 let spawnedSessionId: string | null = null;
+let sessionDirName: string;
 
 /** Extract requestId from button custom_id with a given prefix (e.g. 'perm', 'ask', 'plan') */
 function extractRequestId(msg: Message, prefix: string): string | null {
@@ -40,7 +41,8 @@ describe('Smoke: Manual Permission Approval', () => {
         await happy.start();
 
         await daemon.connect();
-        spawnedSessionId = await daemon.spawnSession(`/tmp/e2e-session-manual-perm-${Date.now()}`);
+        sessionDirName = `e2e-session-manual-perm-${Date.now()}`;
+        spawnedSessionId = await daemon.spawnSession(`/tmp/${sessionDirName}`);
         console.log(`[Test] Spawned session: ${spawnedSessionId}`);
 
         await happy.registerSession(spawnedSessionId);
@@ -57,6 +59,9 @@ describe('Smoke: Manual Permission Approval', () => {
 
     afterAll(async () => {
         await bot.stop();
+        for (const thread of discord.getCreatedThreads()) {
+            await discord.deleteThread(thread.id).catch(() => {});
+        }
         discord.destroy();
         happy.close();
         if (spawnedSessionId) {
@@ -77,12 +82,11 @@ describe('Smoke: Manual Permission Approval', () => {
 
         await happy.approvePermission(spawnedSessionId!, requestId!);
 
-        const response = await discord.waitForBotMessage(
-            (content) =>
-                content.includes('manual-perm')
-                || content.includes('created')
-                || content.includes('written')
-                || content.includes('file'),
+        // After approval, Claude replies in the session's thread
+        const thread = await discord.waitForThread((t) => t.name.includes(sessionDirName), 15_000);
+        const response = await discord.waitForBotMessageInThread(
+            thread.id,
+            (content) => content.length > 0,
             90_000,
         );
         expect(response).toBeDefined();
