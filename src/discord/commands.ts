@@ -89,7 +89,14 @@ const skills = new SlashCommandBuilder()
         opt.setName('args').setDescription('Arguments to pass to the skill').setRequired(false),
     );
 
-const allCommands = [sessions, stop, compact, mode, newSession, archive, deleteCmd, cleanup, usage, skills];
+const loop = new SlashCommandBuilder()
+    .setName('loop')
+    .setDescription('Run a prompt or skill on a recurring interval')
+    .addStringOption((opt) =>
+        opt.setName('args').setDescription('e.g. "5m /compact" or "10m check deploy status"').setRequired(true),
+    );
+
+const allCommands = [sessions, stop, compact, mode, newSession, archive, deleteCmd, cleanup, usage, skills, loop];
 
 export const commandDefinitions: RESTPostAPIChatInputApplicationCommandsJSONBody[] =
     allCommands.map((cmd) => cmd.toJSON());
@@ -122,6 +129,8 @@ export async function handleCommand(
             return handleUsage(interaction, bridge);
         case 'skills':
             return handleSkills(interaction, bridge);
+        case 'loop':
+            return handleLoop(interaction, bridge);
         default:
             await interaction.reply({ content: `Unknown command: ${interaction.commandName}`, ephemeral: true });
     }
@@ -382,6 +391,21 @@ async function handleSkills(interaction: ChatInputCommandInteraction, bridge: Br
     try {
         const sessionId = resolveSessionFromContext(interaction, bridge);
         const message = args ? `/${name} ${args}` : `/${name}`;
+        await bridge.sendMessage(message, sessionId);
+        await interaction.editReply(`Sent \`${message}\``);
+    } catch {
+        await interaction.editReply('No active session. Use /sessions to connect.');
+    }
+}
+
+// --- /loop handler ---
+
+async function handleLoop(interaction: ChatInputCommandInteraction, bridge: Bridge): Promise<void> {
+    await interaction.deferReply();
+    try {
+        const sessionId = resolveSessionFromContext(interaction, bridge);
+        const args = interaction.options.getString('args', true);
+        const message = `/loop ${args}`;
         await bridge.sendMessage(message, sessionId);
         await interaction.editReply(`Sent \`${message}\``);
     } catch {

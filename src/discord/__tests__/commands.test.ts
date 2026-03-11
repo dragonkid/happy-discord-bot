@@ -486,6 +486,37 @@ describe('commands', () => {
         });
     });
 
+    describe('/loop', () => {
+        it('includes /loop command definition', () => {
+            expect(commandDefinitions.find((c: { name: string }) => c.name === 'loop')).toBeDefined();
+        });
+
+        it('sends /loop with args to session', async () => {
+            const bridge = makeMockBridge();
+            Object.defineProperty(bridge, 'activeSession', { value: 'sess-1' });
+            const interaction = mockInteraction('loop', { args: '5m /compact' });
+            await handleCommand(interaction as any, bridge);
+            expect(bridge.sendMessage).toHaveBeenCalledWith('/loop 5m /compact', 'sess-1');
+            expect(interaction.editReply).toHaveBeenCalledWith(expect.stringContaining('/loop 5m /compact'));
+        });
+
+        it('resolves session from thread context', async () => {
+            const bridge = makeMockBridge();
+            Object.defineProperty(bridge, 'activeSession', { value: 'active-sess', writable: true });
+            vi.mocked(bridge.getSessionByThread).mockReturnValue('thread-sess');
+            const interaction = mockInteraction('loop', { args: '10m check status' }, 'thread-1');
+            await handleCommand(interaction as any, bridge);
+            expect(bridge.sendMessage).toHaveBeenCalledWith('/loop 10m check status', 'thread-sess');
+        });
+
+        it('shows error when no active session', async () => {
+            const bridge = makeMockBridge();
+            const interaction = mockInteraction('loop', { args: '5m /compact' });
+            await handleCommand(interaction as any, bridge);
+            expect(interaction.editReply).toHaveBeenCalledWith(expect.stringContaining('No active session'));
+        });
+    });
+
     describe('handleSkillsAutocomplete', () => {
         function mockAutocomplete(focused: string) {
             return {

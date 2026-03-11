@@ -30,7 +30,7 @@ Main Channel (status summaries only)
 - **Thread creation:** Auto-created on bot connect for sessions without threads, and on `/new` session creation. Anchor message sent to main channel, thread created on it.
 - **Thread naming:** `{directoryName} @ {host}` from session metadata (e.g. `happy-discord-bot @ macbook`).
 - **Message routing:** Messages in a thread auto-route to the bound session (no `activeSession` switch). Main channel messages fallback to active session. `activeSession` only changed via `/sessions` button or bot startup.
-- **Command resolution:** `/stop`, `/compact`, `/mode`, `/archive`, `/delete` in a thread resolve to that thread's session via `resolveSessionFromContext()`. Explicit `session` parameter overrides. `/usage` in a thread auto-scopes to that session via `getSessionByThread()`.
+- **Command resolution:** `/stop`, `/compact`, `/mode`, `/archive`, `/delete`, `/loop` in a thread resolve to that thread's session via `resolveSessionFromContext()`. Explicit `session` parameter overrides. `/usage` in a thread auto-scopes to that session via `getSessionByThread()`.
 - **Thread lifecycle:** `/archive` archives thread, `/delete` deletes thread + removes mapping.
 - **Persistence:** Thread mapping (`sessionId -> threadId`) saved in `state.json` under `threads` field, restored on bot restart.
 - **Output routing:** All bot output (text, permissions, TodoWrite, typing, emoji) routes to session's thread when available, falls back to main channel.
@@ -160,6 +160,11 @@ When a Discord message includes attachments (images, PDFs, code files, etc.), th
 - **Autocomplete:** Searches by name and description with relevance ranking (exact > prefix > contains).
 - **Project isolation:** Project-level skills (`.claude/skills/`, `.claude/commands/`) are per-session — each thread only sees its own session's project skills, merged with global (personal + plugin) skills.
 - **Discovery sources:** (1) `~/.claude/skills/` + `~/.claude/commands/` (personal), (2) `<projectDir>/.claude/skills/` + `.claude/commands/` (project, per session), (3) enabled plugins via `installed_plugins.json`.
+
+### /loop Command
+- `/loop <args>` — Forward `/loop <args>` to the thread's session (or active session in main channel).
+- Wraps Claude Code CLI's built-in `/loop` command which runs a prompt or slash command on a recurring interval.
+- Example: `/loop 5m /compact` runs `/compact` every 5 minutes.
 
 ### machineRPC Encryption
 Bot reads two credential files:
