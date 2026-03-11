@@ -352,7 +352,14 @@ export class Bridge {
             await this.discord.archiveThread(threadId).catch((err) => {
                 console.error(`[Bridge] Failed to archive thread:`, err);
             });
+            this.removeThread(fullId);
         }
+        if (target === this.activeSessionId) {
+            this.activeSessionId = null;
+        }
+        this.happy.removeSessionKey(fullId);
+        this.sessionDirMap.delete(fullId);
+        this.persistModes();
         return target;
     }
 

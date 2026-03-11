@@ -18,6 +18,9 @@ function makeMockHappy(): HappyClient {
         registerSessionEncryption: vi.fn((sessionId: string, encryption: any) => {
             sessionKeys.set(sessionId, encryption);
         }),
+        removeSessionKey: vi.fn((sessionId: string) => {
+            sessionKeys.delete(sessionId);
+        }),
         request: vi.fn().mockResolvedValue(new Response(JSON.stringify({
             messages: [{ id: 'msg-1', seq: 1, localId: 'local-1', createdAt: Date.now(), updatedAt: Date.now() }],
         }))),
@@ -1423,6 +1426,32 @@ describe('Bridge', () => {
 
             expect(happy.sessionRPC).toHaveBeenCalledWith('sess-full-id-abc123', 'killSession', {});
         });
+
+        it('clears activeSessionId when archiving active session', async () => {
+            bridge.setActiveSession('sess-1');
+            await bridge.archiveSession('sess-1');
+            expect(bridge.activeSession).toBeNull();
+        });
+
+        it('does not clear activeSessionId when archiving different session', async () => {
+            bridge.setActiveSession('sess-1');
+            await bridge.archiveSession('sess-other');
+            expect(bridge.activeSession).toBe('sess-1');
+        });
+
+        it('removes encryption key after archiving', async () => {
+            bridge.setActiveSession('sess-1');
+            await bridge.archiveSession('sess-1');
+            expect(happy.removeSessionKey).toHaveBeenCalledWith('sess-1');
+        });
+
+        it('persists state after archiving', async () => {
+            const mockStore = { save: vi.fn().mockResolvedValue(undefined), load: vi.fn() };
+            bridge.setStore(mockStore as any);
+            bridge.setActiveSession('sess-1');
+            await bridge.archiveSession('sess-1');
+            expect(mockStore.save).toHaveBeenCalled();
+        });
     });
 
     describe('deleteSession', () => {
@@ -1901,12 +1930,13 @@ describe('Bridge', () => {
     });
 
     describe('Thread lifecycle', () => {
-        it('archiveSession archives the thread', async () => {
+        it('archiveSession archives the thread and removes mapping', async () => {
             bridge.setActiveSession('sess-1');
             bridge.setThread('sess-1', 'thread-1');
             await bridge.archiveSession('sess-1');
             expect(happy.sessionRPC).toHaveBeenCalledWith('sess-1', 'killSession', {});
             expect(discord.archiveThread).toHaveBeenCalledWith('thread-1');
+            expect(bridge.getThreadId('sess-1')).toBeNull();
         });
 
         it('deleteSession deletes the thread and removes mapping', async () => {
@@ -1959,6 +1989,7 @@ describe('Bridge', () => {
             bridge.setThread('sess-full-id-abc123', 'thread-1');
             await bridge.archiveSession('sess-full');
             expect(discord.archiveThread).toHaveBeenCalledWith('thread-1');
+            expect(bridge.getThreadId('sess-full-id-abc123')).toBeNull();
         });
     });
 
