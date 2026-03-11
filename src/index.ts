@@ -375,7 +375,9 @@ async function main(): Promise<void> {
                     case 'for-tool': {
                         let toolIdentifier = toolName;
                         if (toolName === 'Bash' && toolInput && typeof toolInput === 'object' && 'command' in toolInput) {
-                            toolIdentifier = `Bash(${(toolInput as { command: string }).command})`;
+                            const command = (toolInput as { command: string }).command;
+                            const program = command.trimStart().split(/\s/)[0];
+                            toolIdentifier = program ? `Bash(${program}:*)` : 'Bash';
                         }
                         await bridge.approvePermission(sessionId, requestId, undefined, [toolIdentifier]);
                         permissionCache.applyApproval([toolIdentifier]);
