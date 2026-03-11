@@ -14,6 +14,7 @@ const mockFetchedMessage = {
 };
 
 const mockChannel = {
+    id: 'channel-1',
     send: vi.fn().mockResolvedValue({ id: 'msg-1' }),
     sendTyping: vi.fn().mockResolvedValue(undefined),
     messages: { fetch: vi.fn().mockResolvedValue(mockFetchedMessage) },
@@ -26,6 +27,9 @@ const mockClient = {
     destroy: vi.fn(),
     channels: {
         fetch: vi.fn().mockResolvedValue(mockChannel),
+    },
+    rest: {
+        delete: vi.fn().mockResolvedValue(undefined),
     },
     user: { tag: 'TestBot#1234', id: 'bot-user-id' },
 };
@@ -150,11 +154,12 @@ describe('DiscordBot', () => {
     });
 
     describe('removeReaction', () => {
-        it('fetches message and removes bot reaction', async () => {
+        it('calls REST delete to remove bot reaction', async () => {
             await bot.start();
             await bot.removeReaction('msg-123', '🤔');
-            expect(mockChannel.messages.fetch).toHaveBeenCalledWith('msg-123');
-            expect(mockReactionUsers.remove).toHaveBeenCalledWith(mockClient.user.id);
+            expect(mockClient.rest.delete).toHaveBeenCalledWith(
+                `/channels/${mockChannel.id}/messages/msg-123/reactions/${encodeURIComponent('🤔')}/@me`,
+            );
         });
     });
 

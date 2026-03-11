@@ -111,11 +111,13 @@ export class DiscordBot {
     /** Remove the bot's emoji reaction from a specific message. */
     async removeReaction(messageId: string, emoji: string): Promise<void> {
         const channel = this.requireChannel();
-        const message = await channel.messages.fetch(messageId);
-        const reaction = message.reactions.resolve(emoji);
-        if (reaction) {
-            await reaction.users.remove(this.client.user?.id);
-        }
+        const encoded = encodeURIComponent(emoji);
+        await this.client.rest.delete(
+            `/channels/${channel.id}/messages/${messageId}/reactions/${encoded}/@me`,
+        ).catch((err: unknown) => {
+            if (err instanceof Error && 'status' in err && (err as { status: number }).status === 404) return;
+            throw err;
+        });
     }
 
     /** Edit an existing message's content. */
@@ -208,12 +210,13 @@ export class DiscordBot {
 
     /** Remove the bot's emoji reaction from a message in a thread. */
     async removeReactionInThread(threadId: string, messageId: string, emoji: string): Promise<void> {
-        const thread = await this.fetchThread(threadId);
-        const message = await thread.messages.fetch(messageId);
-        const reaction = message.reactions.resolve(emoji);
-        if (reaction) {
-            await reaction.users.remove(this.client.user?.id);
-        }
+        const encoded = encodeURIComponent(emoji);
+        await this.client.rest.delete(
+            `/channels/${threadId}/messages/${messageId}/reactions/${encoded}/@me`,
+        ).catch((err: unknown) => {
+            if (err instanceof Error && 'status' in err && (err as { status: number }).status === 404) return;
+            throw err;
+        });
     }
 
     /** Edit a message's content in a thread. */
