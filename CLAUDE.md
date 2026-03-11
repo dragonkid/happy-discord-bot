@@ -166,6 +166,11 @@ When a Discord message includes attachments (images, PDFs, code files, etc.), th
 - Wraps Claude Code CLI's built-in `/loop` command which runs a prompt or slash command on a recurring interval.
 - Example: `/loop 5m /compact` runs `/compact` every 5 minutes.
 
+### /cleanup Command
+- `/cleanup` — Delete all archived (inactive) sessions and their associated Discord threads.
+- Shows "Confirm Cleanup" / "Cancel" buttons before executing.
+- Iterates all sessions, deletes inactive ones via `DELETE /v1/sessions/:id`, removes thread mappings.
+
 ### machineRPC Encryption
 Bot reads two credential files:
 - `~/.happy/agent.key` → `{token, secret}` (legacy XSalsa20-Poly1305)
@@ -227,7 +232,7 @@ npm run test:e2e         # E2E smoke tests (requires .env.e2e, real services)
 ## Testing
 
 - Framework: Vitest
-- 14 test suites, 426 tests
+- 14 test suites, 431 tests
 - Test files: `src/**/__tests__/*.test.ts`
 - All Happy/Discord dependencies mocked (no real connections needed)
 
