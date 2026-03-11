@@ -70,10 +70,7 @@ async function main(): Promise<void> {
         // Check if message is in a known thread -> route to that session
         const threadSessionId = bridge.getSessionByThread(message.channelId);
         if (threadSessionId) {
-            if (bridge.activeSession !== threadSessionId) {
-                bridge.setActiveSession(threadSessionId);
-                bridge.persistModes();
-            }
+            // Thread message — route directly to bound session, no activeSession switch
         } else if (message.channelId !== config.discord.channelId) {
             return;
         }
@@ -129,7 +126,7 @@ async function main(): Promise<void> {
             }
 
             const threadId = threadSessionId ? message.channelId : undefined;
-            bridge.setLastUserMessageId(message.id, threadId);
+            bridge.setLastUserMessageId(message.id, threadId, targetSessionId);
             await bridge.sendMessage(text, targetSessionId);
         };
 
@@ -262,13 +259,13 @@ async function main(): Promise<void> {
             if (planParsed) {
                 if (planParsed.action === 'reject') {
                     // showModal requires un-deferred interaction — validate guards first
-                    const isActive = planParsed.sessionId === bridge.activeSession;
+                    const isAvailable = bridge.isSessionAvailable(planParsed.sessionId);
                     const pending = stateTracker.getPendingRequests(planParsed.sessionId);
                     const hasRequest = pending.some((r) => r.id === planParsed.requestId);
 
-                    if (!isActive || !hasRequest) {
+                    if (!isAvailable || !hasRequest) {
                         await interaction.update({
-                            content: `⏰ (${!isActive ? 'Session no longer active' : 'Request expired'}) ${interaction.message.content}`,
+                            content: `⏰ (${!isAvailable ? 'Session no longer active' : 'Request expired'}) ${interaction.message.content}`,
                             components: [],
                         });
                         return;
@@ -352,8 +349,8 @@ async function main(): Promise<void> {
             try {
                 const { sessionId, requestId, action } = parsed;
 
-                // Validate session is still active
-                if (sessionId !== bridge.activeSession) {
+                // Validate session is still available
+                if (!bridge.isSessionAvailable(sessionId)) {
                     await interaction.editReply({
                         content: `⏰ (Session no longer active) ${interaction.message.content}`,
                         components: [],

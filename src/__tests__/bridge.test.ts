@@ -183,6 +183,16 @@ describe('Bridge', () => {
         });
     });
 
+    describe('isSessionAvailable', () => {
+        it('returns true when session has encryption key registered', () => {
+            expect(bridge.isSessionAvailable('sess-1')).toBe(true);
+        });
+
+        it('returns false when session has no key', () => {
+            expect(bridge.isSessionAvailable('unknown-sess')).toBe(false);
+        });
+    });
+
     describe('start', () => {
         it('loads active sessions and registers keys', async () => {
             const { listActiveSessions } = await import('../vendor/api.js');
@@ -540,7 +550,7 @@ describe('Bridge', () => {
         it('sends user message with /compact text', async () => {
             bridge.setActiveSession('sess-1');
             const sendSpy = vi.spyOn(bridge, 'sendMessage').mockResolvedValue();
-            await bridge.compactSession('msg-123', 'channel-456');
+            await bridge.compactSession('sess-1', 'msg-123');
             expect(sendSpy).toHaveBeenCalledWith('/compact', 'sess-1');
         });
     });
@@ -899,18 +909,6 @@ describe('Bridge', () => {
             expect(discord.reactToMessage).not.toHaveBeenCalled();
         });
 
-        it('clears state on session switch', async () => {
-            await bridge.start();
-            bridge.setActiveSession('sess-1');
-            bridge.setLastUserMessageId('msg-u1');
-            sendEphemeral('sess-1', true);
-            vi.clearAllMocks();
-            bridge.setActiveSession('sess-2');
-            expect(discord.removeReaction).toHaveBeenCalledWith('msg-u1', '🤔');
-            vi.advanceTimersByTime(16_000);
-            expect(discord.sendTyping).not.toHaveBeenCalled();
-        });
-
         it('stops typing on permission request', async () => {
             await bridge.start();
             bridge.setActiveSession('sess-1');
@@ -933,11 +931,11 @@ describe('Bridge', () => {
             expect(discord.sendTyping).not.toHaveBeenCalled();
         });
 
-        it('ignores ephemeral for non-active session', async () => {
+        it('processes ephemeral for any session with registered key (not just active)', async () => {
             await bridge.start();
             bridge.setActiveSession('sess-1');
             sendEphemeral('sess-other', true);
-            expect(discord.sendTyping).not.toHaveBeenCalled();
+            expect(discord.sendTyping).toHaveBeenCalled();
         });
 
         it('deduplicates same thinking state', async () => {
@@ -1109,13 +1107,14 @@ describe('Bridge', () => {
             expect(discord.pinMessage).toHaveBeenCalled();
         });
 
-        it('does not process TodoWrite for non-active session', async () => {
+        it('processes TodoWrite for any session with registered key', async () => {
             bridge.setActiveSession('sess-1');
             sendToolCallStart('sess-other', 'TodoWrite', {
                 todos: [{ id: '1', content: 'Task', status: 'pending' }],
             });
             await vi.advanceTimersByTimeAsync(0);
-            expect(discord.pinMessage).not.toHaveBeenCalled();
+            expect(discord.send).toHaveBeenCalledWith(expect.stringContaining('📋 Tasks'));
+            expect(discord.pinMessage).toHaveBeenCalled();
         });
 
         it('ignores tool-call-start for non-TodoWrite tools', async () => {

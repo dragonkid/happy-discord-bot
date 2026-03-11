@@ -304,23 +304,23 @@ describe('commands', () => {
             expect(bridge.archiveSession).toHaveBeenCalledWith('explicit-sess');
         });
 
-        it('/compact in a thread switches active session then compacts', async () => {
+        it('/compact in a thread resolves thread session and compacts it', async () => {
             const bridge = makeMockBridge();
             Object.defineProperty(bridge, 'activeSession', { value: 'active-sess', writable: true });
             vi.mocked(bridge.getSessionByThread).mockReturnValue('thread-sess');
             const interaction = mockInteraction('compact', {}, 'thread-1');
             await handleCommand(interaction as any, bridge);
-            expect(bridge.setActiveSession).toHaveBeenCalledWith('thread-sess');
-            expect(bridge.compactSession).toHaveBeenCalled();
+            expect(bridge.setActiveSession).not.toHaveBeenCalled();
+            expect(bridge.compactSession).toHaveBeenCalledWith('thread-sess', 'msg-123');
         });
 
-        it('/mode in a thread switches to thread session', async () => {
+        it('/mode in a thread sets mode without switching active session', async () => {
             const bridge = makeMockBridge();
             Object.defineProperty(bridge, 'activeSession', { value: 'active-sess', writable: true });
             vi.mocked(bridge.getSessionByThread).mockReturnValue('thread-sess');
             const interaction = mockInteraction('mode', { mode: 'acceptEdits' }, 'thread-1');
             await handleCommand(interaction as any, bridge);
-            expect(bridge.setActiveSession).toHaveBeenCalledWith('thread-sess');
+            expect(bridge.setActiveSession).not.toHaveBeenCalled();
             expect(bridge.permissions.setMode).toHaveBeenCalledWith('acceptEdits');
         });
 

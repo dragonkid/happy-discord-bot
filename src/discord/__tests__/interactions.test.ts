@@ -17,6 +17,7 @@ function makeMockInteraction(overrides: Partial<ButtonInteraction> = {}): Button
 function makeMockBridge(activeSession: string | null = 'sess-1'): Bridge {
     return {
         activeSession,
+        isSessionAvailable: vi.fn().mockReturnValue(true),
         approvePermission: vi.fn().mockResolvedValue(undefined),
         denyPermission: vi.fn().mockResolvedValue(undefined),
         permissions: {
@@ -51,7 +52,7 @@ describe('handleExitPlanButton', () => {
     });
 
     it('shows session no longer active when session changed', async () => {
-        bridge = makeMockBridge('other-sess');
+        vi.mocked(bridge.isSessionAvailable).mockReturnValue(false);
         const parsed: ParsedExitPlanButtonId = { sessionId: 'sess-1', requestId: 'req-plan', action: 'approve' };
 
         await handleExitPlanButton(interaction, parsed, bridge, stateTracker);

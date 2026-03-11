@@ -132,11 +132,6 @@ export async function handleCommand(
 async function handleSessions(interaction: ChatInputCommandInteraction, bridge: Bridge): Promise<void> {
     await interaction.deferReply();
 
-    const threadSession = bridge.getSessionByThread(interaction.channelId);
-    if (threadSession && bridge.activeSession !== threadSession) {
-        bridge.setActiveSession(threadSession);
-    }
-
     const sessions = await bridge.listAllSessions();
 
     if (sessions.length === 0) {
@@ -195,12 +190,8 @@ async function handleCompact(interaction: ChatInputCommandInteraction, bridge: B
     await interaction.deferReply();
     try {
         const sessionId = resolveSessionFromContext(interaction, bridge);
-        if (bridge.activeSession !== sessionId) {
-            bridge.setActiveSession(sessionId);
-            bridge.persistModes();
-        }
         const reply = await interaction.editReply('Compacting session...');
-        await bridge.compactSession(reply.id, interaction.channelId);
+        await bridge.compactSession(sessionId, reply.id);
     } catch (err) {
         const detail = err instanceof Error ? err.message : 'Unknown error';
         await interaction.editReply(`Failed to compact: ${detail}`);
@@ -210,11 +201,6 @@ async function handleCompact(interaction: ChatInputCommandInteraction, bridge: B
 async function handleMode(interaction: ChatInputCommandInteraction, bridge: Bridge): Promise<void> {
     const modeValue = interaction.options.getString('mode', true) as PermissionMode;
     await interaction.deferReply();
-
-    const threadSession = bridge.getSessionByThread(interaction.channelId);
-    if (threadSession && bridge.activeSession !== threadSession) {
-        bridge.setActiveSession(threadSession);
-    }
 
     bridge.permissions.setMode(modeValue);
     bridge.persistModes();
@@ -339,11 +325,6 @@ function todayMidnight(): number {
 async function handleSkills(interaction: ChatInputCommandInteraction, bridge: Bridge): Promise<void> {
     await interaction.deferReply();
 
-    const threadSession = bridge.getSessionByThread(interaction.channelId);
-    if (threadSession && bridge.activeSession !== threadSession) {
-        bridge.setActiveSession(threadSession);
-    }
-
     const name = interaction.options.getString('name');
     const args = interaction.options.getString('args');
 
@@ -398,13 +379,14 @@ async function handleSkills(interaction: ChatInputCommandInteraction, bridge: Br
         await interaction.editReply('Invalid skill name.');
         return;
     }
-    if (!bridge.activeSession) {
+    try {
+        const sessionId = resolveSessionFromContext(interaction, bridge);
+        const message = args ? `/${name} ${args}` : `/${name}`;
+        await bridge.sendMessage(message, sessionId);
+        await interaction.editReply(`Sent \`${message}\``);
+    } catch {
         await interaction.editReply('No active session. Use /sessions to connect.');
-        return;
     }
-    const message = args ? `/${name} ${args}` : `/${name}`;
-    await bridge.sendMessage(message, bridge.activeSession);
-    await interaction.editReply(`Sent \`${message}\``);
 }
 
 // --- /skills autocomplete ---

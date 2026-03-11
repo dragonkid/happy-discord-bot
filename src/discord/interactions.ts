@@ -12,7 +12,7 @@ export async function handleAskButton(
     bridge: Bridge,
     stateTracker: StateTracker,
 ): Promise<void> {
-    if (askParsed.sessionId !== bridge.activeSession) {
+    if (!bridge.isSessionAvailable(askParsed.sessionId)) {
         await interaction.editReply({
             content: `⏰ (Session no longer active) ${interaction.message.content}`,
             components: [],
@@ -113,7 +113,7 @@ export async function handleExitPlanButton(
     bridge: Bridge,
     stateTracker: StateTracker,
 ): Promise<void> {
-    if (parsed.sessionId !== bridge.activeSession) {
+    if (!bridge.isSessionAvailable(parsed.sessionId)) {
         await interaction.editReply({
             content: `⏰ (Session no longer active) ${interaction.message.content}`,
             components: [],

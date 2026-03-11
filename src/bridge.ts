@@ -46,14 +46,11 @@ export class Bridge {
     private store: Store | null = null;
     private disconnectTimer: ReturnType<typeof setTimeout> | null = null;
     private initialConnectDone = false;
-    private typingInterval: ReturnType<typeof setInterval> | null = null;
-    private thinkingEmoji = false;
-    private toolUseEmoji = false;
-    private lastUserMsgId: string | null = null;
-    private lastUserMsgThreadId: string | null = null;
-    private isThinking = false;
-    private todoMessageId: string | null = null;
-    private pendingCompactReply: { messageId: string; threadId?: string } | null = null;
+    // Per-session ephemeral state
+    private readonly sessionLastMsg = new Map<string, { msgId: string; threadId?: string }>();
+    private readonly sessionTyping = new Map<string, { isThinking: boolean; interval: ReturnType<typeof setInterval> | null; thinkingEmoji: boolean; toolUseEmoji: boolean }>();
+    private readonly sessionTodoMsgId = new Map<string, string>();
+    private readonly sessionCompactReply = new Map<string, { messageId: string; threadId?: string }>();
 
     constructor(
         happy: HappyClient,
@@ -70,13 +67,6 @@ export class Bridge {
     }
 
     setActiveSession(sessionId: string): void {
-        this.stopTypingLoop();
-        this.updateThinkingEmoji(false);
-        this.updateToolUseEmoji(false);
-        this.isThinking = false;
-        this.lastUserMsgId = null;
-        this.lastUserMsgThreadId = null;
-        this.todoMessageId = null;
         if (this.activeSessionId) {
             this.permissionCache.saveSession(this.activeSessionId);
         }
@@ -87,6 +77,10 @@ export class Bridge {
 
     get activeSession(): string | null {
         return this.activeSessionId;
+    }
+
+    isSessionAvailable(sessionId: string): boolean {
+        return this.happy.getSessionEncryption(sessionId) !== undefined;
     }
 
     get happyClient(): HappyClient {
@@ -111,24 +105,26 @@ export class Bridge {
         });
     }
 
-    setLastUserMessageId(messageId: string, threadId?: string): void {
-        this.lastUserMsgId = messageId;
-        this.lastUserMsgThreadId = threadId ?? null;
+    setLastUserMessageId(messageId: string, threadId?: string, sessionId?: string): void {
+        const sid = sessionId ?? this.activeSessionId;
+        if (sid) {
+            this.sessionLastMsg.set(sid, { msgId: messageId, threadId });
+        }
     }
 
     /** Handle ephemeral activity update (session-alive keepalive). */
     handleEphemeralActivity(sessionId: string, thinking: boolean): void {
-        if (sessionId !== this.activeSessionId) return;
-        if (thinking === this.isThinking) return;
+        const state = this.getSessionTypingState(sessionId);
+        if (thinking === state.isThinking) return;
 
         if (thinking) {
-            this.startTypingLoop();
-            this.updateThinkingEmoji(true);
+            this.startTypingLoop(sessionId);
+            this.updateThinkingEmoji(sessionId, true);
         } else {
-            this.stopTypingLoop();
-            this.updateThinkingEmoji(false);
+            this.stopTypingLoop(sessionId);
+            this.updateThinkingEmoji(sessionId, false);
         }
-        this.isThinking = thinking;
+        state.isThinking = thinking;
     }
 
     async sendMessage(text: string, sessionId: string): Promise<void> {
@@ -242,10 +238,11 @@ export class Bridge {
         });
 
         this.stateTracker.on('permission-request', (sessionId, request) => {
-            this.stopTypingLoop();
-            this.updateThinkingEmoji(false);
-            this.updateToolUseEmoji(false);
-            this.isThinking = false;
+            this.stopTypingLoop(sessionId);
+            this.updateThinkingEmoji(sessionId, false);
+            this.updateToolUseEmoji(sessionId, false);
+            const state = this.getSessionTypingState(sessionId);
+            state.isThinking = false;
             this.handlePermissionRequest(sessionId, request).catch((err) => {
                 console.error('[Bridge] Error handling permission request:', err);
             });
@@ -483,12 +480,10 @@ export class Bridge {
         await this.happy.sessionRPC(fullId, 'abort', {});
     }
 
-    async compactSession(messageId: string, _channelId: string): Promise<void> {
-        const sessionId = this.activeSessionId;
-        if (!sessionId) return;
+    async compactSession(sessionId: string, messageId: string): Promise<void> {
         await this.sendMessage('/compact', sessionId);
         const threadId = this.getThreadId(sessionId);
-        this.pendingCompactReply = { messageId, threadId: threadId || undefined };
+        this.sessionCompactReply.set(sessionId, { messageId, threadId: threadId || undefined });
     }
 
     async approvePermission(
@@ -604,9 +599,18 @@ export class Bridge {
         }
     }
 
-    private startTypingLoop(): void {
-        this.stopTypingLoop();
-        const threadId = this.activeSessionId ? this.getThreadId(this.activeSessionId) : null;
+    private getSessionTypingState(sessionId: string) {
+        let state = this.sessionTyping.get(sessionId);
+        if (!state) {
+            state = { isThinking: false, interval: null, thinkingEmoji: false, toolUseEmoji: false };
+            this.sessionTyping.set(sessionId, state);
+        }
+        return state;
+    }
+
+    private startTypingLoop(sessionId: string): void {
+        this.stopTypingLoop(sessionId);
+        const threadId = this.getThreadId(sessionId);
         const doTyping = () => {
             if (threadId) {
                 this.discord.sendTypingInThread(threadId).catch((err) =>
@@ -617,62 +621,68 @@ export class Bridge {
             }
         };
         doTyping();
-        this.typingInterval = setInterval(doTyping, TYPING_INTERVAL_MS);
+        const state = this.getSessionTypingState(sessionId);
+        state.interval = setInterval(doTyping, TYPING_INTERVAL_MS);
     }
 
-    private stopTypingLoop(): void {
-        if (this.typingInterval) {
-            clearInterval(this.typingInterval);
-            this.typingInterval = null;
+    private stopTypingLoop(sessionId: string): void {
+        const state = this.sessionTyping.get(sessionId);
+        if (state?.interval) {
+            clearInterval(state.interval);
+            state.interval = null;
         }
     }
 
-    private updateThinkingEmoji(thinking: boolean): void {
-        if (thinking === this.thinkingEmoji) return;
+    private updateThinkingEmoji(sessionId: string, thinking: boolean): void {
+        const state = this.getSessionTypingState(sessionId);
+        if (thinking === state.thinkingEmoji) return;
 
-        if (this.lastUserMsgId && this.thinkingEmoji) {
-            if (this.lastUserMsgThreadId) {
-                this.discord.removeReactionInThread(this.lastUserMsgThreadId, this.lastUserMsgId, THINKING_EMOJI).catch((err) =>
+        const lastMsg = this.sessionLastMsg.get(sessionId);
+        if (lastMsg && state.thinkingEmoji) {
+            if (lastMsg.threadId) {
+                this.discord.removeReactionInThread(lastMsg.threadId, lastMsg.msgId, THINKING_EMOJI).catch((err) =>
                     console.error('[Bridge] removeReaction failed:', err));
             } else {
-                this.discord.removeReaction(this.lastUserMsgId, THINKING_EMOJI).catch((err) =>
+                this.discord.removeReaction(lastMsg.msgId, THINKING_EMOJI).catch((err) =>
                     console.error('[Bridge] removeReaction failed:', err));
             }
         }
-        if (this.lastUserMsgId && thinking) {
-            if (this.lastUserMsgThreadId) {
-                this.discord.reactInThread(this.lastUserMsgThreadId, this.lastUserMsgId, THINKING_EMOJI).catch((err) =>
+        if (lastMsg && thinking) {
+            if (lastMsg.threadId) {
+                this.discord.reactInThread(lastMsg.threadId, lastMsg.msgId, THINKING_EMOJI).catch((err) =>
                     console.error('[Bridge] reactToMessage failed:', err));
             } else {
-                this.discord.reactToMessage(this.lastUserMsgId, THINKING_EMOJI).catch((err) =>
+                this.discord.reactToMessage(lastMsg.msgId, THINKING_EMOJI).catch((err) =>
                     console.error('[Bridge] reactToMessage failed:', err));
             }
         }
-        this.thinkingEmoji = thinking;
+        state.thinkingEmoji = thinking;
     }
 
-    private updateToolUseEmoji(active: boolean): void {
-        if (active === this.toolUseEmoji) return;
+    private updateToolUseEmoji(sessionId: string, active: boolean): void {
+        const state = this.getSessionTypingState(sessionId);
+        if (active === state.toolUseEmoji) return;
 
-        if (this.lastUserMsgId && this.toolUseEmoji) {
-            if (this.lastUserMsgThreadId) {
-                this.discord.removeReactionInThread(this.lastUserMsgThreadId, this.lastUserMsgId, TOOL_USE_EMOJI).catch((err) =>
+        const lastMsg = this.sessionLastMsg.get(sessionId);
+        if (lastMsg && state.toolUseEmoji) {
+            if (lastMsg.threadId) {
+                this.discord.removeReactionInThread(lastMsg.threadId, lastMsg.msgId, TOOL_USE_EMOJI).catch((err) =>
                     console.error('[Bridge] removeReaction failed:', err));
             } else {
-                this.discord.removeReaction(this.lastUserMsgId, TOOL_USE_EMOJI).catch((err) =>
+                this.discord.removeReaction(lastMsg.msgId, TOOL_USE_EMOJI).catch((err) =>
                     console.error('[Bridge] removeReaction failed:', err));
             }
         }
-        if (this.lastUserMsgId && active) {
-            if (this.lastUserMsgThreadId) {
-                this.discord.reactInThread(this.lastUserMsgThreadId, this.lastUserMsgId, TOOL_USE_EMOJI).catch((err) =>
+        if (lastMsg && active) {
+            if (lastMsg.threadId) {
+                this.discord.reactInThread(lastMsg.threadId, lastMsg.msgId, TOOL_USE_EMOJI).catch((err) =>
                     console.error('[Bridge] reactToMessage failed:', err));
             } else {
-                this.discord.reactToMessage(this.lastUserMsgId, TOOL_USE_EMOJI).catch((err) =>
+                this.discord.reactToMessage(lastMsg.msgId, TOOL_USE_EMOJI).catch((err) =>
                     console.error('[Bridge] reactToMessage failed:', err));
             }
         }
-        this.toolUseEmoji = active;
+        state.toolUseEmoji = active;
     }
 
     private async sendToSession(sessionId: string, text: string): Promise<{ id: string }[]> {
@@ -708,8 +718,6 @@ export class Bridge {
         sessionId: string,
         encryptedState: { version: number; value: string },
     ): Promise<void> {
-        if (sessionId !== this.activeSessionId) return;
-
         const enc = this.happy.getSessionEncryption(sessionId);
         if (!enc) {
             console.warn(`[Bridge] No key for session ${sessionId}, skipping state update`);
@@ -856,7 +864,7 @@ export class Bridge {
             } else if (agentContent?.type === 'event') {
                 const eventData = agentContent.data as { type?: string; message?: string };
                 if (eventData?.type === 'message' && eventData.message === 'Compaction completed') {
-                    await this.handleCompactionComplete();
+                    await this.handleCompactionComplete(sessionId);
                 }
             } else {
                 console.log(`[Bridge] Unhandled agent message type: ${agentContent?.type ?? 'unknown'}`,
@@ -881,31 +889,31 @@ export class Bridge {
 
             // Tool use emoji tracking + TodoWrite interception
             if (envelope.ev?.t === 'tool-call-start') {
-                this.updateToolUseEmoji(true);
+                this.updateToolUseEmoji(sessionId, true);
 
-                if (envelope.ev.name === 'TodoWrite' && sessionId === this.activeSessionId) {
+                if (envelope.ev.name === 'TodoWrite') {
                     const todos = Array.isArray(envelope.ev.args?.todos) ? envelope.ev.args.todos as TodoItem[] : [];
                     if (todos.length > 0) {
                         await this.handleTodoWrite(sessionId, todos);
                     }
                 }
             } else if (envelope.ev?.t === 'tool-call-end') {
-                this.updateToolUseEmoji(false);
+                this.updateToolUseEmoji(sessionId, false);
             }
         }
     }
 
-    private async handleCompactionComplete(): Promise<void> {
-        if (!this.pendingCompactReply) return;
+    private async handleCompactionComplete(sessionId: string): Promise<void> {
+        const pending = this.sessionCompactReply.get(sessionId);
+        if (!pending) return;
 
-        const { messageId, threadId } = this.pendingCompactReply;
-        this.pendingCompactReply = null;
+        this.sessionCompactReply.delete(sessionId);
 
         try {
-            if (threadId) {
-                await this.discord.editMessageInThread(threadId, messageId, '✅ Compaction complete');
+            if (pending.threadId) {
+                await this.discord.editMessageInThread(pending.threadId, pending.messageId, '✅ Compaction complete');
             } else {
-                await this.discord.editMessage(messageId, '✅ Compaction complete');
+                await this.discord.editMessage(pending.messageId, '✅ Compaction complete');
             }
         } catch (err) {
             console.error('[Bridge] Failed to update compact message:', err);
@@ -918,20 +926,21 @@ export class Bridge {
 
         const allCompleted = todos.every((t) => t.status === 'completed');
         const threadId = this.getThreadId(sessionId);
+        const existingMsgId = this.sessionTodoMsgId.get(sessionId);
 
-        if (this.todoMessageId) {
+        if (existingMsgId) {
             if (threadId) {
-                await this.discord.editMessageInThread(threadId, this.todoMessageId, text);
+                await this.discord.editMessageInThread(threadId, existingMsgId, text);
             } else {
-                await this.discord.editMessage(this.todoMessageId, text);
+                await this.discord.editMessage(existingMsgId, text);
             }
             if (allCompleted) {
                 if (threadId) {
-                    await this.discord.unpinMessageInThread(threadId, this.todoMessageId);
+                    await this.discord.unpinMessageInThread(threadId, existingMsgId);
                 } else {
-                    await this.discord.unpinMessage(this.todoMessageId);
+                    await this.discord.unpinMessage(existingMsgId);
                 }
-                this.todoMessageId = null;
+                this.sessionTodoMsgId.delete(sessionId);
             }
         } else {
             const messages = await this.sendToSession(sessionId, text);
@@ -940,7 +949,7 @@ export class Bridge {
                 if (allCompleted) {
                     // Already all done — show once, don't pin
                 } else {
-                    this.todoMessageId = msg.id;
+                    this.sessionTodoMsgId.set(sessionId, msg.id);
                     if (threadId) {
                         await this.discord.pinMessageInThread(threadId, msg.id);
                     } else {

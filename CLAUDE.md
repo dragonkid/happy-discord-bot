@@ -29,7 +29,7 @@ Main Channel (status summaries only)
 
 - **Thread creation:** Auto-created on bot connect for sessions without threads, and on `/new` session creation. Anchor message sent to main channel, thread created on it.
 - **Thread naming:** `{directoryName} @ {host}` from session metadata (e.g. `happy-discord-bot @ macbook`).
-- **Message routing:** Messages in a thread auto-route to the bound session and auto-switch `activeSession`. Main channel messages fallback to active session.
+- **Message routing:** Messages in a thread auto-route to the bound session (no `activeSession` switch). Main channel messages fallback to active session. `activeSession` only changed via `/sessions` button or bot startup.
 - **Command resolution:** `/stop`, `/compact`, `/mode`, `/archive`, `/delete` in a thread resolve to that thread's session via `resolveSessionFromContext()`. Explicit `session` parameter overrides. `/usage` in a thread auto-scopes to that session via `getSessionByThread()`.
 - **Thread lifecycle:** `/archive` archives thread, `/delete` deletes thread + removes mapping.
 - **Persistence:** Thread mapping (`sessionId -> threadId`) saved in `state.json` under `threads` field, restored on bot restart.
@@ -112,7 +112,7 @@ Intercepts `tool-call-start` events for `TodoWrite` in session protocol messages
 - **First TodoWrite** → send new message + pin
 - **Subsequent TodoWrite** → edit same message (keeps pin)
 - **All completed** → final edit + unpin
-- Only processes TodoWrite from the active session
+- Only processes TodoWrite from sessions with registered encryption keys
 - State (`todoMessageId`) resets on session switch
 
 ### Direct Message Forwarding
@@ -154,7 +154,7 @@ When a Discord message includes attachments (images, PDFs, code files, etc.), th
 
 ### /skills Command
 - `/skills` — List all available skills/commands (personal + project + plugins).
-- `/skills [name]` — Invoke a skill by sending `/<name>` to the active session.
+- `/skills [name]` — Invoke a skill by sending `/<name>` to the thread's session (or active session in main channel).
 - `/skills [name] [args]` — Invoke with arguments: `/<name> <args>`.
 - `/skills reload` — Re-scan skills from disk (personal, plugins, project directories).
 - **Autocomplete:** Searches by name and description with relevance ranking (exact > prefix > contains).
@@ -222,7 +222,7 @@ npm run test:e2e         # E2E smoke tests (requires .env.e2e, real services)
 ## Testing
 
 - Framework: Vitest
-- 14 test suites, 416 tests
+- 14 test suites, 426 tests
 - Test files: `src/**/__tests__/*.test.ts`
 - All Happy/Discord dependencies mocked (no real connections needed)
 
