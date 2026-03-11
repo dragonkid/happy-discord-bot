@@ -27,6 +27,9 @@ describe('Smoke: Session Lifecycle E2E', () => {
 
     afterAll(async () => {
         await bot.stop();
+        for (const thread of discord.getCreatedThreads()) {
+            await discord.deleteThread(thread.id).catch(() => {});
+        }
         discord.destroy();
         happy.close();
         if (sessionId) {

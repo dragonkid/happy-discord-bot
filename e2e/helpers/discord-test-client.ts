@@ -258,7 +258,6 @@ export class DiscordTestClient {
         this.typingEvents = [];
         this.reactionEvents = [];
         this.messageUpdateEvents = [];
-        this.createdThreads = [];
     }
 
     get userId(): string {

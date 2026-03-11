@@ -47,6 +47,9 @@ describe('Smoke: Tool Call Signals', () => {
 
     afterAll(async () => {
         await bot.stop();
+        for (const thread of discord.getCreatedThreads()) {
+            await discord.deleteThread(thread.id).catch(() => {});
+        }
         discord.destroy();
         if (spawnedSessionId) {
             await daemon.stopSession(spawnedSessionId).catch(() => {});

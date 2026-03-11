@@ -18,9 +18,10 @@ export class StateFile {
     /**
      * Write state.json with the given state.
      */
-    async write(state: BotState): Promise<void> {
+    async write(state: Partial<BotState>): Promise<void> {
+        const full: BotState = { sessions: {}, threads: {}, ...state };
         await mkdir(this.dir, { recursive: true });
-        await writeFile(this.filePath, JSON.stringify(state, null, 2) + '\n');
+        await writeFile(this.filePath, JSON.stringify(full, null, 2) + '\n');
     }
 
     /**
@@ -31,7 +32,7 @@ export class StateFile {
             const raw = await readFile(this.filePath, 'utf-8');
             return JSON.parse(raw) as BotState;
         } catch {
-            return { sessions: {} };
+            return { sessions: {}, threads: {} };
         }
     }
 
