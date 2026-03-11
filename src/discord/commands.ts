@@ -422,10 +422,7 @@ export async function handleSkillsAutocomplete(
     const reloadOption = { name: '🔄 reload — Re-scan skills from disk', value: 'reload' };
     const showReload = !focused || 'reload'.includes(focused.toLowerCase());
 
-    const choices = results.map((e) => {
-        const display = `${e.name} — ${e.description || '(no description)'}`;
-        return { name: display.length > 100 ? display.slice(0, 97) + '...' : display, value: e.name };
-    });
+    const choices = results.map((e) => ({ name: e.name, value: e.name }));
 
     if (showReload) {
         choices.unshift(reloadOption);

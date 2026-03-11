@@ -153,11 +153,11 @@ describe('formatter', () => {
             expect(text.length).toBeLessThan(600);
         });
 
-        it('truncates long Edit old/new strings', () => {
-            const longStr = 'x'.repeat(300);
+        it('preserves full Edit old/new strings without truncation', () => {
+            const longStr = 'x'.repeat(600);
             const text = formatPermissionRequest('Edit', { file_path: '/f.ts', old_string: longStr, new_string: longStr });
-            // Each side truncated to 150 chars, so combined diff should be well under 600
-            expect(text.length).toBeLessThan(600);
+            // Full content preserved — both old and new strings appear in full
+            expect(text).toContain('x'.repeat(600));
         });
 
         it('handles unknown tool gracefully', () => {

@@ -105,8 +105,9 @@ export function formatPermissionRequest(toolName: string, input: unknown): strin
 
             if (!oldStr && !newStr) return header;
 
-            const diff = `- ${truncate(oldStr, 200)}\n+ ${truncate(newStr, 200)}`;
-            return `${header}\n${diffBlock(diff)}`;
+            const oldLines = oldStr.split('\n').map((l) => `- ${l}`).join('\n');
+            const newLines = newStr.split('\n').map((l) => `+ ${l}`).join('\n');
+            return `${header}\n${diffBlock(`${oldLines}\n${newLines}`)}`;
         }
 
         case 'Write': {
