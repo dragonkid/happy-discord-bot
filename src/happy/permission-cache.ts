@@ -1,5 +1,43 @@
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
 import { EDIT_TOOLS, type PermissionMode } from './types.js';
 import type { SessionPermissions } from '../store.js';
+
+interface ClaudeSettings {
+    permissions?: { allow?: string[] };
+}
+
+/**
+ * Load allow rules from Claude Code settings files (3 layers):
+ * 1. ~/.claude/settings.json (global)
+ * 2. ~/.claude/settings.local.json (global local)
+ * 3. {projectDir}/.claude/settings.local.json (project local)
+ */
+export async function loadClaudeAllowRules(projectDir?: string): Promise<string[]> {
+    const home = homedir();
+    const paths = [
+        join(home, '.claude', 'settings.json'),
+        join(home, '.claude', 'settings.local.json'),
+    ];
+    if (projectDir) {
+        paths.push(join(projectDir, '.claude', 'settings.local.json'));
+    }
+
+    const rules: string[] = [];
+    for (const p of paths) {
+        try {
+            const raw = await readFile(p, 'utf-8');
+            const parsed = JSON.parse(raw) as ClaudeSettings;
+            if (Array.isArray(parsed.permissions?.allow)) {
+                rules.push(...parsed.permissions.allow);
+            }
+        } catch {
+            // File not found or parse error — skip silently
+        }
+    }
+    return rules;
+}
 
 export class PermissionCache {
     private allowedTools = new Set<string>();
@@ -61,6 +99,46 @@ export class PermissionCache {
             allowedTools: [...this.allowedTools],
             bashLiterals: [...this.bashLiterals],
             bashPrefixes: [...this.bashPrefixes],
+        });
+    }
+
+    /**
+     * Seed a session's permission state with allow rules from Claude settings.
+     * Merges with any existing saved state (user approvals take precedence).
+     */
+    seedSessionRules(sessionId: string, allowRules: string[]): void {
+        const existing = this.sessionStates.get(sessionId) ?? {
+            mode: 'default' as PermissionMode,
+            allowedTools: [],
+            bashLiterals: [],
+            bashPrefixes: [],
+        };
+
+        // Parse allow rules into temporary sets
+        const tools = new Set(existing.allowedTools);
+        const literals = new Set(existing.bashLiterals);
+        const prefixes = new Set(existing.bashPrefixes);
+
+        for (const rule of allowRules) {
+            if (rule === 'Bash') continue;
+            const match = rule.match(/^Bash\((.+?)\)$/);
+            if (match) {
+                const command = match[1];
+                if (command.endsWith(':*')) {
+                    prefixes.add(command.slice(0, -2));
+                } else {
+                    literals.add(command);
+                }
+            } else {
+                tools.add(rule);
+            }
+        }
+
+        this.sessionStates.set(sessionId, {
+            mode: existing.mode,
+            allowedTools: [...tools],
+            bashLiterals: [...literals],
+            bashPrefixes: [...prefixes],
         });
     }
 

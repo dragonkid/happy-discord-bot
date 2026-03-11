@@ -7,6 +7,7 @@ import { encrypt, encodeBase64, decrypt, decodeBase64 } from './vendor/encryptio
 import { listActiveSessions, listSessions, deleteSession as apiDeleteSession, type DecryptedSession } from './vendor/api.js';
 import type { StateTracker } from './happy/state-tracker.js';
 import type { PermissionCache } from './happy/permission-cache.js';
+import { loadClaudeAllowRules } from './happy/permission-cache.js';
 import type { Store } from './store.js';
 import { buildPermissionButtons, buildAskButtons, buildExitPlanButtons } from './discord/buttons.js';
 import { formatPermissionRequest, formatAskUserQuestion, formatExitPlanMode, formatTodoWrite } from './discord/formatter.js';
@@ -805,6 +806,13 @@ export class Bridge {
             const meta = session.metadata as { path?: string } | null;
             if (meta?.path) {
                 this.sessionDirMap.set(session.id, meta.path);
+            }
+
+            // Seed permission cache with Claude settings allow rules
+            const projectDir = meta?.path;
+            const allowRules = await loadClaudeAllowRules(projectDir);
+            if (allowRules.length > 0) {
+                this.permissionCache.seedSessionRules(session.id, allowRules);
             }
         }
         return sessions;
