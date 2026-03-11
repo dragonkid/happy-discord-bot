@@ -45,12 +45,17 @@ describe('buttons', () => {
             expect(btnData(rows, 2).style).toBe(ButtonStyle.Danger);
         });
 
-        it('returns Yes, For This Tool, and No for non-edit tools', () => {
+        it('returns Yes, For <program>:*, and No for Bash tools', () => {
             const rows = buildPermissionButtons('sess-1', 'req-1', 'Bash', { command: 'ls' });
             expect(rows[0].components).toHaveLength(3);
             expect(btnData(rows, 0).label).toBe('Yes');
-            expect(btnData(rows, 1).label).toBe('For This Tool');
+            expect(btnData(rows, 1).label).toBe('For ls:*');
             expect(btnData(rows, 2).label).toBe('No');
+        });
+
+        it('shows For <toolName> for non-Bash non-edit tools', () => {
+            const rows = buildPermissionButtons('sess-1', 'req-1', 'WebSearch', {});
+            expect(btnData(rows, 1).label).toBe('For WebSearch');
         });
 
         it('encodes session, request, and action in button customId', () => {

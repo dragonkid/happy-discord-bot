@@ -781,6 +781,15 @@ export class Bridge {
 
         if (this.permissionCache.isAutoApproved(request.tool, request.arguments)) {
             console.log(`[Bridge] Auto-approving ${request.tool} (${request.id})`);
+
+            // Show diff/command for side-effect tools even when auto-approved
+            if (request.tool === 'Edit' || request.tool === 'Write' || request.tool === 'Bash' || request.tool === 'NotebookEdit' || request.tool === 'MultiEdit') {
+                const description = `(✅ Auto) ${formatPermissionRequest(request.tool, request.arguments)}`;
+                this.sendToSession(sessionId, description).catch((err) => {
+                    console.error('[Bridge] Failed to send auto-approve notification:', err);
+                });
+            }
+
             await this.approvePermission(sessionId, request.id);
             return;
         }

@@ -32,7 +32,7 @@ export function buildPermissionButtons(
     sessionId: string,
     requestId: string,
     toolName: string,
-    _toolInput: unknown,
+    toolInput: unknown,
 ): ActionRowBuilder<ButtonBuilder>[] {
     const yes = new ButtonBuilder()
         .setCustomId(buttonId(sessionId, requestId, 'yes'))
@@ -46,6 +46,12 @@ export function buildPermissionButtons(
 
     const isEditTool = EDIT_TOOLS.has(toolName);
 
+    let forToolLabel = `For ${toolName}`;
+    if (toolName === 'Bash' && toolInput && typeof toolInput === 'object' && 'command' in toolInput) {
+        const program = ((toolInput as { command: string }).command).trimStart().split(/\s/)[0];
+        if (program) forToolLabel = `For ${program}:*`;
+    }
+
     const middle = isEditTool
         ? new ButtonBuilder()
               .setCustomId(buttonId(sessionId, requestId, 'allow-edits'))
@@ -53,7 +59,7 @@ export function buildPermissionButtons(
               .setStyle(ButtonStyle.Primary)
         : new ButtonBuilder()
               .setCustomId(buttonId(sessionId, requestId, 'for-tool'))
-              .setLabel('For This Tool')
+              .setLabel(forToolLabel)
               .setStyle(ButtonStyle.Primary);
 
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(yes, middle, no);
