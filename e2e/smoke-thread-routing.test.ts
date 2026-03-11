@@ -24,6 +24,8 @@ let sessionIdA: string | null = null;
 let sessionIdB: string | null = null;
 let sessionDirA: string;
 let sessionDirB: string;
+let threadA: { id: string; name: string } | undefined;
+let threadB: { id: string; name: string } | undefined;
 
 describe('Smoke: Thread Message Routing (multi-session)', () => {
     beforeAll(async () => {
@@ -50,9 +52,9 @@ describe('Smoke: Thread Message Routing (multi-session)', () => {
             BOT_STATE_DIR: stateFile.stateDir,
         });
 
-        // Wait for both threads to be created
-        await discord.waitForThread((t) => t.name.includes(sessionDirA), 20_000);
-        await discord.waitForThread((t) => t.name.includes(sessionDirB), 20_000);
+        // Wait for both threads to be created and save references before any clearMessages()
+        threadA = await discord.waitForThread((t) => t.name.includes(sessionDirA), 20_000);
+        threadB = await discord.waitForThread((t) => t.name.includes(sessionDirB), 20_000);
 
         // Let sessions settle
         await new Promise((r) => setTimeout(r, 3_000));
@@ -70,7 +72,6 @@ describe('Smoke: Thread Message Routing (multi-session)', () => {
     });
 
     it('routes reply to thread A when message sent in thread A', async () => {
-        const threadA = discord.findThread((t) => t.name.includes(sessionDirA));
         expect(threadA).toBeDefined();
 
         discord.clearMessages();
@@ -87,7 +88,6 @@ describe('Smoke: Thread Message Routing (multi-session)', () => {
     });
 
     it('routes reply to thread B when message sent in thread B', async () => {
-        const threadB = discord.findThread((t) => t.name.includes(sessionDirB));
         expect(threadB).toBeDefined();
 
         discord.clearMessages();
@@ -104,8 +104,6 @@ describe('Smoke: Thread Message Routing (multi-session)', () => {
     });
 
     it('does not cross-contaminate: reply to A stays in A while B is active', async () => {
-        const threadA = discord.findThread((t) => t.name.includes(sessionDirA));
-        const threadB = discord.findThread((t) => t.name.includes(sessionDirB));
         expect(threadA).toBeDefined();
         expect(threadB).toBeDefined();
 
