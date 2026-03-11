@@ -23,6 +23,7 @@ const TOOL_USE_EMOJI = '🔧';
 const ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024; // 10 MB
 const ATTACHMENT_DIR = '.attachments';
 const IMAGE_CONTENT_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
+const RESPONSE_TIMEOUT_MS = 15_000;
 
 export interface DiscordAttachment {
     url: string;
@@ -51,6 +52,7 @@ export class Bridge {
     private readonly sessionTyping = new Map<string, { isThinking: boolean; interval: ReturnType<typeof setInterval> | null; thinkingEmoji: boolean; toolUseEmoji: boolean }>();
     private readonly sessionTodoMsgId = new Map<string, string>();
     private readonly sessionCompactReply = new Map<string, { messageId: string; threadId?: string }>();
+    private readonly pendingResponseTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
     constructor(
         happy: HappyClient,
@@ -114,6 +116,7 @@ export class Bridge {
 
     /** Handle ephemeral activity update (session-alive keepalive). */
     handleEphemeralActivity(sessionId: string, thinking: boolean): void {
+        this.clearResponseTimer(sessionId);
         const state = this.getSessionTypingState(sessionId);
         if (thinking === state.isThinking) return;
 
@@ -161,6 +164,10 @@ export class Bridge {
         }
 
         console.log(`[Bridge] Message sent to session ${sessionId.slice(0, 8)} (localId: ${localId.slice(0, 8)})`);
+
+        // Start response timeout — if no turn-start/text arrives within RESPONSE_TIMEOUT_MS,
+        // warn user that session may be inactive (e.g. archived)
+        this.startResponseTimer(sessionId);
     }
 
     async uploadAttachments(attachments: readonly DiscordAttachment[]): Promise<string[]> {
@@ -846,6 +853,7 @@ export class Bridge {
 
         // Handle agent output (legacy format)
         if (record.role === 'agent') {
+            this.clearResponseTimer(sessionId);
             const agentContent = record.content as { type?: string; data?: unknown };
             if (agentContent?.type === 'output') {
                 const outputData = agentContent.data as {
@@ -874,6 +882,7 @@ export class Bridge {
 
         // Handle session protocol messages (new format)
         if (record.role === 'session') {
+            this.clearResponseTimer(sessionId);
             const envelope = record.content as {
                 role?: string;
                 ev?: { t?: string; text?: string; thinking?: boolean; name?: string; args?: Record<string, unknown> };
@@ -917,6 +926,26 @@ export class Bridge {
             }
         } catch (err) {
             console.error('[Bridge] Failed to update compact message:', err);
+        }
+    }
+
+    private startResponseTimer(sessionId: string): void {
+        this.clearResponseTimer(sessionId);
+        const timer = setTimeout(() => {
+            this.pendingResponseTimers.delete(sessionId);
+            console.warn(`[Bridge] No response from session ${sessionId.slice(0, 8)} within ${RESPONSE_TIMEOUT_MS / 1000}s`);
+            this.sendToSession(sessionId, '⚠️ No response from session — it may be archived or inactive.').catch((err) => {
+                console.error('[Bridge] Failed to send timeout warning:', err);
+            });
+        }, RESPONSE_TIMEOUT_MS);
+        this.pendingResponseTimers.set(sessionId, timer);
+    }
+
+    private clearResponseTimer(sessionId: string): void {
+        const timer = this.pendingResponseTimers.get(sessionId);
+        if (timer) {
+            clearTimeout(timer);
+            this.pendingResponseTimers.delete(sessionId);
         }
     }
 
