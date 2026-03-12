@@ -1,10 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { existsSync } from 'node:fs';
 
-vi.mock('node:fs', async (importOriginal) => {
-    const actual = await importOriginal<typeof import('node:fs')>();
-    return { ...actual, existsSync: vi.fn() };
-});
+vi.mock('node:fs', () => ({
+    existsSync: vi.fn(),
+}));
 
 const { resolveEnvFile } = await import('../config.js');
 

@@ -1,10 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
 import { execFileSync } from 'node:child_process';
 
-vi.mock('node:child_process', async (importOriginal) => {
-    const actual = await importOriginal<typeof import('node:child_process')>();
-    return { ...actual, execFileSync: vi.fn(), spawn: vi.fn() };
-});
+vi.mock('node:child_process', () => ({
+    execFileSync: vi.fn(),
+    spawn: vi.fn(),
+}));
 
 const { checkForUpdate } = await import('../update.js');
 

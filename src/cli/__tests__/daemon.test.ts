@@ -1,16 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as fs from 'node:fs';
 
-vi.mock('node:fs', async (importOriginal) => {
-    const actual = await importOriginal<typeof import('node:fs')>();
-    return {
-        ...actual,
-        readFileSync: vi.fn(),
-        writeFileSync: vi.fn(),
-        mkdirSync: vi.fn(),
-        unlinkSync: vi.fn(),
-    };
-});
+vi.mock('node:fs', () => ({
+    readFileSync: vi.fn(),
+    writeFileSync: vi.fn(),
+    mkdirSync: vi.fn(),
+    unlinkSync: vi.fn(),
+}));
 
 const { readDaemonState, writeDaemonState, isDaemonRunning } = await import('../daemon.js');
 import type { DaemonState } from '../daemon.js';
