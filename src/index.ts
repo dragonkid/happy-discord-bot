@@ -10,6 +10,7 @@ import { PermissionCache } from './happy/permission-cache.js';
 import { Store } from './store.js';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { writeFileSync, mkdirSync } from 'node:fs';
 
 // Patch console to prepend timestamps
 const origLog = console.log;
@@ -19,6 +20,34 @@ console.log = (...args: unknown[]) => origLog(ts(), ...args);
 console.error = (...args: unknown[]) => origError(ts(), ...args);
 
 async function main(): Promise<void> {
+    // --- Update handoff support ---
+    const handoffIdx = process.argv.indexOf('--update-handoff');
+    const isHandoff = handoffIdx !== -1;
+
+    if (isHandoff) {
+        const oldPid = parseInt(process.argv[handoffIdx + 1], 10);
+        const stateDir = process.env.BOT_STATE_DIR || join(homedir(), '.happy-discord-bot');
+
+        try {
+            loadBotConfig();
+        } catch (err) {
+            console.error('Handoff failed: config error', err);
+            process.exit(1);
+        }
+
+        // Signal ready to old process
+        mkdirSync(stateDir, { recursive: true });
+        writeFileSync(join(stateDir, 'update-ready'), String(process.pid));
+
+        // Wait for old process to exit (max 10s)
+        const deadline = Date.now() + 10_000;
+        while (Date.now() < deadline) {
+            try { process.kill(oldPid, 0); await new Promise(r => setTimeout(r, 200)); }
+            catch { break; }
+        }
+        // Fall through to normal startup
+    }
+
     const config = loadBotConfig();
     console.log(`Happy server: ${config.happy.serverUrl}`);
     console.log(`Discord channel: ${config.discord.channelId}`);
@@ -485,13 +514,29 @@ async function main(): Promise<void> {
     // Replay pending permission requests from all sessions (requires threads to exist)
     await bridge.replayPendingPermissions();
 
+    // --- Post-handoff: deploy commands + announce ---
+    if (isHandoff) {
+        try {
+            const { autoDeployCommands } = await import('./discord/deploy-commands.js');
+            await autoDeployCommands();
+            console.log('[Update] Slash commands re-deployed');
+        } catch (err) {
+            console.error('[Update] Failed to deploy commands:', err);
+        }
+
+        const { getVersion } = await import('./version.js');
+        discord.send(`Bot restarted. Running v${getVersion()}`).catch(() => {});
+    }
+
     // --- Graceful shutdown ---
-    process.on('SIGINT', () => {
-        console.log('Shutting down...');
+    const shutdown = (signal: string) => {
+        console.log(`Received ${signal}, shutting down...`);
         happy.close();
         discord.destroy();
         process.exit(0);
-    });
+    };
+    process.on('SIGINT', () => shutdown('SIGINT'));
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
 }
 
 main().catch((err) => {

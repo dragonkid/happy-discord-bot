@@ -504,6 +504,54 @@ describe('commands', () => {
         });
     });
 
+    describe('/update', () => {
+        it('includes /update command definition', () => {
+            expect(commandDefinitions.find((c: { name: string }) => c.name === 'update')).toBeDefined();
+        });
+
+        it('/update checks for updates and reports result', async () => {
+            const bridge = makeMockBridge();
+            const interaction = mockInteraction('update');
+            await handleCommand(interaction as any, bridge);
+            expect(interaction.deferReply).toHaveBeenCalled();
+            expect(interaction.editReply).toHaveBeenCalled();
+        });
+    });
+
+    describe('/sessions host grouping', () => {
+        it('groups sessions by host and shows bot version', async () => {
+            const bridge = makeMockBridge();
+            vi.mocked(bridge.listAllSessions).mockResolvedValueOnce([
+                { id: 'sess-1', active: true, activeAt: 1000, metadata: { path: '/a/proj1', machineId: 'm1', host: 'macbook' } },
+                { id: 'sess-2', active: true, activeAt: 2000, metadata: { path: '/a/proj2', machineId: 'm1', host: 'macbook' } },
+                { id: 'sess-3', active: true, activeAt: 3000, metadata: { path: '/b/proj3', machineId: 'm2', host: 'server-1' } },
+            ] as any);
+            Object.defineProperty(bridge, 'activeSession', { value: 'sess-2' });
+
+            const interaction = mockInteraction('sessions');
+            await handleCommand(interaction as any, bridge);
+
+            const call = vi.mocked(interaction.editReply).mock.calls[0][0] as { content: string };
+            expect(call.content).toContain('macbook');
+            expect(call.content).toContain('server-1');
+            expect(call.content).toMatch(/Bot v\d+\.\d+\.\d+/);
+        });
+
+        it('shows directory name from metadata path', async () => {
+            const bridge = makeMockBridge();
+            vi.mocked(bridge.listAllSessions).mockResolvedValueOnce([
+                { id: 'sess-1', active: true, activeAt: 1000, metadata: { path: '/Users/user/my-project', host: 'macbook' } },
+            ] as any);
+            Object.defineProperty(bridge, 'activeSession', { value: 'sess-1' });
+
+            const interaction = mockInteraction('sessions');
+            await handleCommand(interaction as any, bridge);
+
+            const call = vi.mocked(interaction.editReply).mock.calls[0][0] as { content: string };
+            expect(call.content).toContain('my-project');
+        });
+    });
+
     describe('/loop', () => {
         it('includes /loop command definition', () => {
             expect(commandDefinitions.find((c: { name: string }) => c.name === 'loop')).toBeDefined();

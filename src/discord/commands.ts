@@ -6,11 +6,12 @@ import {
 } from 'discord.js';
 import type { Bridge } from '../bridge.js';
 import { buildSessionButtons, buildNewSessionMenu, buildDeleteConfirmButtons, buildCleanupConfirmButtons } from './buttons.js';
-import { extractDirectories, threadName } from '../happy/session-metadata.js';
+import { extractDirectories } from '../happy/session-metadata.js';
 import type { PermissionMode } from '../happy/types.js';
 import { queryUsage } from '../happy/usage.js';
 import { formatUsage } from './formatter.js';
 import type { SkillRegistry } from '../happy/skill-registry.js';
+import { getVersion } from '../version.js';
 
 // --- Command definitions ---
 
@@ -96,7 +97,11 @@ const loop = new SlashCommandBuilder()
         opt.setName('args').setDescription('e.g. "5m /compact" or "10m check deploy status"').setRequired(true),
     );
 
-const allCommands = [sessions, stop, compact, mode, newSession, archive, deleteCmd, cleanup, usage, skills, loop];
+const update = new SlashCommandBuilder()
+    .setName('update')
+    .setDescription('Check for updates and upgrade the bot');
+
+const allCommands = [sessions, stop, compact, mode, newSession, archive, deleteCmd, cleanup, usage, skills, loop, update];
 
 export const commandDefinitions: RESTPostAPIChatInputApplicationCommandsJSONBody[] =
     allCommands.map((cmd) => cmd.toJSON());
@@ -131,9 +136,28 @@ export async function handleCommand(
             return handleSkills(interaction, bridge);
         case 'loop':
             return handleLoop(interaction, bridge);
+        case 'update':
+            return handleUpdateCommand(interaction, bridge);
         default:
             await interaction.reply({ content: `Unknown command: ${interaction.commandName}`, ephemeral: true });
     }
+}
+
+// --- Helpers ---
+
+function extractHost(metadata: unknown): string {
+    if (!metadata || typeof metadata !== 'object') return 'unknown';
+    const m = metadata as Record<string, unknown>;
+    if (typeof m.host === 'string') return m.host;
+    if (typeof m.machineId === 'string') return (m.machineId as string).slice(0, 8);
+    return 'unknown';
+}
+
+function extractDirName(metadata: unknown, fallbackId: string): string {
+    if (!metadata || typeof metadata !== 'object') return `session-${fallbackId.slice(0, 8)}`;
+    const m = metadata as Record<string, unknown>;
+    if (typeof m.path !== 'string') return `session-${fallbackId.slice(0, 8)}`;
+    return m.path.split('/').filter(Boolean).pop() ?? 'unknown';
 }
 
 // --- Handlers ---
@@ -158,22 +182,31 @@ async function handleSessions(interaction: ChatInputCommandInteraction, bridge: 
     const threadSession = bridge.getSessionByThread(interaction.channelId);
     const currentSessionId = threadSession ?? bridge.activeSession;
 
-    const lines = sorted.map((s) => {
-        const name = threadName(s.metadata, s.id);
-        const marker = s.id === currentSessionId ? ' **← current**' : '';
-        const status = s.active ? '' : ' (archived)';
-        return `${s.active ? '🟢' : '⚪'} \`${s.id.slice(0, 8)}\` ${name}${status}${marker}`;
-    });
+    // Group sessions by host
+    const groups = new Map<string, typeof sorted>();
+    for (const s of sorted) {
+        const host = extractHost(s.metadata);
+        const group = groups.get(host) ?? [];
+        group.push(s);
+        groups.set(host, group);
+    }
 
-    // Truncate to fit Discord 2000-char limit
-    let content = '';
-    for (const line of lines) {
-        const next = content ? `${content}\n${line}` : line;
-        if (next.length > 1900) {
-            content += `\n... and ${lines.length - content.split('\n').length} more`;
-            break;
-        }
-        content = next;
+    const sections: string[] = [];
+    for (const [host, hostSessions] of groups) {
+        const header = `**${host}**`;
+        const lines = hostSessions.map((s) => {
+            const dir = extractDirName(s.metadata, s.id);
+            const marker = s.id === currentSessionId ? ' **← current**' : '';
+            const status = s.active ? '' : ' (archived)';
+            return `  ${s.active ? '🟢' : '⚪'} \`${s.id.slice(0, 8)}\` ${dir}${status}${marker}`;
+        });
+        sections.push([header, ...lines].join('\n'));
+    }
+    sections.push(`\nBot v${getVersion()}`);
+
+    let content = sections.join('\n\n');
+    if (content.length > 1900) {
+        content = content.slice(0, 1890) + '\n...';
     }
 
     const activeSessions = sorted.filter((s) => s.active);
@@ -415,6 +448,33 @@ async function handleLoop(interaction: ChatInputCommandInteraction, bridge: Brid
     } catch {
         await interaction.editReply('No active session. Use /sessions to connect.');
     }
+}
+
+// --- /update handler ---
+
+async function handleUpdateCommand(interaction: ChatInputCommandInteraction, _bridge: Bridge): Promise<void> {
+    await interaction.deferReply();
+
+    const { checkForUpdate, performDiscordUpdate } = await import('../cli/update.js');
+    const currentVersion = getVersion();
+    const latest = checkForUpdate(currentVersion);
+
+    if (!latest) {
+        await interaction.editReply(`Already on latest version (v${currentVersion}).`);
+        return;
+    }
+
+    await interaction.editReply(`Updating to v${latest}...`);
+
+    const success = await performDiscordUpdate(latest);
+
+    if (!success) {
+        await interaction.editReply(`Update to v${latest} failed. Still running v${currentVersion}.`);
+        return;
+    }
+
+    await interaction.editReply(`Updated to v${latest}. Restarting...`);
+    setTimeout(() => process.exit(0), 1000);
 }
 
 // --- /skills autocomplete ---

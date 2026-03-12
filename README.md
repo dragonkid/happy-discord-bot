@@ -17,6 +17,28 @@ Discord Bot that controls Claude Code sessions via Happy Coder's relay server. S
 - **Session management** — create, archive, delete sessions; batch cleanup of stale sessions
 - **Usage tracking** — query token usage and cost per session or across all sessions
 
+## Installation
+
+### Global install (recommended)
+
+```bash
+npm install -g happy-discord-bot
+happy-discord-bot init              # Interactive config setup
+happy-discord-bot deploy-commands   # Register Discord slash commands
+happy-discord-bot daemon start      # Run as background daemon
+```
+
+### From source (development)
+
+```bash
+git clone https://github.com/nicholasgriffintn/happy-discord-bot
+cd happy-discord-bot
+npm install
+cp .env.example .env                # Edit with your credentials
+npm run deploy-commands
+npm run dev
+```
+
 ## Prerequisites
 
 - Node.js 20+
@@ -24,7 +46,7 @@ Discord Bot that controls Claude Code sessions via Happy Coder's relay server. S
 - A Happy Coder account with paired agent credentials
 - `happy` CLI daemon running (`happy daemon start`) for `/new` session creation
 
-## Setup
+## Setup (from source)
 
 ### 1. Install dependencies
 
@@ -158,8 +180,25 @@ Messages sent in a thread auto-route to the bound session. Messages in the main 
 | `/cleanup` | Batch delete archived sessions + orphan threads (with confirmation) |
 | `/usage [period]` | Token usage & cost — session-scoped in threads, account-wide in channel |
 | `/skills [name] [args]` | List, search, or invoke Claude Code skills/commands (with autocomplete) |
+| `/loop <args>` | Run a prompt or skill on a recurring interval (e.g. `5m /compact`) |
+| `/update` | Check for updates and upgrade the bot (safe dual-process handoff) |
 
 Commands in a thread automatically resolve to that thread's session.
+
+## CLI Commands
+
+When installed globally (`npm install -g happy-discord-bot`):
+
+```
+happy-discord-bot start             # Run bot (foreground, default)
+happy-discord-bot daemon start      # Run as background daemon
+happy-discord-bot daemon stop       # Stop daemon
+happy-discord-bot daemon status     # Show daemon status
+happy-discord-bot update            # Check for updates and upgrade
+happy-discord-bot init              # Interactive config setup
+happy-discord-bot deploy-commands   # Register Discord slash commands
+happy-discord-bot version           # Show version
+```
 
 ## npm Scripts
 

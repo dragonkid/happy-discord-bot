@@ -1,7 +1,26 @@
-import 'dotenv/config';
+import { config as dotenvConfig } from 'dotenv';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
 import { loadConfig as loadHappyConfig, type Config as HappyConfig } from './vendor/config.js';
 import { readCredentials, type Credentials } from './vendor/credentials.js';
 import { deriveContentKeyPair, decodeBase64 } from './vendor/encryption.js';
+
+const DEFAULT_STATE_DIR = join(homedir(), '.happy-discord-bot');
+
+export function resolveEnvFile(): string | undefined {
+    const cwdEnv = join(process.cwd(), '.env');
+    if (existsSync(cwdEnv)) return cwdEnv;
+
+    const stateDir = process.env.BOT_STATE_DIR || DEFAULT_STATE_DIR;
+    const stateEnv = join(stateDir, '.env');
+    if (existsSync(stateEnv)) return stateEnv;
+
+    return undefined;
+}
+
+const envFile = resolveEnvFile();
+if (envFile) dotenvConfig({ path: envFile });
 
 export interface BotConfig {
     discord: {
