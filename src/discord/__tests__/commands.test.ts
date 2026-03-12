@@ -93,6 +93,24 @@ describe('commands', () => {
             );
         });
 
+        it('/sessions marks thread-bound session as current when in a thread', async () => {
+            const bridge = makeMockBridge();
+            vi.mocked(bridge.listAllSessions).mockResolvedValueOnce([
+                { id: 'sess-1', active: true, activeAt: 1000, metadata: null },
+                { id: 'sess-2', active: true, activeAt: 2000, metadata: null },
+            ] as any);
+            Object.defineProperty(bridge, 'activeSession', { value: 'sess-1' });
+            vi.mocked(bridge.getSessionByThread).mockReturnValueOnce('sess-2');
+
+            const interaction = mockInteraction('sessions', {}, 'thread-123');
+            await handleCommand(interaction as any, bridge);
+
+            const call = vi.mocked(interaction.editReply).mock.calls[0][0] as { content: string };
+            expect(call.content).toContain('sess-2');
+            expect(call.content).toMatch(/sess-2.*← current/);
+            expect(call.content).not.toMatch(/sess-1.*← current/);
+        });
+
         it('/sessions shows "no sessions found" when empty', async () => {
             const bridge = makeMockBridge();
             vi.mocked(bridge.listAllSessions).mockResolvedValueOnce([]);

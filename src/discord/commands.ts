@@ -154,9 +154,13 @@ async function handleSessions(interaction: ChatInputCommandInteraction, bridge: 
         return b.activeAt - a.activeAt;
     });
 
+    // In a thread, "current" = thread-bound session; in main channel, "current" = activeSession
+    const threadSession = bridge.getSessionByThread(interaction.channelId);
+    const currentSessionId = threadSession ?? bridge.activeSession;
+
     const lines = sorted.map((s) => {
         const name = threadName(s.metadata, s.id);
-        const marker = s.id === bridge.activeSession ? ' **← current**' : '';
+        const marker = s.id === currentSessionId ? ' **← current**' : '';
         const status = s.active ? '' : ' (archived)';
         return `${s.active ? '🟢' : '⚪'} \`${s.id.slice(0, 8)}\` ${name}${status}${marker}`;
     });
