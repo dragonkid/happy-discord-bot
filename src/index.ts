@@ -37,9 +37,7 @@ async function main(): Promise<void> {
     try {
         config = loadBotConfig();
     } catch (err) {
-        if (isHandoff) {
-            console.error('Handoff failed: config error', err);
-        }
+        console.error(isHandoff ? 'Handoff failed: config error' : 'Fatal: config error', err);
         process.exit(1);
     }
     console.log(`Happy server: ${config.happy.serverUrl}`);
@@ -522,7 +520,7 @@ async function main(): Promise<void> {
 
         try {
             const { autoDeployCommands } = await import('./discord/deploy-commands.js');
-            await autoDeployCommands();
+            await autoDeployCommands({ silent: true });
             console.log('[Update] Slash commands re-deployed');
         } catch (err) {
             console.error('[Update] Failed to deploy commands:', err);

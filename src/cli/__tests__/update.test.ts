@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { execFileSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
 
 vi.mock('node:child_process', () => ({
     execFileSync: vi.fn(),
@@ -10,18 +10,27 @@ vi.mock('node:child_process', () => ({
 const { checkForUpdate } = await import('../update.js');
 
 describe('checkForUpdate', () => {
-    it('returns null when already on latest', () => {
-        vi.mocked(execFileSync).mockReturnValue('0.1.0\n');
-        expect(checkForUpdate('0.1.0')).toBeNull();
+    it('returns null when already on latest', async () => {
+        vi.mocked(execFile).mockImplementation((_cmd: any, _args: any, cb: any) => {
+            cb(null, { stdout: '0.1.0\n', stderr: '' });
+            return undefined as any;
+        });
+        expect(await checkForUpdate('0.1.0')).toBeNull();
     });
 
-    it('returns latest version when update available', () => {
-        vi.mocked(execFileSync).mockReturnValue('0.2.0\n');
-        expect(checkForUpdate('0.1.0')).toBe('0.2.0');
+    it('returns latest version when update available', async () => {
+        vi.mocked(execFile).mockImplementation((_cmd: any, _args: any, cb: any) => {
+            cb(null, { stdout: '0.2.0\n', stderr: '' });
+            return undefined as any;
+        });
+        expect(await checkForUpdate('0.1.0')).toBe('0.2.0');
     });
 
-    it('returns null on registry error', () => {
-        vi.mocked(execFileSync).mockImplementation(() => { throw new Error('network'); });
-        expect(checkForUpdate('0.1.0')).toBeNull();
+    it('returns null on registry error', async () => {
+        vi.mocked(execFile).mockImplementation((_cmd: any, _args: any, cb: any) => {
+            cb(new Error('network'));
+            return undefined as any;
+        });
+        expect(await checkForUpdate('0.1.0')).toBeNull();
     });
 });

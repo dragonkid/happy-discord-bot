@@ -4,15 +4,16 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { getVersion } from '../version.js';
 import { getStateDir } from '../state-dir.js';
-import { readDaemonState, writeDaemonState, isDaemonRunning } from './daemon.js';
+import { readDaemonState, writeDaemonState, isDaemonRunning, removeDaemonState } from './daemon.js';
 
 const execFileAsync = promisify(execFile);
 const PKG_NAME = 'happy-discord-bot';
 const SEMVER_RE = /^\d+\.\d+\.\d+(-[\w.]+)?(\+[\w.]+)?$/;
 
-export function checkForUpdate(currentVersion: string): string | null {
+export async function checkForUpdate(currentVersion: string): Promise<string | null> {
     try {
-        const latest = execFileSync('npm', ['view', PKG_NAME, 'version'], { encoding: 'utf-8' }).trim();
+        const { stdout } = await execFileAsync('npm', ['view', PKG_NAME, 'version']);
+        const latest = stdout.trim();
         if (!SEMVER_RE.test(latest)) return null;
         return latest !== currentVersion ? latest : null;
     } catch {
@@ -78,7 +79,7 @@ export async function handleUpdate(_args: string[]): Promise<void> {
     console.log(`Current version: v${currentVersion}`);
     console.log('Checking for updates...');
 
-    const latest = checkForUpdate(currentVersion);
+    const latest = await checkForUpdate(currentVersion);
 
     if (!latest) {
         console.log(`Already on latest version (v${currentVersion}).`);
@@ -116,7 +117,8 @@ export async function handleUpdate(_args: string[]): Promise<void> {
         child.unref();
 
         if (!child.pid) {
-            console.error('Failed to spawn new daemon process.');
+            removeDaemonState(stateDir);
+            console.error('Failed to spawn new daemon process. Run `happy-discord-bot daemon start` to restart manually.');
             process.exit(1);
         }
 

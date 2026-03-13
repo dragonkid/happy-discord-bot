@@ -26,7 +26,7 @@ export function writeDaemonState(stateDir: string, state: DaemonState): void {
     writeFileSync(join(stateDir, DAEMON_STATE_FILE), JSON.stringify(state, null, 2) + '\n', { mode: 0o600 });
 }
 
-function removeDaemonState(stateDir: string): void {
+export function removeDaemonState(stateDir: string): void {
     try { unlinkSync(join(stateDir, DAEMON_STATE_FILE)); } catch { /* ignore */ }
 }
 
@@ -111,8 +111,7 @@ function statusDaemon(): void {
     }
 
     if (!isProcessAlive(state.pid)) {
-        console.log('Daemon not running (stale state file).');
-        removeDaemonState(stateDir);
+        console.log('Daemon not running (stale state file). Run `happy-discord-bot daemon stop` to clean up.');
         return;
     }
 

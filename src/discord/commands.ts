@@ -204,9 +204,19 @@ async function handleSessions(interaction: ChatInputCommandInteraction, bridge: 
     }
     sections.push(`\nBot v${getVersion()}`);
 
-    let content = sections.join('\n\n');
-    if (content.length > 1900) {
-        content = content.slice(0, 1890) + '\n...';
+    const allLines = sections.join('\n\n').split('\n');
+    let content = '';
+    let truncated = 0;
+    for (const line of allLines) {
+        const next = content ? `${content}\n${line}` : line;
+        if (next.length > 1900) {
+            truncated = allLines.length - content.split('\n').length;
+            break;
+        }
+        content = next;
+    }
+    if (truncated > 0) {
+        content += `\n... and ${truncated} more lines`;
     }
 
     const activeSessions = sorted.filter((s) => s.active);
@@ -457,7 +467,7 @@ async function handleUpdateCommand(interaction: ChatInputCommandInteraction, _br
 
     const { checkForUpdate, performDiscordUpdate } = await import('../cli/update.js');
     const currentVersion = getVersion();
-    const latest = checkForUpdate(currentVersion);
+    const latest = await checkForUpdate(currentVersion);
 
     if (!latest) {
         await interaction.editReply(`Already on latest version (v${currentVersion}).`);

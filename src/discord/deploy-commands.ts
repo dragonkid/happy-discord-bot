@@ -1,10 +1,19 @@
 import { REST, Routes } from 'discord.js';
 import { commandDefinitions } from './commands.js';
 
-export async function autoDeployCommands(): Promise<void> {
+export async function autoDeployCommands(options?: { silent?: boolean }): Promise<void> {
     const token = process.env.DISCORD_TOKEN;
     const applicationId = process.env.DISCORD_APPLICATION_ID;
-    if (!token || !applicationId) return;
+    if (!token || !applicationId) {
+        if (!options?.silent) {
+            if (!token) throw new Error('DISCORD_TOKEN is required');
+            throw new Error(
+                'DISCORD_APPLICATION_ID is required. '
+                + 'Find it at https://discord.com/developers/applications -> General Information -> Application ID',
+            );
+        }
+        return;
+    }
 
     const rest = new REST().setToken(token);
     const guildId = process.env.DISCORD_GUILD_ID;
