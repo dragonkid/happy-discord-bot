@@ -4,8 +4,10 @@ e2e/
 .plan/
 .worktrees/
 **/__tests__/
-*.test.ts
-*.test.js
+**/*.test.ts
+**/*.test.js
+**/*.test.d.ts
+**/*.test.js.map
 vitest.config.ts
 tsconfig.json
 eslint.config.js
