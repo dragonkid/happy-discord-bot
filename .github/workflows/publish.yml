@@ -18,8 +18,8 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
 
       - run: npm ci
-      - run: npm test
       - run: npm run build
+      - run: npm test
 
       - name: Verify package version matches release tag
         env:
