@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { commandDefinitions, handleCommand, handleSkillsAutocomplete } from '../commands.js';
+import { commandDefinitions, handleCommand, handleSkillsAutocomplete, handleLoopAutocomplete } from '../commands.js';
 import type { Bridge } from '../../bridge.js';
 
 vi.mock('../../happy/usage.js', () => ({
@@ -532,6 +532,74 @@ describe('commands', () => {
             const interaction = mockInteraction('loop', { args: '5m /compact' });
             await handleCommand(interaction as any, bridge);
             expect(interaction.editReply).toHaveBeenCalledWith(expect.stringContaining('No active session'));
+        });
+
+        it('shows usage help when no args provided', async () => {
+            const bridge = makeMockBridge();
+            Object.defineProperty(bridge, 'activeSession', { value: 'sess-1' });
+            const interaction = mockInteraction('loop');
+            await handleCommand(interaction as any, bridge);
+            expect(interaction.reply).toHaveBeenCalledWith(
+                expect.objectContaining({ content: expect.stringContaining('/loop'), ephemeral: true }),
+            );
+            expect(bridge.sendMessage).not.toHaveBeenCalled();
+        });
+
+        it('forwards /loop list to session', async () => {
+            const bridge = makeMockBridge();
+            Object.defineProperty(bridge, 'activeSession', { value: 'sess-1' });
+            const interaction = mockInteraction('loop', { args: 'list' });
+            await handleCommand(interaction as any, bridge);
+            expect(bridge.sendMessage).toHaveBeenCalledWith('/loop list', 'sess-1');
+        });
+
+        it('forwards /loop delete <id> to session', async () => {
+            const bridge = makeMockBridge();
+            Object.defineProperty(bridge, 'activeSession', { value: 'sess-1' });
+            const interaction = mockInteraction('loop', { args: 'delete abc123' });
+            await handleCommand(interaction as any, bridge);
+            expect(bridge.sendMessage).toHaveBeenCalledWith('/loop delete abc123', 'sess-1');
+        });
+    });
+
+    describe('handleLoopAutocomplete', () => {
+        function mockAutocomplete(focused: string) {
+            return {
+                commandName: 'loop',
+                options: { getFocused: vi.fn().mockReturnValue(focused) },
+                respond: vi.fn().mockResolvedValue(undefined),
+            };
+        }
+
+        it('suggests subcommands and intervals when empty input', async () => {
+            const interaction = mockAutocomplete('');
+            await handleLoopAutocomplete(interaction as any);
+            const choices = interaction.respond.mock.calls[0][0];
+            expect(choices).toEqual(
+                expect.arrayContaining([
+                    expect.objectContaining({ value: 'list' }),
+                    expect.objectContaining({ value: 'delete ' }),
+                ]),
+            );
+        });
+
+        it('filters suggestions by input', async () => {
+            const interaction = mockAutocomplete('lis');
+            await handleLoopAutocomplete(interaction as any);
+            const choices = interaction.respond.mock.calls[0][0];
+            expect(choices).toEqual(
+                expect.arrayContaining([expect.objectContaining({ value: 'list' })]),
+            );
+            expect(choices).not.toEqual(
+                expect.arrayContaining([expect.objectContaining({ value: 'delete ' })]),
+            );
+        });
+
+        it('suggests intervals when input starts with a digit', async () => {
+            const interaction = mockAutocomplete('5');
+            await handleLoopAutocomplete(interaction as any);
+            const choices = interaction.respond.mock.calls[0][0];
+            expect(choices.some((c: { value: string }) => c.value.startsWith('5m'))).toBe(true);
         });
     });
 
