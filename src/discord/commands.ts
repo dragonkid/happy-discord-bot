@@ -94,7 +94,7 @@ const loop = new SlashCommandBuilder()
     .setName('loop')
     .setDescription('Run a prompt or skill on a recurring interval')
     .addStringOption((opt) =>
-        opt.setName('args').setDescription('e.g. "5m /compact" or "10m check deploy status"').setRequired(true),
+        opt.setName('args').setDescription('e.g. "list", "delete <id>", "5m /compact"').setRequired(false).setAutocomplete(true),
     );
 
 const update = new SlashCommandBuilder()
@@ -447,11 +447,26 @@ async function handleSkills(interaction: ChatInputCommandInteraction, bridge: Br
 
 // --- /loop handler ---
 
+const LOOP_USAGE = [
+    '**Usage:** `/loop [args]`',
+    '',
+    '`/loop 5m /compact` — run /compact every 5 minutes',
+    '`/loop 10m check deploy` — check deploy every 10 minutes',
+    '`/loop list` — list scheduled jobs',
+    '`/loop delete <id>` — delete a scheduled job',
+].join('\n');
+
 async function handleLoop(interaction: ChatInputCommandInteraction, bridge: Bridge): Promise<void> {
+    const args = interaction.options.getString('args');
+
+    if (!args) {
+        await interaction.reply({ content: LOOP_USAGE, ephemeral: true });
+        return;
+    }
+
     await interaction.deferReply();
     try {
         const sessionId = resolveSessionFromContext(interaction, bridge);
-        const args = interaction.options.getString('args', true);
         const message = `/loop ${args}`;
         await bridge.sendMessage(message, sessionId);
         await interaction.editReply(`Sent \`${message}\``);
@@ -487,6 +502,28 @@ async function handleUpdateCommand(interaction: ChatInputCommandInteraction, _br
     setTimeout(() => process.kill(process.pid, 'SIGTERM'), 1000);
 }
 
+// --- /loop autocomplete ---
+
+const LOOP_SUGGESTIONS = [
+    { name: 'list — Show scheduled jobs', value: 'list' },
+    { name: 'delete <id> — Cancel a scheduled job', value: 'delete ' },
+    { name: '5m — Every 5 minutes', value: '5m ' },
+    { name: '10m — Every 10 minutes', value: '10m ' },
+    { name: '30m — Every 30 minutes', value: '30m ' },
+    { name: '1h — Every hour', value: '1h ' },
+];
+
+export async function handleLoopAutocomplete(
+    interaction: AutocompleteInteraction,
+): Promise<void> {
+    const focused = interaction.options.getFocused().toLowerCase();
+
+    const filtered = focused
+        ? LOOP_SUGGESTIONS.filter((s) => s.value.startsWith(focused) || s.name.toLowerCase().includes(focused))
+        : LOOP_SUGGESTIONS;
+
+    await interaction.respond(filtered.slice(0, 25));
+}
 // --- /skills autocomplete ---
 
 const MAX_AUTOCOMPLETE = 25;

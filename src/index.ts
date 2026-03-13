@@ -1,7 +1,7 @@
 import { loadBotConfig } from './config.js';
 import { HappyClient } from './happy/client.js';
 import { DiscordBot } from './discord/bot.js';
-import { handleCommand, handleSkillsAutocomplete } from './discord/commands.js';
+import { handleCommand, handleSkillsAutocomplete, handleLoopAutocomplete } from './discord/commands.js';
 import { parseButtonId, parseExitPlanButtonId, parsePlanModalId, parseNewSessionSelect, parseCustomPathButton, parseCustomPathModal, buildCustomPathModal, parseDeleteButtonId, parseCleanupButtonId } from './discord/buttons.js';
 import { parseAskButtonId, parseSessionButtonId, handleAskButton, handleSessionButton, handleExitPlanButton, handleNewSessionSelect, handleNewSessionModal, handleDeleteButton } from './discord/interactions.js';
 import { Bridge } from './bridge.js';
@@ -175,6 +175,12 @@ async function main(): Promise<void> {
                     await handleSkillsAutocomplete(interaction, bridge.skillRegistry, projectDir);
                 } catch (err) {
                     console.error('[Discord] Autocomplete error:', err);
+                }
+            } else if (interaction.commandName === 'loop') {
+                try {
+                    await handleLoopAutocomplete(interaction);
+                } catch (err) {
+                    console.error('[Discord] Loop autocomplete error:', err);
                 }
             }
             return;
