@@ -23,10 +23,14 @@ Discord Bot that controls Claude Code sessions via Happy Coder's relay server. S
 
 ```bash
 npm install -g happy-discord-bot
-happy-discord-bot init              # Interactive config setup
+happy-discord-bot init              # Interactive config setup (~/.happy-discord-bot/.env)
 happy-discord-bot deploy-commands   # Register Discord slash commands
 happy-discord-bot daemon start      # Run as background daemon
 ```
+
+`init` prompts for Discord token, channel ID, user ID, application ID, and optional Happy credentials. Config is saved to `~/.happy-discord-bot/.env` with restrictive file permissions (0600).
+
+If you already have `~/.happy/agent.key` from `happy-agent auth login`, you can skip the Happy credential prompts during init.
 
 ### From source (development)
 
@@ -199,6 +203,47 @@ happy-discord-bot init              # Interactive config setup
 happy-discord-bot deploy-commands   # Register Discord slash commands
 happy-discord-bot version           # Show version
 ```
+
+### Daemon mode
+
+The daemon runs the bot as a detached background process. State is tracked in `~/.happy-discord-bot/daemon.state.json`.
+
+```bash
+happy-discord-bot daemon start      # Spawn detached process, print PID
+happy-discord-bot daemon status     # Show PID, version, start time
+happy-discord-bot daemon stop       # Send SIGTERM, wait for exit, clean up state
+```
+
+### Updating
+
+Two ways to update to the latest version:
+
+**From the CLI:**
+
+```bash
+happy-discord-bot update
+```
+
+Checks npm registry, installs the new version globally, and restarts the daemon if running.
+
+**From Discord:**
+
+Use the `/update` slash command. The bot performs a safe dual-process handoff:
+1. Installs new version via `npm install -g`
+2. Spawns new process with `--update-handoff`
+3. New process connects to Discord + Happy relay
+4. New process signals ready via file
+5. Old process exits gracefully
+
+Zero downtime — the new process is fully connected before the old one shuts down.
+
+### Config resolution
+
+The bot loads `.env` from the first location found:
+1. `.env` in the current working directory
+2. `~/.happy-discord-bot/.env` (created by `init`)
+
+Override the state directory with `BOT_STATE_DIR` env var.
 
 ## npm Scripts
 

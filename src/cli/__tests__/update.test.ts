@@ -33,4 +33,28 @@ describe('checkForUpdate', () => {
         });
         expect(await checkForUpdate('0.1.0')).toBeNull();
     });
+
+    it('returns null when registry returns invalid semver', async () => {
+        vi.mocked(execFile).mockImplementation((_cmd: any, _args: any, cb: any) => {
+            cb(null, { stdout: 'not-a-version\n', stderr: '' });
+            return undefined as any;
+        });
+        expect(await checkForUpdate('0.1.0')).toBeNull();
+    });
+
+    it('trims whitespace from registry output', async () => {
+        vi.mocked(execFile).mockImplementation((_cmd: any, _args: any, cb: any) => {
+            cb(null, { stdout: '  0.3.0  \n', stderr: '' });
+            return undefined as any;
+        });
+        expect(await checkForUpdate('0.1.0')).toBe('0.3.0');
+    });
+
+    it('handles pre-release versions', async () => {
+        vi.mocked(execFile).mockImplementation((_cmd: any, _args: any, cb: any) => {
+            cb(null, { stdout: '0.2.0-beta.1\n', stderr: '' });
+            return undefined as any;
+        });
+        expect(await checkForUpdate('0.1.0')).toBe('0.2.0-beta.1');
+    });
 });
