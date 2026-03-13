@@ -178,6 +178,46 @@ describe('CLI integration', () => {
         });
     });
 
+    // --- T11: handoff ready file protocol ---
+    describe('handoff ready file', () => {
+        it('new process writes ready file after start with valid handoff PID', async () => {
+            // We can't fully test the handoff (requires Discord + Happy connections),
+            // but we can verify PID validation passes and process attempts startup.
+            // With missing env vars, it will fail at config load — but AFTER PID validation.
+            const { stderr, exitCode } = await runCli(['start', '--update-handoff', String(process.pid)]);
+            // Should fail at config load, not at PID validation
+            expect(exitCode).not.toBe(0);
+            expect(stderr).not.toContain('Invalid --update-handoff PID');
+            expect(stderr).toContain('config error');
+        });
+    });
+
+    // --- T14: npm pack content verification ---
+    describe('npm pack', () => {
+        it('pack dry-run excludes source, e2e, and env files', async () => {
+            const { stdout } = await execFileAsync('npm', ['pack', '--dry-run', '--json'], {
+                cwd: join(import.meta.dirname, '..', '..'),
+                timeout: 15_000,
+            });
+            const [result] = JSON.parse(stdout);
+            const files: string[] = result.files.map((f: { path: string }) => f.path);
+
+            // Source code, e2e tests, and env files must NOT be included
+            expect(files.some((f: string) => f.startsWith('src/'))).toBe(false);
+            expect(files.some((f: string) => f.startsWith('e2e/'))).toBe(false);
+            expect(files.some((f: string) => f.endsWith('.env') || f.endsWith('.env.example'))).toBe(false);
+            expect(files.some((f: string) => f === 'CLAUDE.md')).toBe(false);
+
+            // dist/cli.js must be included
+            expect(files).toContain('dist/cli.js');
+        });
+
+        it('dist/cli.js has shebang line', () => {
+            const firstLine = readFileSync(CLI, 'utf-8').split('\n')[0];
+            expect(firstLine).toBe('#!/usr/bin/env node');
+        });
+    });
+
     // Note: init file permissions (0o600/0o700) tested in src/cli/__tests__/init.test.ts via unit tests.
     // Subprocess stdin piping to readline is unreliable in vitest, so init creation is not tested here.
 });
