@@ -1,7 +1,23 @@
-import 'dotenv/config';
+import { config as dotenvConfig } from 'dotenv';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { loadConfig as loadHappyConfig, type Config as HappyConfig } from './vendor/config.js';
 import { readCredentials, type Credentials } from './vendor/credentials.js';
 import { deriveContentKeyPair, decodeBase64 } from './vendor/encryption.js';
+import { getStateDir } from './state-dir.js';
+
+export function resolveEnvFile(): string | undefined {
+    const cwdEnv = join(process.cwd(), '.env');
+    if (existsSync(cwdEnv)) return cwdEnv;
+
+    const stateEnv = join(getStateDir(), '.env');
+    if (existsSync(stateEnv)) return stateEnv;
+
+    return undefined;
+}
+
+const envFile = resolveEnvFile();
+if (envFile) dotenvConfig({ path: envFile });
 
 export interface BotConfig {
     discord: {

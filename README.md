@@ -17,6 +17,32 @@ Discord Bot that controls Claude Code sessions via Happy Coder's relay server. S
 - **Session management** — create, archive, delete sessions; batch cleanup of stale sessions
 - **Usage tracking** — query token usage and cost per session or across all sessions
 
+## Installation
+
+### Global install (recommended)
+
+```bash
+npm install -g happy-discord-bot
+happy-discord-bot init              # Interactive config setup (~/.happy-discord-bot/.env)
+happy-discord-bot deploy-commands   # Register Discord slash commands
+happy-discord-bot daemon start      # Run as background daemon
+```
+
+`init` prompts for Discord token, channel ID, user ID, application ID, and optional Happy credentials. Config is saved to `~/.happy-discord-bot/.env` with restrictive file permissions (0600).
+
+If you already have `~/.happy/agent.key` from `happy-agent auth login`, you can skip the Happy credential prompts during init.
+
+### From source (development)
+
+```bash
+git clone https://github.com/nicholasgriffintn/happy-discord-bot
+cd happy-discord-bot
+npm install
+cp .env.example .env                # Edit with your credentials
+npm run deploy-commands
+npm run dev
+```
+
 ## Prerequisites
 
 - Node.js 20+
@@ -24,7 +50,7 @@ Discord Bot that controls Claude Code sessions via Happy Coder's relay server. S
 - A Happy Coder account with paired agent credentials
 - `happy` CLI daemon running (`happy daemon start`) for `/new` session creation
 
-## Setup
+## Setup (from source)
 
 ### 1. Install dependencies
 
@@ -158,8 +184,66 @@ Messages sent in a thread auto-route to the bound session. Messages in the main 
 | `/cleanup` | Batch delete archived sessions + orphan threads (with confirmation) |
 | `/usage [period]` | Token usage & cost — session-scoped in threads, account-wide in channel |
 | `/skills [name] [args]` | List, search, or invoke Claude Code skills/commands (with autocomplete) |
+| `/loop <args>` | Run a prompt or skill on a recurring interval (e.g. `5m /compact`) |
+| `/update` | Check for updates and upgrade the bot (safe dual-process handoff) |
 
 Commands in a thread automatically resolve to that thread's session.
+
+## CLI Commands
+
+When installed globally (`npm install -g happy-discord-bot`):
+
+```
+happy-discord-bot start             # Run bot (foreground, default)
+happy-discord-bot daemon start      # Run as background daemon
+happy-discord-bot daemon stop       # Stop daemon
+happy-discord-bot daemon status     # Show daemon status
+happy-discord-bot update            # Check for updates and upgrade
+happy-discord-bot init              # Interactive config setup
+happy-discord-bot deploy-commands   # Register Discord slash commands
+happy-discord-bot version           # Show version
+```
+
+### Daemon mode
+
+The daemon runs the bot as a detached background process. State is tracked in `~/.happy-discord-bot/daemon.state.json`.
+
+```bash
+happy-discord-bot daemon start      # Spawn detached process, print PID
+happy-discord-bot daemon status     # Show PID, version, start time
+happy-discord-bot daemon stop       # Send SIGTERM, wait for exit, clean up state
+```
+
+### Updating
+
+Two ways to update to the latest version:
+
+**From the CLI:**
+
+```bash
+happy-discord-bot update
+```
+
+Checks npm registry, installs the new version globally, and restarts the daemon if running.
+
+**From Discord:**
+
+Use the `/update` slash command. The bot performs a safe dual-process handoff:
+1. Installs new version via `npm install -g`
+2. Spawns new process with `--update-handoff`
+3. New process connects to Discord + Happy relay
+4. New process signals ready via file
+5. Old process exits gracefully
+
+Zero downtime — the new process is fully connected before the old one shuts down.
+
+### Config resolution
+
+The bot loads `.env` from the first location found:
+1. `.env` in the current working directory
+2. `~/.happy-discord-bot/.env` (created by `init`)
+
+Override the state directory with `BOT_STATE_DIR` env var.
 
 ## npm Scripts
 

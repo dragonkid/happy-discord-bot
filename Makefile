@@ -1,4 +1,4 @@
-.PHONY: dev build start deploy lint fix test test-watch test-e2e clean install
+.PHONY: dev build start deploy lint fix test test-watch test-e2e clean install publish
 
 dev:
 	npm run dev
@@ -32,3 +32,6 @@ clean:
 
 install:
 	npm install
+
+publish:
+	npm publish

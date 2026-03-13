@@ -8,8 +8,9 @@ import { Bridge } from './bridge.js';
 import { StateTracker } from './happy/state-tracker.js';
 import { PermissionCache } from './happy/permission-cache.js';
 import { Store } from './store.js';
-import { homedir } from 'node:os';
+import { getStateDir } from './state-dir.js';
 import { join } from 'node:path';
+import { writeFileSync, mkdirSync } from 'node:fs';
 
 // Patch console to prepend timestamps
 const origLog = console.log;
@@ -19,7 +20,26 @@ console.log = (...args: unknown[]) => origLog(ts(), ...args);
 console.error = (...args: unknown[]) => origError(ts(), ...args);
 
 async function main(): Promise<void> {
-    const config = loadBotConfig();
+    // --- Update handoff support ---
+    const handoffIdx = process.argv.indexOf('--update-handoff');
+    const isHandoff = handoffIdx !== -1;
+
+    let handoffOldPid = 0;
+    if (isHandoff) {
+        handoffOldPid = parseInt(process.argv[handoffIdx + 1], 10);
+        if (!Number.isFinite(handoffOldPid) || handoffOldPid <= 0) {
+            console.error('Invalid --update-handoff PID');
+            process.exit(1);
+        }
+    }
+
+    let config;
+    try {
+        config = loadBotConfig();
+    } catch (err) {
+        console.error(isHandoff ? 'Handoff failed: config error' : 'Fatal: config error', err);
+        process.exit(1);
+    }
     console.log(`Happy server: ${config.happy.serverUrl}`);
     console.log(`Discord channel: ${config.discord.channelId}`);
 
@@ -42,7 +62,7 @@ async function main(): Promise<void> {
     // --- Bridge ---
     const stateTracker = new StateTracker();
     const permissionCache = new PermissionCache();
-    const store = new Store(process.env.BOT_STATE_DIR ?? join(homedir(), '.happy-discord-bot'));
+    const store = new Store(getStateDir());
     const savedState = await store.load();
     permissionCache.loadSessions(savedState.sessions);
     console.log(`[Store] Loaded ${Object.keys(savedState.sessions).length} saved session(s)`);
@@ -491,13 +511,40 @@ async function main(): Promise<void> {
     // Replay pending permission requests from all sessions (requires threads to exist)
     await bridge.replayPendingPermissions();
 
+    // --- Post-handoff: signal ready, wait for old process, deploy + announce ---
+    if (isHandoff) {
+        const stateDir = getStateDir();
+        mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+        writeFileSync(join(stateDir, 'update-ready'), String(process.pid));
+
+        // Wait for old process to exit (max 10s)
+        const deadline = Date.now() + 10_000;
+        while (Date.now() < deadline) {
+            try { process.kill(handoffOldPid, 0); await new Promise(r => setTimeout(r, 200)); }
+            catch { break; }
+        }
+
+        try {
+            const { autoDeployCommands } = await import('./discord/deploy-commands.js');
+            await autoDeployCommands({ silent: true });
+            console.log('[Update] Slash commands re-deployed');
+        } catch (err) {
+            console.error('[Update] Failed to deploy commands:', err);
+        }
+
+        const { getVersion } = await import('./version.js');
+        discord.send(`Bot restarted. Running v${getVersion()}`).catch(() => {});
+    }
+
     // --- Graceful shutdown ---
-    process.on('SIGINT', () => {
-        console.log('Shutting down...');
+    const shutdown = (signal: string) => {
+        console.log(`Received ${signal}, shutting down...`);
         happy.close();
         discord.destroy();
         process.exit(0);
-    });
+    };
+    process.on('SIGINT', () => shutdown('SIGINT'));
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
 }
 
 main().catch((err) => {

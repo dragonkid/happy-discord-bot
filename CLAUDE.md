@@ -39,10 +39,16 @@ Main Channel (status summaries only)
 
 ```
 src/
-├── index.ts              # Entry point, message forwarding + thread routing
-├── config.ts             # Env var loading (incl. requireMention)
+├── cli.ts                # CLI entry point (bin), arg parsing, subcommand routing
+├── version.ts            # Version from package.json (cached)
+├── index.ts              # Bot entry point, message forwarding + thread routing
+├── config.ts             # Env var loading + ~/.happy-discord-bot/.env fallback
 ├── bridge.ts             # Glue: Happy events ↔ Discord messages/buttons + typing/emoji + thread routing
 ├── store.ts              # Bot state persistence (~/.happy-discord-bot/state.json)
+├── cli/
+│   ├── daemon.ts         # Daemon start/stop/status (detached child_process)
+│   ├── update.ts         # Self-update (npm install -g + dual-process handoff)
+│   └── init.ts           # Interactive config setup (~/.happy-discord-bot/.env)
 ├── happy/
 │   ├── client.ts         # HappyClient: Socket.IO + sessionRPC + machineRPC + HTTP
 │   ├── session-metadata.ts  # Session metadata decryption + directory extraction + threadName
@@ -171,6 +177,25 @@ When a Discord message includes attachments (images, PDFs, code files, etc.), th
 - Shows "Confirm Cleanup" / "Cancel" buttons before executing.
 - Iterates all sessions, deletes inactive ones via `DELETE /v1/sessions/:id`, removes thread mappings.
 
+### /update Command
+- `/update` — Check npm registry for newer version; if available, run `npm install -g`, spawn new process with `--update-handoff`, wait for ready signal, then exit.
+- Owner-only (same `DISCORD_USER_ID` check).
+- Safe dual-process handoff: new process validates config + writes ready file, old process polls (30s timeout), on success old exits and new takes over Discord.
+- On failure: old process continues running, reports error.
+
+### /sessions Display
+- Sessions grouped by host (from metadata), with directory name extracted from path.
+- `Bot vX.Y.Z` version footer.
+- "current" marker: thread-bound session in threads, activeSession in main channel.
+
+### Self-Update Handoff Protocol
+1. Old process installs new version via `npm install -g`
+2. Spawns new process with `--update-handoff <oldPid>` flag
+3. New process validates config, writes `~/.happy-discord-bot/update-ready` file
+4. Old process polls for ready file (30s timeout)
+5. On ready: old exits, new connects Discord + re-deploys slash commands
+6. On timeout: old kills new process, continues running
+
 ### machineRPC Encryption
 Bot reads two credential files:
 - `~/.happy/agent.key` → `{token, secret}` (legacy XSalsa20-Poly1305)
@@ -215,7 +240,20 @@ Happy credentials (one of):
 - `HAPPY_TOKEN` + `HAPPY_SECRET` env vars, or
 - `~/.happy/agent.key` file (created by `happy-agent auth login`)
 
-## Commands
+## CLI Commands (npm global install)
+
+```
+happy-discord-bot start             # Run bot (foreground, default)
+happy-discord-bot daemon start      # Run as background daemon
+happy-discord-bot daemon stop       # Stop daemon
+happy-discord-bot daemon status     # Show daemon status
+happy-discord-bot update            # Check for updates and upgrade
+happy-discord-bot init              # Interactive config setup
+happy-discord-bot deploy-commands   # Register Discord slash commands
+happy-discord-bot version           # Show version
+```
+
+## npm Scripts (development)
 
 ```bash
 npm run dev              # Development (tsx)
@@ -232,7 +270,7 @@ npm run test:e2e         # E2E smoke tests (requires .env.e2e, real services)
 ## Testing
 
 - Framework: Vitest
-- 14 test suites, 431 tests
+- 22 test suites, 496 tests
 - Test files: `src/**/__tests__/*.test.ts`
 - All Happy/Discord dependencies mocked (no real connections needed)
 

@@ -1,25 +1,22 @@
-// src/discord/deploy-commands.ts
-import 'dotenv/config';
 import { REST, Routes } from 'discord.js';
 import { commandDefinitions } from './commands.js';
 
-async function main(): Promise<void> {
+export async function autoDeployCommands(options?: { silent?: boolean }): Promise<void> {
     const token = process.env.DISCORD_TOKEN;
-    if (!token) {
-        throw new Error('DISCORD_TOKEN is required');
-    }
-
     const applicationId = process.env.DISCORD_APPLICATION_ID;
-    if (!applicationId) {
-        throw new Error(
-            'DISCORD_APPLICATION_ID is required. '
-            + 'Find it at https://discord.com/developers/applications → General Information → Application ID',
-        );
+    if (!token || !applicationId) {
+        if (!options?.silent) {
+            if (!token) throw new Error('DISCORD_TOKEN is required');
+            throw new Error(
+                'DISCORD_APPLICATION_ID is required. '
+                + 'Find it at https://discord.com/developers/applications -> General Information -> Application ID',
+            );
+        }
+        return;
     }
-
-    const guildId = process.env.DISCORD_GUILD_ID;
 
     const rest = new REST().setToken(token);
+    const guildId = process.env.DISCORD_GUILD_ID;
 
     if (guildId) {
         console.log(`Deploying ${commandDefinitions.length} commands to guild ${guildId}...`);
@@ -36,7 +33,13 @@ async function main(): Promise<void> {
     }
 }
 
-main().catch((err) => {
-    console.error('Deploy failed:', err);
-    process.exit(1);
-});
+// Run as standalone script when executed directly
+const isDirectRun = process.argv[1]?.endsWith('deploy-commands.js') || process.argv[1]?.endsWith('deploy-commands.ts');
+if (isDirectRun) {
+    const { config } = await import('dotenv');
+    config();
+
+    autoDeployCommands()
+        .then(() => console.log('Done.'))
+        .catch((err) => { console.error('Deploy failed:', err); process.exit(1); });
+}
