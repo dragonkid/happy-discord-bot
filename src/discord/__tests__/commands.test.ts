@@ -6,6 +6,11 @@ vi.mock('../../happy/usage.js', () => ({
     queryUsage: vi.fn(),
 }));
 
+vi.mock('../../cli/update.js', () => ({
+    checkForUpdate: vi.fn().mockResolvedValue(null),
+    performDiscordUpdate: vi.fn().mockResolvedValue(false),
+}));
+
 import { queryUsage } from '../../happy/usage.js';
 
 // Minimal interaction mock

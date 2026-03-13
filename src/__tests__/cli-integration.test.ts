@@ -116,13 +116,20 @@ describe('CLI integration', () => {
         });
     });
 
-    // --- T7: update (offline, package not on npm) ---
+    // --- T7: update (offline, registry unreachable) ---
     describe('update', () => {
         it('reports already on latest when npm view fails', async () => {
-            const { stdout, exitCode } = await runCli(['update']);
+            // Point npm to a non-existent registry with minimal timeout
+            const { stdout, exitCode } = await runCli(['update'], {
+                env: {
+                    npm_config_registry: 'http://localhost:1',
+                    npm_config_fetch_timeout: '1000',
+                    npm_config_fetch_retries: '0',
+                },
+            });
             expect(exitCode).toBe(0);
             expect(stdout).toContain('Already on latest version');
-        });
+        }, 15_000);
     });
 
     // --- T8: deploy-commands without env vars ---
