@@ -31,17 +31,17 @@ async function main(): Promise<void> {
             console.error('Invalid --update-handoff PID');
             process.exit(1);
         }
-
-        try {
-            loadBotConfig();
-        } catch (err) {
-            console.error('Handoff failed: config error', err);
-            process.exit(1);
-        }
-        // Ready file will be written after Discord connects (below)
     }
 
-    const config = loadBotConfig();
+    let config;
+    try {
+        config = loadBotConfig();
+    } catch (err) {
+        if (isHandoff) {
+            console.error('Handoff failed: config error', err);
+        }
+        process.exit(1);
+    }
     console.log(`Happy server: ${config.happy.serverUrl}`);
     console.log(`Discord channel: ${config.discord.channelId}`);
 

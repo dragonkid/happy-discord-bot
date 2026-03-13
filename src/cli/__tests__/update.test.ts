@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 
 vi.mock('node:child_process', () => ({
     execFileSync: vi.fn(),
+    execFile: vi.fn(),
     spawn: vi.fn(),
 }));
 

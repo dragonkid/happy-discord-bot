@@ -1,10 +1,12 @@
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync, execFile, spawn } from 'node:child_process';
 import { readFileSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
+import { promisify } from 'node:util';
 import { getVersion } from '../version.js';
 import { getStateDir } from '../state-dir.js';
 import { readDaemonState, writeDaemonState, isDaemonRunning } from './daemon.js';
 
+const execFileAsync = promisify(execFile);
 const PKG_NAME = 'happy-discord-bot';
 const SEMVER_RE = /^\d+\.\d+\.\d+(-[\w.]+)?(\+[\w.]+)?$/;
 
@@ -28,23 +30,24 @@ function runNpmInstall(version: string): boolean {
     }
 }
 
-function resolveGlobalBin(): string {
-    return execFileSync('npm', ['bin', '-g'], { encoding: 'utf-8' }).trim();
+/** Resolve the newly installed cli.js path via npm global prefix */
+function resolveNewCliPath(): string {
+    const prefix = execFileSync('npm', ['config', 'get', 'prefix'], { encoding: 'utf-8' }).trim();
+    return join(prefix, 'lib', 'node_modules', PKG_NAME, 'dist', 'cli.js');
 }
 
 export async function performDiscordUpdate(targetVersion: string): Promise<boolean> {
     try {
-        execFileSync('npm', ['install', '-g', `${PKG_NAME}@${targetVersion}`], { stdio: 'pipe' });
+        await execFileAsync('npm', ['install', '-g', `${PKG_NAME}@${targetVersion}`]);
     } catch {
         return false;
     }
 
-    const globalBin = resolveGlobalBin();
-    const cliPath = join(globalBin, 'happy-discord-bot');
+    const cliPath = resolveNewCliPath();
     const stateDir = getStateDir();
     const readyFile = join(stateDir, 'update-ready');
 
-    const child = spawn(cliPath, ['start', '--update-handoff', String(process.pid)], {
+    const child = spawn(process.execPath, [cliPath, 'start', '--update-handoff', String(process.pid)], {
         detached: true,
         stdio: 'ignore',
         env: { ...process.env, BOT_STATE_DIR: stateDir },
@@ -104,9 +107,8 @@ export async function handleUpdate(_args: string[]): Promise<void> {
             catch { break; }
         }
 
-        const globalBin = resolveGlobalBin();
-        const cliPath = join(globalBin, 'happy-discord-bot');
-        const child = spawn(cliPath, ['start'], {
+        const cliPath = resolveNewCliPath();
+        const child = spawn(process.execPath, [cliPath, 'start'], {
             detached: true,
             stdio: 'ignore',
             env: { ...process.env, BOT_STATE_DIR: stateDir },
