@@ -253,6 +253,26 @@ happy-discord-bot deploy-commands   # Register Discord slash commands
 happy-discord-bot version           # Show version
 ```
 
+## Release & Publish
+
+GitHub Actions automates npm publishing on release creation.
+
+**Release flow:**
+```bash
+npm version patch          # bump version in package.json + create git tag
+git push origin main --tags
+gh release create v<version> --generate-notes
+```
+
+**Workflows:**
+- `.github/workflows/ci.yml` — build + test + lint on push/PR to main
+- `.github/workflows/publish.yml` — build → test → version check → `npm publish --provenance` on GitHub Release
+- `.github/release.yml` — categorizes changelog by PR labels (feature, bug, other)
+
+**Secrets required:** `NPM_TOKEN` (npm granular access token, scoped to this package)
+
+**Version tag convention:** `v<semver>` (e.g. `v0.1.3`). Workflow verifies tag matches `package.json` version.
+
 ## npm Scripts (development)
 
 ```bash
@@ -270,7 +290,7 @@ npm run test:e2e         # E2E smoke tests (requires .env.e2e, real services)
 ## Testing
 
 - Framework: Vitest
-- 22 test suites, 496 tests
+- 22 test suites, 502 tests
 - Test files: `src/**/__tests__/*.test.ts`
 - All Happy/Discord dependencies mocked (no real connections needed)
 
