@@ -1,9 +1,7 @@
 import { createInterface } from 'node:readline/promises';
 import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { homedir } from 'node:os';
-
-const DEFAULT_STATE_DIR = join(homedir(), '.happy-discord-bot');
+import { getStateDir } from '../state-dir.js';
 
 interface ConfigAnswers {
     DISCORD_TOKEN: string;
@@ -42,7 +40,7 @@ export function buildEnvContent(answers: ConfigAnswers): string {
 }
 
 export async function handleInit(): Promise<void> {
-    const stateDir = process.env.BOT_STATE_DIR || DEFAULT_STATE_DIR;
+    const stateDir = getStateDir();
     const envPath = join(stateDir, '.env');
 
     if (existsSync(envPath)) {
@@ -77,8 +75,8 @@ export async function handleInit(): Promise<void> {
         };
 
         const content = buildEnvContent(answers);
-        mkdirSync(stateDir, { recursive: true });
-        writeFileSync(envPath, content);
+        mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+        writeFileSync(envPath, content, { mode: 0o600 });
 
         console.log(`\nConfig saved to ${envPath}`);
         console.log('Run: happy-discord-bot deploy-commands');

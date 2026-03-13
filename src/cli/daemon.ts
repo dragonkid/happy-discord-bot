@@ -1,20 +1,15 @@
 import { spawn } from 'node:child_process';
 import { readFileSync, writeFileSync, mkdirSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
-import { homedir } from 'node:os';
 import { getVersion } from '../version.js';
+import { getStateDir } from '../state-dir.js';
 
-const DEFAULT_STATE_DIR = join(homedir(), '.happy-discord-bot');
 const DAEMON_STATE_FILE = 'daemon.state.json';
 
 export interface DaemonState {
     pid: number;
     startTime: string;
     version: string;
-}
-
-function getStateDir(): string {
-    return process.env.BOT_STATE_DIR || DEFAULT_STATE_DIR;
 }
 
 export function readDaemonState(stateDir: string): DaemonState | null {
@@ -27,8 +22,8 @@ export function readDaemonState(stateDir: string): DaemonState | null {
 }
 
 export function writeDaemonState(stateDir: string, state: DaemonState): void {
-    mkdirSync(stateDir, { recursive: true });
-    writeFileSync(join(stateDir, DAEMON_STATE_FILE), JSON.stringify(state, null, 2) + '\n');
+    mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+    writeFileSync(join(stateDir, DAEMON_STATE_FILE), JSON.stringify(state, null, 2) + '\n', { mode: 0o600 });
 }
 
 function removeDaemonState(stateDir: string): void {
@@ -62,8 +57,13 @@ function startDaemon(): void {
     });
     child.unref();
 
+    if (!child.pid) {
+        console.error('Failed to spawn daemon process.');
+        process.exit(1);
+    }
+
     const state: DaemonState = {
-        pid: child.pid!,
+        pid: child.pid,
         startTime: new Date().toISOString(),
         version: getVersion(),
     };
@@ -71,7 +71,7 @@ function startDaemon(): void {
     console.log(`Daemon started (PID ${state.pid})`);
 }
 
-function stopDaemon(): void {
+async function stopDaemon(): Promise<void> {
     const stateDir = getStateDir();
     const state = readDaemonState(stateDir);
 
@@ -90,19 +90,15 @@ function stopDaemon(): void {
     console.log(`Sent SIGTERM to daemon (PID ${state.pid})`);
 
     const deadline = Date.now() + 10_000;
-    const check = (): void => {
+    while (Date.now() < deadline) {
         if (!isProcessAlive(state.pid)) {
             removeDaemonState(stateDir);
             console.log('Daemon stopped.');
             return;
         }
-        if (Date.now() > deadline) {
-            console.error(`Daemon did not exit within 10s. Try: kill -9 ${state.pid}`);
-            return;
-        }
-        setTimeout(check, 200);
-    };
-    check();
+        await new Promise(r => setTimeout(r, 200));
+    }
+    console.error(`Daemon did not exit within 10s. Try: kill -9 ${state.pid}`);
 }
 
 function statusDaemon(): void {
@@ -130,7 +126,7 @@ export async function handleDaemon(args: string[]): Promise<void> {
     const sub = args[0];
     switch (sub) {
         case 'start': startDaemon(); break;
-        case 'stop': stopDaemon(); break;
+        case 'stop': await stopDaemon(); break;
         case 'status': statusDaemon(); break;
         default:
             console.log('Usage: happy-discord-bot daemon <start|stop|status>');

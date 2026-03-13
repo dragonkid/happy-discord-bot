@@ -8,7 +8,7 @@ import { Bridge } from './bridge.js';
 import { StateTracker } from './happy/state-tracker.js';
 import { PermissionCache } from './happy/permission-cache.js';
 import { Store } from './store.js';
-import { homedir } from 'node:os';
+import { getStateDir } from './state-dir.js';
 import { join } from 'node:path';
 import { writeFileSync, mkdirSync } from 'node:fs';
 
@@ -24,9 +24,13 @@ async function main(): Promise<void> {
     const handoffIdx = process.argv.indexOf('--update-handoff');
     const isHandoff = handoffIdx !== -1;
 
+    let handoffOldPid = 0;
     if (isHandoff) {
-        const oldPid = parseInt(process.argv[handoffIdx + 1], 10);
-        const stateDir = process.env.BOT_STATE_DIR || join(homedir(), '.happy-discord-bot');
+        handoffOldPid = parseInt(process.argv[handoffIdx + 1], 10);
+        if (!Number.isFinite(handoffOldPid) || handoffOldPid <= 0) {
+            console.error('Invalid --update-handoff PID');
+            process.exit(1);
+        }
 
         try {
             loadBotConfig();
@@ -34,18 +38,7 @@ async function main(): Promise<void> {
             console.error('Handoff failed: config error', err);
             process.exit(1);
         }
-
-        // Signal ready to old process
-        mkdirSync(stateDir, { recursive: true });
-        writeFileSync(join(stateDir, 'update-ready'), String(process.pid));
-
-        // Wait for old process to exit (max 10s)
-        const deadline = Date.now() + 10_000;
-        while (Date.now() < deadline) {
-            try { process.kill(oldPid, 0); await new Promise(r => setTimeout(r, 200)); }
-            catch { break; }
-        }
-        // Fall through to normal startup
+        // Ready file will be written after Discord connects (below)
     }
 
     const config = loadBotConfig();
@@ -71,7 +64,7 @@ async function main(): Promise<void> {
     // --- Bridge ---
     const stateTracker = new StateTracker();
     const permissionCache = new PermissionCache();
-    const store = new Store(process.env.BOT_STATE_DIR ?? join(homedir(), '.happy-discord-bot'));
+    const store = new Store(getStateDir());
     const savedState = await store.load();
     permissionCache.loadSessions(savedState.sessions);
     console.log(`[Store] Loaded ${Object.keys(savedState.sessions).length} saved session(s)`);
@@ -514,8 +507,19 @@ async function main(): Promise<void> {
     // Replay pending permission requests from all sessions (requires threads to exist)
     await bridge.replayPendingPermissions();
 
-    // --- Post-handoff: deploy commands + announce ---
+    // --- Post-handoff: signal ready, wait for old process, deploy + announce ---
     if (isHandoff) {
+        const stateDir = getStateDir();
+        mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+        writeFileSync(join(stateDir, 'update-ready'), String(process.pid));
+
+        // Wait for old process to exit (max 10s)
+        const deadline = Date.now() + 10_000;
+        while (Date.now() < deadline) {
+            try { process.kill(handoffOldPid, 0); await new Promise(r => setTimeout(r, 200)); }
+            catch { break; }
+        }
+
         try {
             const { autoDeployCommands } = await import('./discord/deploy-commands.js');
             await autoDeployCommands();

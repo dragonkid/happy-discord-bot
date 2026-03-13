@@ -1,0 +1,14 @@
+src/
+e2e/
+.env*
+.plan/
+.worktrees/
+**/__tests__/
+*.test.ts
+*.test.js
+vitest.config.ts
+tsconfig.json
+eslint.config.js
+Makefile
+CLAUDE.md
+.github/

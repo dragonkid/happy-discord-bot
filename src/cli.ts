@@ -50,7 +50,10 @@ async function main(): Promise<void> {
             break;
         }
         case 'deploy-commands': {
-            await import('./discord/deploy-commands.js');
+            // Import config.js to trigger env var loading (resolveEnvFile + dotenv)
+            await import('./config.js');
+            const { autoDeployCommands } = await import('./discord/deploy-commands.js');
+            await autoDeployCommands();
             break;
         }
         default:

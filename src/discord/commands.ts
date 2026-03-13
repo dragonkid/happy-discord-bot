@@ -474,7 +474,7 @@ async function handleUpdateCommand(interaction: ChatInputCommandInteraction, _br
     }
 
     await interaction.editReply(`Updated to v${latest}. Restarting...`);
-    setTimeout(() => process.exit(0), 1000);
+    setTimeout(() => process.kill(process.pid, 'SIGTERM'), 1000);
 }
 
 // --- /skills autocomplete ---
