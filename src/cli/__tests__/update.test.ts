@@ -169,6 +169,15 @@ describe('performDiscordUpdate', () => {
     });
 });
 
+vi.mock('../daemon.js', () => ({
+    isDaemonRunning: vi.fn(() => false),
+    readDaemonState: vi.fn(() => null),
+    writeDaemonState: vi.fn(),
+    removeDaemonState: vi.fn(),
+}));
+
+const { isDaemonRunning, readDaemonState, writeDaemonState, removeDaemonState } = await import('../daemon.js');
+
 describe('handleUpdate', () => {
     beforeEach(() => {
         vi.restoreAllMocks();
@@ -216,6 +225,102 @@ describe('handleUpdate', () => {
         expect(errorSpy).toHaveBeenCalledWith('Update failed. Current version unchanged.');
         expect(exitSpy).toHaveBeenCalledWith(1);
 
+        logSpy.mockRestore();
+        errorSpy.mockRestore();
+        exitSpy.mockRestore();
+    });
+
+    it('prints "Updated to vX.Y.Z" on successful npm install without daemon', async () => {
+        // checkForUpdate returns new version
+        vi.mocked(execFile).mockImplementation((_cmd: any, _args: any, cb: any) => {
+            cb(null, { stdout: '0.2.0\n', stderr: '' });
+            return undefined as any;
+        });
+        // runNpmInstall succeeds
+        vi.mocked(execFileSync).mockReturnValue('' as any);
+        vi.mocked(isDaemonRunning).mockReturnValue(false);
+
+        const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+        await handleUpdate([]);
+
+        expect(logSpy).toHaveBeenCalledWith('Updated to v0.2.0.');
+        // No daemon restart — writeDaemonState should not be called
+        expect(writeDaemonState).not.toHaveBeenCalled();
+        logSpy.mockRestore();
+    });
+
+    it('restarts daemon after successful update when daemon is running', async () => {
+        // checkForUpdate returns new version
+        vi.mocked(execFile).mockImplementation((_cmd: any, _args: any, cb: any) => {
+            cb(null, { stdout: '0.2.0\n', stderr: '' });
+            return undefined as any;
+        });
+        // runNpmInstall + resolveNewCliPath
+        vi.mocked(execFileSync).mockReturnValue('/usr/local\n' as any);
+        vi.mocked(isDaemonRunning).mockReturnValue(true);
+        vi.mocked(readDaemonState).mockReturnValue({ pid: 99999, startTime: '2026-01-01', version: '0.1.0' });
+
+        // spawn returns new process
+        vi.mocked(spawn).mockReturnValue({ pid: 55555, unref: vi.fn() } as any);
+
+        // Simulate old process dying immediately after SIGTERM
+        const killSpy = vi.fn();
+        let killCallCount = 0;
+        killSpy.mockImplementation((_pid: number, signal?: string | number) => {
+            killCallCount++;
+            if (signal === 'SIGTERM') return;
+            throw new Error('ESRCH'); // process dead
+        });
+        const origKill = process.kill;
+        process.kill = killSpy as any;
+
+        const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+        await handleUpdate([]);
+
+        expect(killSpy).toHaveBeenCalledWith(99999, 'SIGTERM');
+        expect(spawn).toHaveBeenCalled();
+        expect(writeDaemonState).toHaveBeenCalledWith(
+            expect.any(String),
+            expect.objectContaining({ pid: 55555, version: '0.2.0' }),
+        );
+        expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Daemon restarted'));
+
+        process.kill = origKill;
+        logSpy.mockRestore();
+    });
+
+    it('exits with 1 when daemon respawn fails (no pid)', async () => {
+        vi.mocked(execFile).mockImplementation((_cmd: any, _args: any, cb: any) => {
+            cb(null, { stdout: '0.2.0\n', stderr: '' });
+            return undefined as any;
+        });
+        vi.mocked(execFileSync).mockReturnValue('/usr/local\n' as any);
+        vi.mocked(isDaemonRunning).mockReturnValue(true);
+        vi.mocked(readDaemonState).mockReturnValue({ pid: 99999, startTime: '2026-01-01', version: '0.1.0' });
+
+        // spawn returns no pid
+        vi.mocked(spawn).mockReturnValue({ pid: undefined, unref: vi.fn() } as any);
+
+        // Old process: SIGTERM succeeds, then signal=0 check → dead
+        const killSpy = vi.fn();
+        killSpy.mockImplementation((_pid: number, signal?: string | number) => {
+            if (signal === 'SIGTERM') return; // SIGTERM succeeds
+            throw new Error('ESRCH'); // process already dead
+        });
+        const origKill = process.kill;
+        process.kill = killSpy as any;
+
+        const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+
+        await handleUpdate([]);
+
+        expect(removeDaemonState).toHaveBeenCalled();
+        expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('Failed to spawn'));
+        expect(exitSpy).toHaveBeenCalledWith(1);
+
+        process.kill = origKill;
         logSpy.mockRestore();
         errorSpy.mockRestore();
         exitSpy.mockRestore();
