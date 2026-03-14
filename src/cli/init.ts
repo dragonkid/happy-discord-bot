@@ -1,5 +1,5 @@
 import { createInterface } from 'node:readline/promises';
-import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { writeFileSync, mkdirSync, existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getStateDir } from '../state-dir.js';
 
@@ -9,6 +9,18 @@ interface ConfigAnswers {
     DISCORD_USER_ID: string;
     DISCORD_APPLICATION_ID: string;
     DISCORD_GUILD_ID?: string;
+}
+
+export function parseEnvFile(content: string): Record<string, string> {
+    const result: Record<string, string> = {};
+    for (const line of content.split('\n')) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) continue;
+        const eqIndex = trimmed.indexOf('=');
+        if (eqIndex === -1) continue;
+        result[trimmed.slice(0, eqIndex)] = trimmed.slice(eqIndex + 1);
+    }
+    return result;
 }
 
 export function buildEnvContent(answers: ConfigAnswers): string {
@@ -31,10 +43,10 @@ export async function handleInit(): Promise<void> {
     const stateDir = getStateDir();
     const envPath = join(stateDir, '.env');
 
+    let defaults: Record<string, string> = {};
     if (existsSync(envPath)) {
-        console.log(`Config already exists at ${envPath}`);
-        console.log('Delete it first if you want to reconfigure.');
-        return;
+        defaults = parseEnvFile(readFileSync(envPath, 'utf-8'));
+        console.log(`Existing config found at ${envPath}\n`);
     }
 
     const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -42,18 +54,27 @@ export async function handleInit(): Promise<void> {
     try {
         console.log('Setting up happy-discord-bot\n');
 
-        const token = await rl.question('Discord bot token: ');
-        const channelId = await rl.question('Discord channel ID: ');
-        const userId = await rl.question('Your Discord user ID: ');
-        const appId = await rl.question('Discord application ID: ');
-        const guildId = await rl.question('Discord guild ID (optional, press Enter to skip): ');
+        const ask = (label: string, key: string, optional = false): Promise<string> => {
+            const current = defaults[key];
+            const suffix = current ? ` [${current}]` : '';
+            const optHint = optional ? ' (optional, press Enter to skip)' : '';
+            return rl.question(`${label}${suffix}${optHint}: `);
+        };
+
+        const token = await ask('Discord bot token', 'DISCORD_TOKEN');
+        const channelId = await ask('Discord channel ID', 'DISCORD_CHANNEL_ID');
+        const userId = await ask('Your Discord user ID', 'DISCORD_USER_ID');
+        const appId = await ask('Discord application ID', 'DISCORD_APPLICATION_ID');
+        const guildId = await ask('Discord guild ID', 'DISCORD_GUILD_ID', true);
 
         const answers: ConfigAnswers = {
-            DISCORD_TOKEN: token,
-            DISCORD_CHANNEL_ID: channelId,
-            DISCORD_USER_ID: userId,
-            DISCORD_APPLICATION_ID: appId,
-            ...(guildId && { DISCORD_GUILD_ID: guildId }),
+            DISCORD_TOKEN: token || defaults.DISCORD_TOKEN || '',
+            DISCORD_CHANNEL_ID: channelId || defaults.DISCORD_CHANNEL_ID || '',
+            DISCORD_USER_ID: userId || defaults.DISCORD_USER_ID || '',
+            DISCORD_APPLICATION_ID: appId || defaults.DISCORD_APPLICATION_ID || '',
+            ...((guildId || defaults.DISCORD_GUILD_ID) && {
+                DISCORD_GUILD_ID: guildId || defaults.DISCORD_GUILD_ID,
+            }),
         };
 
         const content = buildEnvContent(answers);

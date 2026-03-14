@@ -4,7 +4,7 @@
  * Requires `npm run build` before running.
  */
 import { describe, it, expect, beforeAll } from 'vitest';
-import { execFile } from 'node:child_process';
+import { execFile, spawn as nodeSpawn } from 'node:child_process';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
@@ -82,15 +82,27 @@ describe('CLI integration', () => {
 
     // --- T3: init ---
     describe('init', () => {
-        it('exits with message when config already exists', async () => {
+        it('reads existing config and shows defaults when config already exists', async () => {
             const stateDir = join(tmpdir(), `cli-test-init-${Date.now()}`);
             mkdirSync(stateDir, { recursive: true });
-            writeFileSync(join(stateDir, '.env'), 'EXISTING=true\n');
+            writeFileSync(join(stateDir, '.env'), 'DISCORD_TOKEN=old-tok\n');
 
-            const { stdout, exitCode } = await runCli(['init'], { stateDir });
-            expect(exitCode).toBe(0);
-            expect(stdout).toContain('Config already exists');
+            // spawn with stdin pipe so we can close it (readline needs EOF to exit)
+            const stdout = await new Promise<string>((resolve, reject) => {
+                const child = nodeSpawn(process.execPath, [CLI, 'init'], {
+                    env: { ...process.env, BOT_STATE_DIR: stateDir },
+                    stdio: ['pipe', 'pipe', 'pipe'],
+                });
+                let out = '';
+                child.stdout!.on('data', (d: Buffer) => { out += d.toString(); });
+                child.on('close', () => resolve(out));
+                child.on('error', reject);
+                // Close stdin immediately — readline gets EOF and exits
+                child.stdin!.end();
+                setTimeout(() => { child.kill(); reject(new Error('timeout')); }, 5000);
+            });
 
+            expect(stdout).toContain('Existing config found');
             rmSync(stateDir, { recursive: true, force: true });
         });
     });

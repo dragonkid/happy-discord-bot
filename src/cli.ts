@@ -5,7 +5,7 @@ export interface ParsedArgs {
     args: string[];
 }
 
-const COMMANDS = new Set(['start', 'daemon', 'update', 'version', 'init', 'deploy-commands', 'help', 'auth']);
+const COMMANDS = new Set(['start', 'daemon', 'update', 'version', 'init', 'deploy-commands', 'help', 'auth', 'logs']);
 
 export function parseArgs(argv: string[]): ParsedArgs {
     const first = argv[0];
@@ -39,6 +39,7 @@ Commands:
   start               Run the bot (default)
   auth <action>       Manage Happy account (login|restore|status|logout)
   daemon <action>     Manage background daemon (start|stop|status)
+  logs                Tail daemon log output
   update              Check for updates and upgrade
   init                Interactive config setup
   deploy-commands     Register Discord slash commands
@@ -72,6 +73,11 @@ Options:
         case 'update': {
             const { handleUpdate } = await import('./cli/update.js');
             await handleUpdate(args);
+            break;
+        }
+        case 'logs': {
+            const { handleLogs } = await import('./cli/logs.js');
+            await handleLogs();
             break;
         }
         case 'init': {
