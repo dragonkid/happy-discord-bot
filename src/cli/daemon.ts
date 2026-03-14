@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { readFileSync, writeFileSync, mkdirSync, unlinkSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, unlinkSync, openSync } from 'node:fs';
 import { join } from 'node:path';
 import { getVersion } from '../version.js';
 import { getStateDir } from '../state-dir.js';
@@ -49,10 +49,13 @@ function startDaemon(): void {
     }
 
     const cliPath = join(import.meta.dirname, '..', 'cli.js');
+    mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+    const logPath = join(stateDir, 'daemon.log');
+    const logFd = openSync(logPath, 'a');
 
     const child = spawn(process.execPath, [cliPath, 'start'], {
         detached: true,
-        stdio: 'ignore',
+        stdio: ['ignore', logFd, logFd],
         env: { ...process.env, BOT_STATE_DIR: stateDir },
     });
     child.unref();
@@ -119,6 +122,7 @@ function statusDaemon(): void {
     console.log(`  PID:     ${state.pid}`);
     console.log(`  Version: ${state.version}`);
     console.log(`  Started: ${state.startTime}`);
+    console.log(`  Log:     ${join(stateDir, 'daemon.log')}`);
 }
 
 export async function handleDaemon(args: string[]): Promise<void> {
