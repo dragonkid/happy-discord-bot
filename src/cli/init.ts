@@ -11,6 +11,18 @@ interface ConfigAnswers {
     DISCORD_GUILD_ID?: string;
 }
 
+export function parseEnvFile(content: string): Record<string, string> {
+    const result: Record<string, string> = {};
+    for (const line of content.split('\n')) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) continue;
+        const eqIndex = trimmed.indexOf('=');
+        if (eqIndex === -1) continue;
+        result[trimmed.slice(0, eqIndex)] = trimmed.slice(eqIndex + 1);
+    }
+    return result;
+}
+
 export function buildEnvContent(answers: ConfigAnswers): string {
     const lines: string[] = [
         '# Discord Bot',

@@ -3,6 +3,7 @@ import * as fs from 'node:fs';
 
 vi.mock('node:fs', () => ({
     existsSync: vi.fn(),
+    readFileSync: vi.fn(),
     writeFileSync: vi.fn(),
     mkdirSync: vi.fn(),
 }));
@@ -14,7 +15,7 @@ vi.mock('node:readline/promises', () => ({
     })),
 }));
 
-const { buildEnvContent, handleInit } = await import('../init.js');
+const { buildEnvContent, parseEnvFile, handleInit } = await import('../init.js');
 
 describe('buildEnvContent', () => {
     it('builds .env content with required fields', () => {
@@ -49,6 +50,30 @@ describe('buildEnvContent', () => {
             DISCORD_APPLICATION_ID: 'a',
         });
         expect(content.endsWith('\n')).toBe(true);
+    });
+});
+
+describe('parseEnvFile', () => {
+    it('parses key=value pairs from .env content', () => {
+        const content = '# comment\nDISCORD_TOKEN=tok123\nDISCORD_CHANNEL_ID=ch456\n';
+        const result = parseEnvFile(content);
+        expect(result).toEqual({ DISCORD_TOKEN: 'tok123', DISCORD_CHANNEL_ID: 'ch456' });
+    });
+
+    it('ignores blank lines and comments', () => {
+        const content = '\n# comment\n\nDISCORD_TOKEN=tok\n';
+        const result = parseEnvFile(content);
+        expect(result).toEqual({ DISCORD_TOKEN: 'tok' });
+    });
+
+    it('handles values with equals signs', () => {
+        const content = 'DISCORD_TOKEN=tok=with=equals\n';
+        const result = parseEnvFile(content);
+        expect(result).toEqual({ DISCORD_TOKEN: 'tok=with=equals' });
+    });
+
+    it('returns empty object for empty content', () => {
+        expect(parseEnvFile('')).toEqual({});
     });
 });
 
