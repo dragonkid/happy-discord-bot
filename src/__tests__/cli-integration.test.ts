@@ -58,6 +58,28 @@ describe('CLI integration', () => {
         });
     });
 
+    // --- help ---
+    describe('help', () => {
+        it('outputs usage with "help" command', async () => {
+            const { stdout, exitCode } = await runCli(['help']);
+            expect(exitCode).toBe(0);
+            expect(stdout).toContain('Usage:');
+            expect(stdout).toContain('happy-discord-bot');
+        });
+
+        it('outputs usage with --help flag', async () => {
+            const { stdout, exitCode } = await runCli(['--help']);
+            expect(exitCode).toBe(0);
+            expect(stdout).toContain('Usage:');
+        });
+
+        it('outputs usage with -h flag', async () => {
+            const { stdout, exitCode } = await runCli(['-h']);
+            expect(exitCode).toBe(0);
+            expect(stdout).toContain('Usage:');
+        });
+    });
+
     // --- T3: init ---
     describe('init', () => {
         it('exits with message when config already exists', async () => {

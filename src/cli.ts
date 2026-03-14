@@ -5,17 +5,21 @@ export interface ParsedArgs {
     args: string[];
 }
 
-const COMMANDS = new Set(['start', 'daemon', 'update', 'version', 'init', 'deploy-commands']);
+const COMMANDS = new Set(['start', 'daemon', 'update', 'version', 'init', 'deploy-commands', 'help']);
 
 export function parseArgs(argv: string[]): ParsedArgs {
     const first = argv[0];
 
-    if (!first || (!COMMANDS.has(first) && first !== '--version')) {
+    if (!first || (!COMMANDS.has(first) && !first.startsWith('-'))) {
         return { command: 'start', args: argv };
     }
 
     if (first === '--version') {
         return { command: 'version', args: [] };
+    }
+
+    if (first === '--help' || first === '-h') {
+        return { command: 'help', args: [] };
     }
 
     return { command: first, args: argv.slice(1) };
@@ -25,6 +29,26 @@ async function main(): Promise<void> {
     const { command, args } = parseArgs(process.argv.slice(2));
 
     switch (command) {
+        case 'help': {
+            const { getVersion } = await import('./version.js');
+            console.log(`happy-discord-bot v${getVersion()}
+
+Usage: happy-discord-bot [command]
+
+Commands:
+  start               Run the bot (default)
+  daemon <action>     Manage background daemon (start|stop|status)
+  update              Check for updates and upgrade
+  init                Interactive config setup
+  deploy-commands     Register Discord slash commands
+  version             Show version
+  help                Show this help message
+
+Options:
+  --version, -v       Show version
+  --help, -h          Show this help message`);
+            break;
+        }
         case 'version': {
             const { getVersion } = await import('./version.js');
             console.log(`happy-discord-bot v${getVersion()}`);

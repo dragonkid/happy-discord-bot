@@ -31,6 +31,12 @@ describe('parseArgs', () => {
         expect(parseArgs(['deploy-commands'])).toEqual({ command: 'deploy-commands', args: [] });
     });
 
+    it('parses "help" and --help flag', () => {
+        expect(parseArgs(['help'])).toEqual({ command: 'help', args: [] });
+        expect(parseArgs(['--help'])).toEqual({ command: 'help', args: [] });
+        expect(parseArgs(['-h'])).toEqual({ command: 'help', args: [] });
+    });
+
     it('passes remaining args through', () => {
         expect(parseArgs(['daemon', 'start', '--verbose'])).toEqual({
             command: 'daemon',
