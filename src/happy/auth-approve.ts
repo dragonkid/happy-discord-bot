@@ -61,6 +61,7 @@ export async function approveAccountAuth(
 
     if (!res.ok) {
         const body = await res.text().catch(() => '');
-        throw new Error(`Approve failed: ${res.status} ${res.statusText}${body ? ` — ${body}` : ''}`);
+        const truncated = body.length > 200 ? body.slice(0, 200) + '...' : body;
+        throw new Error(`Approve failed: ${res.status} ${res.statusText}${truncated ? ` — ${truncated}` : ''}`);
     }
 }

@@ -122,13 +122,18 @@ async function main(): Promise<void> {
                 }
             }
 
-            // pendingApprove: intercept image for QR decode
-            if (bridge.pendingApprove && message.attachments.size > 0) {
+            // pendingApprove: intercept image for QR decode (only in the channel where /approve was invoked)
+            const pendingApprove = bridge.pendingApprove;
+            if (pendingApprove && message.channelId === pendingApprove.channelId && message.attachments.size > 0) {
                 const imageAttachment = [...message.attachments.values()].find(
                     (a) => a.contentType?.startsWith('image/'),
                 );
                 if (imageAttachment) {
                     bridge.clearPendingApprove();
+                    if (imageAttachment.size > 10 * 1024 * 1024) {
+                        await message.reply('Image too large (max 10 MB).');
+                        return;
+                    }
                     try {
                         const { decodeQrFromImage, parseAccountAuthUrl, approveAccountAuth } = await import('./happy/auth-approve.js');
                         const { loadConfig } = await import('./vendor/config.js');
