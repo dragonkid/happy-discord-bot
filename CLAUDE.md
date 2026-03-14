@@ -41,16 +41,19 @@ Main Channel (status summaries only)
 src/
 ├── cli.ts                # CLI entry point (bin), arg parsing, subcommand routing
 ├── version.ts            # Version from package.json (cached)
-├── index.ts              # Bot entry point, message forwarding + thread routing
+├── index.ts              # Bot entry point, message forwarding + thread routing + pendingApprove
 ├── config.ts             # Env var loading + ~/.happy-discord-bot/.env fallback
+├── credentials.ts        # Bot credential CRUD (~/.happy-discord-bot/credentials.json)
 ├── bridge.ts             # Glue: Happy events ↔ Discord messages/buttons + typing/emoji + thread routing
 ├── store.ts              # Bot state persistence (~/.happy-discord-bot/state.json)
 ├── cli/
+│   ├── auth.ts           # Auth CLI: login/restore/status/logout
 │   ├── daemon.ts         # Daemon start/stop/status (detached child_process)
 │   ├── update.ts         # Self-update (npm install -g + dual-process handoff)
 │   └── init.ts           # Interactive config setup (~/.happy-discord-bot/.env)
 ├── happy/
 │   ├── client.ts         # HappyClient: Socket.IO + sessionRPC + machineRPC + HTTP
+│   ├── auth-approve.ts   # QR decode (jsqr+sharp) + device approve via NaCl box
 │   ├── session-metadata.ts  # Session metadata decryption + directory extraction + threadName
 │   ├── usage.ts          # REST API wrapper for /v1/usage/query (token/cost)
 │   ├── skill-registry.ts # Skills/commands discovery (personal + project + plugins)
@@ -65,10 +68,10 @@ src/
 │   ├── formatter.ts      # Code fence-aware message chunking, code blocks, diff formatting
 │   └── deploy-commands.ts  # One-time slash command deployment
 └── vendor/               # Vendored from happy-agent (~800 lines)
-    ├── encryption.ts     # AES-256-GCM + XSalsa20 + key derivation
-    ├── credentials.ts    # ~/.happy/agent.key + ~/.happy/access.key read/write
+    ├── encryption.ts     # AES-256-GCM + XSalsa20 + key derivation + NaCl box
+    ├── credentials.ts    # Credentials type definition (type-only, no I/O)
     ├── api.ts            # REST API (listSessions, getMessages, etc.)
-    └── config.ts         # Happy server config loading
+    └── config.ts         # Happy server URL config
 ```
 
 ## Happy Relay Protocol Reference
@@ -172,6 +175,16 @@ When a Discord message includes attachments (images, PDFs, code files, etc.), th
 - Wraps Claude Code CLI's built-in `/loop` command which runs a prompt or slash command on a recurring interval.
 - Example: `/loop 5m /compact` runs `/compact` every 5 minutes.
 
+### /approve Command
+- `/approve` — Two-step device authorization flow (replaces App's QR scan).
+- Step 1: User runs `/approve` → bot enters `pendingApprove` state (60s timeout), replies with instructions.
+- Step 2: User pastes QR screenshot → bot downloads image → `sharp` converts to RGBA → `jsqr` decodes QR URL.
+- QR format: `happy:///account?<base64url-encoded ephemeral public key>`.
+- Bot encrypts its secret via NaCl box for the ephemeral key → `POST /v1/auth/account/response`.
+- Channel-scoped: only images in the same channel as `/approve` trigger QR detection.
+- 10MB image size limit. Non-image attachments ignored.
+- `pendingApprove` auto-clears on timeout or after processing.
+
 ### /cleanup Command
 - `/cleanup` — Delete all archived (inactive) sessions and their associated Discord threads.
 - Shows "Confirm Cleanup" / "Cancel" buttons before executing.
@@ -197,11 +210,7 @@ When a Discord message includes attachments (images, PDFs, code files, etc.), th
 6. On timeout: old kills new process, continues running
 
 ### machineRPC Encryption
-Bot reads two credential files:
-- `~/.happy/agent.key` → `{token, secret}` (legacy XSalsa20-Poly1305)
-- `~/.happy/access.key` → `{encryption: {machineKey}}` (AES-256-GCM / dataKey)
-
-`machineRPC` uses `machineKey` + `dataKey` variant when `access.key` is available, falls back to `secret` + `legacy` otherwise. This matches daemon's `RpcHandlerManager` which always encrypts responses with its machineKey.
+All machineRPC calls use the bot's own `secret` + `legacy` (XSalsa20-Poly1305) variant. Communication goes through the relay server — bot never connects directly to the daemon. No `~/.happy/` dependency.
 
 ### PermissionCache Logic (replicate from permissionHandler.ts:116-165)
 Check order: Bash literal → Bash prefix → tool whitelist → permissionMode
@@ -236,9 +245,11 @@ Required env vars (via `.env` or shell):
 - `DISCORD_REQUIRE_MENTION` — (optional, default `false`) Require @bot mention to forward messages
 - `BOT_STATE_DIR` — (optional, default `~/.happy-discord-bot`) Directory for state.json persistence
 
-Happy credentials (one of):
-- `HAPPY_TOKEN` + `HAPPY_SECRET` env vars, or
-- `~/.happy/agent.key` file (created by `happy-agent auth login`)
+Happy credentials (checked in order):
+1. `HAPPY_TOKEN` + `HAPPY_SECRET` env vars
+2. `~/.happy-discord-bot/credentials.json` (created by `happy-discord-bot auth login`)
+
+Bot does NOT read from `~/.happy/` — all credentials are self-managed.
 
 ## CLI Commands (npm global install)
 
@@ -247,6 +258,10 @@ happy-discord-bot start             # Run bot (foreground, default)
 happy-discord-bot daemon start      # Run as background daemon
 happy-discord-bot daemon stop       # Stop daemon
 happy-discord-bot daemon status     # Show daemon status
+happy-discord-bot auth login        # Generate new account (secret + Ed25519 → POST /v1/auth)
+happy-discord-bot auth restore      # Input existing secret (base64url) to reuse account
+happy-discord-bot auth status       # Show credential status
+happy-discord-bot auth logout       # Delete stored credentials
 happy-discord-bot update            # Check for updates and upgrade
 happy-discord-bot init              # Interactive config setup
 happy-discord-bot deploy-commands   # Register Discord slash commands
@@ -290,7 +305,7 @@ npm run test:e2e         # E2E smoke tests (requires .env.e2e, real services)
 ## Testing
 
 - Framework: Vitest
-- 22 test suites, 502 tests
+- 25 test suites, 536 tests
 - Test files: `src/**/__tests__/*.test.ts`
 - All Happy/Discord dependencies mocked (no real connections needed)
 
