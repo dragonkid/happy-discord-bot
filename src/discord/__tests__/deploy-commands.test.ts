@@ -27,6 +27,7 @@ vi.mock('discord.js', () => ({
         applicationGuildCommands: vi.fn(() => '/guild-commands'),
         applicationCommands: vi.fn(() => '/commands'),
     },
+    // eslint-disable-next-line @typescript-eslint/no-extraneous-class
     SlashCommandBuilder: class { constructor() { return chainProxy(); } },
 }));
 
