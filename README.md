@@ -209,6 +209,7 @@ happy-discord-bot auth login        # Create new Happy account
 happy-discord-bot auth restore      # Restore from existing secret
 happy-discord-bot auth status       # Show credential status
 happy-discord-bot auth logout       # Remove credentials
+happy-discord-bot logs               # Tail daemon log output
 happy-discord-bot deploy-commands   # Register Discord slash commands
 happy-discord-bot version           # Show version
 ```

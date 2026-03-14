@@ -49,6 +49,7 @@ src/
 ├── cli/
 │   ├── auth.ts           # Auth CLI: login/restore/status/logout
 │   ├── daemon.ts         # Daemon start/stop/status (detached child_process)
+│   ├── logs.ts           # Tail daemon log (tail -f daemon.log)
 │   ├── update.ts         # Self-update (npm install -g + dual-process handoff)
 │   └── init.ts           # Interactive config setup (~/.happy-discord-bot/.env)
 ├── happy/
@@ -264,6 +265,7 @@ happy-discord-bot auth status       # Show credential status
 happy-discord-bot auth logout       # Delete stored credentials
 happy-discord-bot update            # Check for updates and upgrade
 happy-discord-bot init              # Interactive config setup
+happy-discord-bot logs              # Tail daemon log output
 happy-discord-bot deploy-commands   # Register Discord slash commands
 happy-discord-bot version           # Show version
 ```
@@ -305,7 +307,7 @@ npm run test:e2e         # E2E smoke tests (requires .env.e2e, real services)
 ## Testing
 
 - Framework: Vitest
-- 25 test suites, 572 tests
+- 26 test suites, 575 tests
 - Test files: `src/**/__tests__/*.test.ts`
 - All Happy/Discord dependencies mocked (no real connections needed)
 
