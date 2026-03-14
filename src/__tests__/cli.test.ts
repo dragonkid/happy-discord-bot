@@ -38,6 +38,10 @@ describe('parseArgs', () => {
         expect(parseArgs(['auth', 'logout'])).toEqual({ command: 'auth', args: ['logout'] });
     });
 
+    it('parses "logs"', () => {
+        expect(parseArgs(['logs'])).toEqual({ command: 'logs', args: [] });
+    });
+
     it('parses "help" and --help flag', () => {
         expect(parseArgs(['help'])).toEqual({ command: 'help', args: [] });
         expect(parseArgs(['--help'])).toEqual({ command: 'help', args: [] });
