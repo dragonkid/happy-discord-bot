@@ -40,7 +40,7 @@ function requiredEnv(key: string): string {
 }
 
 /** Read credentials from env vars (HAPPY_TOKEN + HAPPY_SECRET), fallback to bot's credentials.json */
-function loadCredentials(_happy: HappyConfig): Credentials {
+function loadCredentials(): Credentials {
     const envToken = process.env.HAPPY_TOKEN;
     const envSecret = process.env.HAPPY_SECRET;
 
@@ -65,7 +65,7 @@ function loadCredentials(_happy: HappyConfig): Credentials {
 
 export function loadBotConfig(): BotConfig {
     const happy = loadHappyConfig();
-    const credentials = loadCredentials(happy);
+    const credentials = loadCredentials();
 
     return {
         discord: {

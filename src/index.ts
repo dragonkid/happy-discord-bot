@@ -142,6 +142,10 @@ async function main(): Promise<void> {
                         const { getStateDir } = await import('./state-dir.js');
 
                         const resp = await fetch(imageAttachment.url);
+                        if (!resp.ok) {
+                            await message.reply(`Failed to download image: HTTP ${resp.status}`);
+                            return;
+                        }
                         const buf = Buffer.from(await resp.arrayBuffer());
                         const qrText = await decodeQrFromImage(buf);
                         if (!qrText) {

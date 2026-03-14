@@ -127,16 +127,7 @@ export class HappyClient extends EventEmitter<HappyClientEvents> {
         method: string,
         params: A,
     ): Promise<R> {
-        // Daemon may use machineKey (dataKey mode) or secret (legacy mode)
-        const machineKey = this.credentials.machineKey;
-        if (machineKey) {
-            return this.encryptedRPC<R>(
-                `${machineId}:${method}`,
-                params,
-                machineKey,
-                'dataKey',
-            );
-        }
+        // All machine RPCs go through relay, encrypted with bot's own secret
         return this.encryptedRPC<R>(
             `${machineId}:${method}`,
             params,

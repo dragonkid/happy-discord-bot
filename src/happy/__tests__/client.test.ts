@@ -51,8 +51,6 @@ vi.mock('../../vendor/encryption.js', () => ({
 
 const testConfig: Config = {
     serverUrl: 'https://test.example.com',
-    homeDir: '/tmp/.happy',
-    credentialPath: '/tmp/.happy/agent.key',
 };
 
 const testCredentials: Credentials = {
@@ -383,30 +381,6 @@ describe('HappyClient', () => {
             ).rejects.toThrow('Not connected');
         });
 
-        it('uses machineKey with dataKey variant when available', async () => {
-            const machineKey = new Uint8Array(32).fill(0xab);
-            const clientWithMachineKey = new HappyClient(testConfig, {
-                ...testCredentials,
-                machineKey,
-            });
-            clientWithMachineKey.connect();
-
-            const { encrypt } = await import('../../vendor/encryption.js');
-            const responseData = { sessionId: 'new-sess-123' };
-            const encodedResponse = Buffer.from(
-                JSON.stringify(responseData),
-            ).toString('base64');
-
-            mockSocket.emitWithAck.mockResolvedValueOnce({
-                ok: true,
-                result: encodedResponse,
-            });
-
-            const result = await clientWithMachineKey.machineRPC('machine-1', 'spawn', {});
-
-            expect(result).toEqual(responseData);
-            expect(encrypt).toHaveBeenCalledWith(machineKey, 'dataKey', {});
-        });
     });
 
     describe('request', () => {
