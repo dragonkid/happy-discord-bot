@@ -2,7 +2,7 @@ import sharp from 'sharp';
 import { decodeBase64Url, encodeBase64, libsodiumEncryptForPublicKey } from '../vendor/encryption.js';
 
 // jsqr is CJS with `export default` in .d.ts — NodeNext sees it as namespace
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+// eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/consistent-type-imports
 const jsQR: typeof import('jsqr')['default'] = require('jsqr');
 
 /**
