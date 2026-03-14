@@ -16,6 +16,8 @@ Discord Bot that controls Claude Code sessions via Happy Coder's relay server. S
 - **Permission replay** — pending permissions re-displayed on bot startup
 - **Session management** — create, archive, delete sessions; batch cleanup of stale sessions
 - **Usage tracking** — query token usage and cost per session or across all sessions
+- **Built-in auth** — bot manages its own Happy account (`auth login` / `auth restore`), no external tools needed
+- **Device approval** — `/approve` command to authorize new devices via QR code screenshot (replaces mobile app scan)
 
 ## Installation
 
@@ -24,13 +26,14 @@ Discord Bot that controls Claude Code sessions via Happy Coder's relay server. S
 ```bash
 npm install -g happy-discord-bot
 happy-discord-bot init              # Interactive config setup (~/.happy-discord-bot/.env)
+happy-discord-bot auth login        # Create Happy account (or `auth restore` with existing secret)
 happy-discord-bot deploy-commands   # Register Discord slash commands
 happy-discord-bot daemon start      # Run as background daemon
 ```
 
-`init` prompts for Discord token, channel ID, user ID, application ID, and optional Happy credentials. Config is saved to `~/.happy-discord-bot/.env` with restrictive file permissions (0600).
+`init` prompts for Discord token, channel ID, user ID, and application ID. Config is saved to `~/.happy-discord-bot/.env` with restrictive file permissions (0600).
 
-If you already have `~/.happy/agent.key` from `happy-agent auth login`, you can skip the Happy credential prompts during init.
+`auth login` generates a new Happy account (secret + Ed25519 keypair → challenge-response auth). Credentials are saved to `~/.happy-discord-bot/credentials.json`. If you already have a secret from another device, use `auth restore` to input it.
 
 ### From source (development)
 
@@ -47,8 +50,8 @@ npm run dev
 
 - Node.js 20+
 - A Discord Bot token
-- A Happy Coder account with paired agent credentials
-- `happy` CLI daemon running (`happy daemon start`) for `/new` session creation
+- A Happy Coder account (created via `auth login`, or restored from existing secret via `auth restore`)
+- `happy` CLI daemon running on the target machine for `/new` session creation
 
 ## Setup (from source)
 
@@ -72,28 +75,29 @@ npm install
 
 ### 3. Get Happy Coder credentials
 
-**Option A: File-based (local development)**
+**Option A: Built-in auth (recommended)**
 
 ```bash
-npm install -g @slopus/agent
-happy-agent auth login
+happy-discord-bot auth login
 ```
 
-This displays a QR code in the terminal. Scan it with the Happy Coder app:
-**Settings → Account → Link New Device**. The app is required for this step — it performs a device pairing that transfers your encrypted account secret to the CLI.
+Creates a new Happy account. The bot generates a 32-byte secret, derives an Ed25519 keypair, and registers with the relay server. Credentials are saved to `~/.happy-discord-bot/credentials.json` (mode 0600).
 
-Once paired, `~/.happy/agent.key` is created with your token and secret.
+The command prints a backup key (base64url-encoded secret). **Save it** — you'll need it to restore access on another machine via `auth restore`.
 
-**Option B: Environment variables (deployment)**
+After login, the new account needs to be linked to an existing Happy account. Use the `/approve` Discord command (see below) or scan the QR code from the Happy mobile app.
 
-Extract token and secret from an existing `agent.key`:
+**Option B: Restore from existing secret**
 
 ```bash
-cat ~/.happy/agent.key
-# Output: {"token":"...","secret":"..."}
+happy-discord-bot auth restore
 ```
 
-Set them as `HAPPY_TOKEN` and `HAPPY_SECRET` in your environment.
+Prompts for a base64url-encoded secret (from a previous `auth login` backup or another device). Validates the secret length (32 bytes), authenticates with the relay, and saves credentials.
+
+**Option C: Environment variables (CI/deployment)**
+
+Set `HAPPY_TOKEN` and `HAPPY_SECRET` in your environment or `.env` file. These take precedence over `credentials.json`.
 
 ### 4. Configure environment
 
@@ -117,7 +121,7 @@ Fill in:
 | `BOT_STATE_DIR` | No | Directory for state.json persistence (default: `~/.happy-discord-bot`) |
 
 \* Required for `npm run deploy-commands`.
-\*\* Either set `HAPPY_TOKEN` + `HAPPY_SECRET`, or have `~/.happy/agent.key` present.
+\*\* Either set `HAPPY_TOKEN` + `HAPPY_SECRET`, or run `happy-discord-bot auth login` to create `credentials.json`.
 
 ### 5. Deploy slash commands
 
@@ -185,6 +189,7 @@ Messages sent in a thread auto-route to the bound session. Messages in the main 
 | `/usage [period]` | Token usage & cost — session-scoped in threads, account-wide in channel |
 | `/skills [name] [args]` | List, search, or invoke Claude Code skills/commands (with autocomplete) |
 | `/loop <args>` | Run a prompt or skill on a recurring interval (e.g. `5m /compact`) |
+| `/approve` | Authorize a new device via QR code screenshot (two-step flow) |
 | `/update` | Check for updates and upgrade the bot (safe dual-process handoff) |
 
 Commands in a thread automatically resolve to that thread's session.
@@ -200,6 +205,10 @@ happy-discord-bot daemon stop       # Stop daemon
 happy-discord-bot daemon status     # Show daemon status
 happy-discord-bot update            # Check for updates and upgrade
 happy-discord-bot init              # Interactive config setup
+happy-discord-bot auth login        # Create new Happy account
+happy-discord-bot auth restore      # Restore from existing secret
+happy-discord-bot auth status       # Show credential status
+happy-discord-bot auth logout       # Remove credentials
 happy-discord-bot deploy-commands   # Register Discord slash commands
 happy-discord-bot version           # Show version
 ```
