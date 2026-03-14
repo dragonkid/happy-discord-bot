@@ -62,7 +62,10 @@ async function main(): Promise<void> {
     }
 }
 
-const isDirectRun = process.argv[1]?.endsWith('cli.js') || process.argv[1]?.endsWith('cli.ts');
+import { realpathSync } from 'node:fs';
+
+const resolvedArgv = (() => { try { return realpathSync(process.argv[1] ?? ''); } catch { return process.argv[1] ?? ''; } })();
+const isDirectRun = resolvedArgv.endsWith('cli.js') || resolvedArgv.endsWith('cli.ts');
 if (isDirectRun) {
     main().catch((err) => {
         console.error('Fatal error:', err);
