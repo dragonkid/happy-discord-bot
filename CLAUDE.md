@@ -305,7 +305,7 @@ npm run test:e2e         # E2E smoke tests (requires .env.e2e, real services)
 ## Testing
 
 - Framework: Vitest
-- 25 test suites, 536 tests
+- 25 test suites, 545 tests
 - Test files: `src/**/__tests__/*.test.ts`
 - All Happy/Discord dependencies mocked (no real connections needed)
 

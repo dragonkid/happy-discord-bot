@@ -565,12 +565,12 @@ describe('commands', () => {
             expect(commandDefinitions.find((c: { name: string }) => c.name === 'approve')).toBeDefined();
         });
 
-        it('sets pendingApprove and replies with instructions', async () => {
+        it('sets pendingApprove with correct channelId and 60s timeout', async () => {
             const bridge = makeMockBridge();
-            const interaction = mockInteraction('approve');
+            const interaction = mockInteraction('approve', {}, 'ch-approve');
             await handleCommand(interaction as any, bridge);
 
-            expect(bridge.setPendingApprove).toHaveBeenCalledWith(expect.any(String), expect.any(Number));
+            expect(bridge.setPendingApprove).toHaveBeenCalledWith('ch-approve', 60_000);
             expect(interaction.reply).toHaveBeenCalledWith(expect.stringContaining('QR code screenshot'));
         });
 

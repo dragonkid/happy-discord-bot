@@ -2208,4 +2208,46 @@ describe('Bridge', () => {
             expect(discord.sendWithButtons).not.toHaveBeenCalled();
         });
     });
+
+    describe('pendingApprove', () => {
+        it('starts as null', () => {
+            expect(bridge.pendingApprove).toBeNull();
+        });
+
+        it('setPendingApprove stores channelId and timestamp', () => {
+            bridge.setPendingApprove('ch-approve', 60_000);
+
+            expect(bridge.pendingApprove).not.toBeNull();
+            expect(bridge.pendingApprove!.channelId).toBe('ch-approve');
+            expect(bridge.pendingApprove!.timestamp).toBeGreaterThan(0);
+        });
+
+        it('clearPendingApprove nulls the state', () => {
+            bridge.setPendingApprove('ch-approve', 60_000);
+            expect(bridge.pendingApprove).not.toBeNull();
+
+            bridge.clearPendingApprove();
+            expect(bridge.pendingApprove).toBeNull();
+        });
+
+        it('clearPendingApprove is safe when nothing pending', () => {
+            expect(() => bridge.clearPendingApprove()).not.toThrow();
+        });
+
+        it('setPendingApprove clears previous pending state', () => {
+            bridge.setPendingApprove('ch-1', 60_000);
+            bridge.setPendingApprove('ch-2', 60_000);
+
+            expect(bridge.pendingApprove!.channelId).toBe('ch-2');
+        });
+
+        it('auto-clears after timeout', () => {
+            // beforeEach already uses vi.useFakeTimers()
+            bridge.setPendingApprove('ch-approve', 5_000);
+            expect(bridge.pendingApprove).not.toBeNull();
+
+            vi.advanceTimersByTime(5_000);
+            expect(bridge.pendingApprove).toBeNull();
+        });
+    });
 });

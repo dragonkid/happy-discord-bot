@@ -55,6 +55,12 @@ describe('auth-approve', () => {
         it('returns null for empty query', () => {
             expect(parseAccountAuthUrl('happy:///account?')).toBeNull();
         });
+
+        it('returns null for malformed base64url (decodeBase64Url throws)', async () => {
+            const { decodeBase64Url } = await import('../../vendor/encryption.js');
+            vi.mocked(decodeBase64Url).mockImplementationOnce(() => { throw new Error('bad base64'); });
+            expect(parseAccountAuthUrl('happy:///account?!!!invalid!!!')).toBeNull();
+        });
     });
 
     describe('decodeQrFromImage', () => {
@@ -67,7 +73,7 @@ describe('auth-approve', () => {
     });
 
     describe('approveAccountAuth', () => {
-        it('sends encrypted response to server', async () => {
+        it('sends encrypted response to server with correct body', async () => {
             vi.mocked(globalThis.fetch).mockResolvedValue({ ok: true } as Response);
 
             await approveAccountAuth(
@@ -83,9 +89,17 @@ describe('auth-approve', () => {
                     method: 'POST',
                     headers: expect.objectContaining({
                         'Authorization': 'Bearer tok-123',
+                        'Content-Type': 'application/json',
                     }),
                 }),
             );
+
+            // Verify body contains publicKey and response fields
+            const callBody = JSON.parse(vi.mocked(globalThis.fetch).mock.calls[0][1]!.body as string);
+            expect(callBody).toHaveProperty('publicKey');
+            expect(callBody).toHaveProperty('response');
+            expect(typeof callBody.publicKey).toBe('string');
+            expect(typeof callBody.response).toBe('string');
         });
 
         it('throws on server error', async () => {
@@ -99,6 +113,33 @@ describe('auth-approve', () => {
             await expect(
                 approveAccountAuth('https://api.test.com', 'tok', new Uint8Array(32), new Uint8Array(32)),
             ).rejects.toThrow('Approve failed: 403 Forbidden');
+        });
+
+        it('truncates long error body to 200 chars', async () => {
+            const longBody = 'x'.repeat(300);
+            vi.mocked(globalThis.fetch).mockResolvedValue({
+                ok: false,
+                status: 500,
+                statusText: 'Internal Server Error',
+                text: async () => longBody,
+            } as Response);
+
+            await expect(
+                approveAccountAuth('https://api.test.com', 'tok', new Uint8Array(32), new Uint8Array(32)),
+            ).rejects.toThrow('...');
+        });
+
+        it('handles body read failure gracefully', async () => {
+            vi.mocked(globalThis.fetch).mockResolvedValue({
+                ok: false,
+                status: 502,
+                statusText: 'Bad Gateway',
+                text: async () => { throw new Error('stream broken'); },
+            } as unknown as Response);
+
+            await expect(
+                approveAccountAuth('https://api.test.com', 'tok', new Uint8Array(32), new Uint8Array(32)),
+            ).rejects.toThrow('Approve failed: 502 Bad Gateway');
         });
     });
 });
