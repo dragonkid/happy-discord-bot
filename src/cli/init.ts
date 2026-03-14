@@ -9,8 +9,6 @@ interface ConfigAnswers {
     DISCORD_USER_ID: string;
     DISCORD_APPLICATION_ID: string;
     DISCORD_GUILD_ID?: string;
-    HAPPY_TOKEN?: string;
-    HAPPY_SECRET?: string;
 }
 
 export function buildEnvContent(answers: ConfigAnswers): string {
@@ -24,16 +22,6 @@ export function buildEnvContent(answers: ConfigAnswers): string {
 
     if (answers.DISCORD_GUILD_ID) {
         lines.push(`DISCORD_GUILD_ID=${answers.DISCORD_GUILD_ID}`);
-    }
-
-    lines.push('');
-    lines.push('# Happy Coder credentials');
-
-    if (answers.HAPPY_TOKEN && answers.HAPPY_SECRET) {
-        lines.push(`HAPPY_TOKEN=${answers.HAPPY_TOKEN}`);
-        lines.push(`HAPPY_SECRET=${answers.HAPPY_SECRET}`);
-    } else {
-        lines.push('# Using ~/.happy/agent.key (run: happy-agent auth login)');
     }
 
     return lines.join('\n') + '\n';
@@ -60,18 +48,12 @@ export async function handleInit(): Promise<void> {
         const appId = await rl.question('Discord application ID: ');
         const guildId = await rl.question('Discord guild ID (optional, press Enter to skip): ');
 
-        console.log('\nHappy Coder credentials (optional if ~/.happy/agent.key exists):');
-        const happyToken = await rl.question('Happy token (press Enter to skip): ');
-        const happySecret = happyToken ? await rl.question('Happy secret: ') : '';
-
         const answers: ConfigAnswers = {
             DISCORD_TOKEN: token,
             DISCORD_CHANNEL_ID: channelId,
             DISCORD_USER_ID: userId,
             DISCORD_APPLICATION_ID: appId,
             ...(guildId && { DISCORD_GUILD_ID: guildId }),
-            ...(happyToken && { HAPPY_TOKEN: happyToken }),
-            ...(happySecret && { HAPPY_SECRET: happySecret }),
         };
 
         const content = buildEnvContent(answers);
@@ -79,8 +61,11 @@ export async function handleInit(): Promise<void> {
         writeFileSync(envPath, content, { mode: 0o600 });
 
         console.log(`\nConfig saved to ${envPath}`);
-        console.log('Run: happy-discord-bot deploy-commands');
-        console.log('Then: happy-discord-bot start');
+        console.log('\nNext steps:');
+        console.log('  1. happy-discord-bot auth login    (create new Happy account)');
+        console.log('     — or: happy-discord-bot auth restore  (restore existing account)');
+        console.log('  2. happy-discord-bot deploy-commands');
+        console.log('  3. happy-discord-bot start');
     } finally {
         rl.close();
     }

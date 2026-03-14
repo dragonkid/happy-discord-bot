@@ -2,9 +2,10 @@ import { config as dotenvConfig } from 'dotenv';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadConfig as loadHappyConfig, type Config as HappyConfig } from './vendor/config.js';
-import { readCredentials, type Credentials } from './vendor/credentials.js';
+import type { Credentials } from './vendor/credentials.js';
 import { deriveContentKeyPair, decodeBase64 } from './vendor/encryption.js';
 import { getStateDir } from './state-dir.js';
+import { readBotCredentials } from './credentials.js';
 
 export function resolveEnvFile(): string | undefined {
     const cwdEnv = join(process.cwd(), '.env');
@@ -38,8 +39,8 @@ function requiredEnv(key: string): string {
     return value;
 }
 
-/** Read credentials from env vars (HAPPY_TOKEN + HAPPY_SECRET), fallback to ~/.happy/agent.key */
-function loadCredentials(happy: HappyConfig): Credentials {
+/** Read credentials from env vars (HAPPY_TOKEN + HAPPY_SECRET), fallback to bot's credentials.json */
+function loadCredentials(_happy: HappyConfig): Credentials {
     const envToken = process.env.HAPPY_TOKEN;
     const envSecret = process.env.HAPPY_SECRET;
 
@@ -49,12 +50,16 @@ function loadCredentials(happy: HappyConfig): Credentials {
         return { token: envToken, secret, contentKeyPair };
     }
 
-    const fileCreds = readCredentials(happy);
-    if (fileCreds) return fileCreds;
+    const botCreds = readBotCredentials(getStateDir());
+    if (botCreds) {
+        const secret = decodeBase64(botCreds.secret);
+        const contentKeyPair = deriveContentKeyPair(secret);
+        return { token: botCreds.token, secret, contentKeyPair };
+    }
 
     throw new Error(
         'No Happy credentials found. Either set HAPPY_TOKEN + HAPPY_SECRET env vars, '
-        + 'or run `happy-agent auth login` to create ~/.happy/agent.key.',
+        + 'or run `happy-discord-bot auth login`.',
     );
 }
 

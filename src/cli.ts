@@ -5,7 +5,7 @@ export interface ParsedArgs {
     args: string[];
 }
 
-const COMMANDS = new Set(['start', 'daemon', 'update', 'version', 'init', 'deploy-commands', 'help']);
+const COMMANDS = new Set(['start', 'daemon', 'update', 'version', 'init', 'deploy-commands', 'help', 'auth']);
 
 export function parseArgs(argv: string[]): ParsedArgs {
     const first = argv[0];
@@ -37,6 +37,7 @@ Usage: happy-discord-bot [command]
 
 Commands:
   start               Run the bot (default)
+  auth <action>       Manage Happy account (login|restore|status|logout)
   daemon <action>     Manage background daemon (start|stop|status)
   update              Check for updates and upgrade
   init                Interactive config setup
@@ -56,6 +57,11 @@ Options:
         }
         case 'start': {
             await import('./index.js');
+            break;
+        }
+        case 'auth': {
+            const { handleAuth } = await import('./cli/auth.js');
+            await handleAuth(args);
             break;
         }
         case 'daemon': {

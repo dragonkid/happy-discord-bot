@@ -26,6 +26,12 @@ const ATTACHMENT_DIR = '.attachments';
 const IMAGE_CONTENT_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
 const RESPONSE_TIMEOUT_MS = 15_000;
 
+export interface PendingApprove {
+    channelId: string;
+    timestamp: number;
+    timer: ReturnType<typeof setTimeout>;
+}
+
 export interface DiscordAttachment {
     url: string;
     name: string;
@@ -54,6 +60,7 @@ export class Bridge {
     private readonly sessionTodoMsgId = new Map<string, string>();
     private readonly sessionCompactReply = new Map<string, { messageId: string; threadId?: string }>();
     private readonly pendingResponseTimers = new Map<string, ReturnType<typeof setTimeout>>();
+    private _pendingApprove: PendingApprove | null = null;
 
     constructor(
         happy: HappyClient,
@@ -92,6 +99,26 @@ export class Bridge {
 
     get permissions(): PermissionCache {
         return this.permissionCache;
+    }
+
+    get pendingApprove(): PendingApprove | null {
+        return this._pendingApprove;
+    }
+
+    setPendingApprove(channelId: string, timeoutMs: number): void {
+        this.clearPendingApprove();
+        const timer = setTimeout(() => {
+            this._pendingApprove = null;
+            console.log('[Bridge] pendingApprove timed out');
+        }, timeoutMs);
+        this._pendingApprove = { channelId, timestamp: Date.now(), timer };
+    }
+
+    clearPendingApprove(): void {
+        if (this._pendingApprove) {
+            clearTimeout(this._pendingApprove.timer);
+            this._pendingApprove = null;
+        }
     }
 
     setStore(store: Store): void {

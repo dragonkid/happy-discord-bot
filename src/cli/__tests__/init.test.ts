@@ -28,23 +28,17 @@ describe('buildEnvContent', () => {
         expect(content).toContain('DISCORD_CHANNEL_ID=ch456');
         expect(content).toContain('DISCORD_USER_ID=u789');
         expect(content).toContain('DISCORD_APPLICATION_ID=app000');
-        expect(content).toContain('Using ~/.happy/agent.key');
     });
 
-    it('includes optional fields when provided', () => {
+    it('includes guild ID when provided', () => {
         const content = buildEnvContent({
             DISCORD_TOKEN: 'tok',
             DISCORD_CHANNEL_ID: 'ch',
             DISCORD_USER_ID: 'u',
             DISCORD_APPLICATION_ID: 'app',
             DISCORD_GUILD_ID: 'guild123',
-            HAPPY_TOKEN: 'ht',
-            HAPPY_SECRET: 'hs',
         });
         expect(content).toContain('DISCORD_GUILD_ID=guild123');
-        expect(content).toContain('HAPPY_TOKEN=ht');
-        expect(content).toContain('HAPPY_SECRET=hs');
-        expect(content).not.toContain('Using ~/.happy/agent.key');
     });
 
     it('ends with newline', () => {
@@ -83,8 +77,7 @@ describe('handleInit', () => {
             .mockResolvedValueOnce('ch')     // channel ID
             .mockResolvedValueOnce('uid')    // user ID
             .mockResolvedValueOnce('appid')  // app ID
-            .mockResolvedValueOnce('')       // guild ID (skip)
-            .mockResolvedValueOnce('');      // Happy token (skip)
+            .mockResolvedValueOnce('');      // guild ID (skip)
 
         vi.mocked(createInterface).mockReturnValue({
             question: mockQuestion,

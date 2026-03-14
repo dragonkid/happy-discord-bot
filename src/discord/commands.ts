@@ -97,11 +97,15 @@ const loop = new SlashCommandBuilder()
         opt.setName('args').setDescription('e.g. "list", "delete <id>", "5m /compact"').setRequired(false).setAutocomplete(true),
     );
 
+const approve = new SlashCommandBuilder()
+    .setName('approve')
+    .setDescription('Approve a Happy account auth request (paste QR screenshot next)');
+
 const update = new SlashCommandBuilder()
     .setName('update')
     .setDescription('Check for updates and upgrade the bot');
 
-const allCommands = [sessions, stop, compact, mode, newSession, archive, deleteCmd, cleanup, usage, skills, loop, update];
+const allCommands = [sessions, stop, compact, mode, newSession, archive, deleteCmd, cleanup, usage, skills, loop, approve, update];
 
 export const commandDefinitions: RESTPostAPIChatInputApplicationCommandsJSONBody[] =
     allCommands.map((cmd) => cmd.toJSON());
@@ -136,6 +140,8 @@ export async function handleCommand(
             return handleSkills(interaction, bridge);
         case 'loop':
             return handleLoop(interaction, bridge);
+        case 'approve':
+            return handleApprove(interaction, bridge);
         case 'update':
             return handleUpdateCommand(interaction, bridge);
         default:
@@ -473,6 +479,20 @@ async function handleLoop(interaction: ChatInputCommandInteraction, bridge: Brid
     } catch {
         await interaction.editReply('No active session. Use /sessions to connect.');
     }
+}
+
+// --- /approve handler ---
+
+const PENDING_APPROVE_TIMEOUT_MS = 60_000;
+
+async function handleApprove(interaction: ChatInputCommandInteraction, bridge: Bridge): Promise<void> {
+    if (bridge.pendingApprove) {
+        await interaction.reply({ content: 'Already waiting for a QR screenshot. Send the image or wait for timeout.', ephemeral: true });
+        return;
+    }
+
+    bridge.setPendingApprove(interaction.channelId, PENDING_APPROVE_TIMEOUT_MS);
+    await interaction.reply('Send a QR code screenshot within 60 seconds to approve the auth request.');
 }
 
 // --- /update handler ---

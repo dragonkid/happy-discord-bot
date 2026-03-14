@@ -47,6 +47,9 @@ function makeMockBridge(): Bridge {
         getAllProjectDirs: vi.fn().mockReturnValue([]),
         happyClient: { request: vi.fn() },
         activeSession: null,
+        pendingApprove: null,
+        setPendingApprove: vi.fn(),
+        clearPendingApprove: vi.fn(),
         permissions: {
             setMode: vi.fn(),
             mode: 'default',
@@ -554,6 +557,35 @@ describe('commands', () => {
 
             const call = vi.mocked(interaction.editReply).mock.calls[0][0] as { content: string };
             expect(call.content).toContain('my-project');
+        });
+    });
+
+    describe('/approve', () => {
+        it('includes /approve command definition', () => {
+            expect(commandDefinitions.find((c: { name: string }) => c.name === 'approve')).toBeDefined();
+        });
+
+        it('sets pendingApprove and replies with instructions', async () => {
+            const bridge = makeMockBridge();
+            const interaction = mockInteraction('approve');
+            await handleCommand(interaction as any, bridge);
+
+            expect(bridge.setPendingApprove).toHaveBeenCalledWith(expect.any(String), expect.any(Number));
+            expect(interaction.reply).toHaveBeenCalledWith(expect.stringContaining('QR code screenshot'));
+        });
+
+        it('rejects when already waiting for QR', async () => {
+            const bridge = makeMockBridge();
+            Object.defineProperty(bridge, 'pendingApprove', {
+                value: { channelId: 'ch-1', timestamp: Date.now(), timer: setTimeout(() => {}, 0) },
+            });
+            const interaction = mockInteraction('approve');
+            await handleCommand(interaction as any, bridge);
+
+            expect(bridge.setPendingApprove).not.toHaveBeenCalled();
+            expect(interaction.reply).toHaveBeenCalledWith(
+                expect.objectContaining({ content: expect.stringContaining('Already waiting'), ephemeral: true }),
+            );
         });
     });
 
