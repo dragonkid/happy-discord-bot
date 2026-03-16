@@ -18,27 +18,18 @@ vi.mock('node:readline/promises', () => ({
 const { buildEnvContent, parseEnvFile, handleInit } = await import('../init.js');
 
 describe('buildEnvContent', () => {
-    it('builds .env content with required fields', () => {
+    it('builds .env content with all required fields', () => {
         const content = buildEnvContent({
             DISCORD_TOKEN: 'tok123',
             DISCORD_CHANNEL_ID: 'ch456',
             DISCORD_USER_ID: 'u789',
             DISCORD_APPLICATION_ID: 'app000',
+            DISCORD_GUILD_ID: 'guild123',
         });
         expect(content).toContain('DISCORD_TOKEN=tok123');
         expect(content).toContain('DISCORD_CHANNEL_ID=ch456');
         expect(content).toContain('DISCORD_USER_ID=u789');
         expect(content).toContain('DISCORD_APPLICATION_ID=app000');
-    });
-
-    it('includes guild ID when provided', () => {
-        const content = buildEnvContent({
-            DISCORD_TOKEN: 'tok',
-            DISCORD_CHANNEL_ID: 'ch',
-            DISCORD_USER_ID: 'u',
-            DISCORD_APPLICATION_ID: 'app',
-            DISCORD_GUILD_ID: 'guild123',
-        });
         expect(content).toContain('DISCORD_GUILD_ID=guild123');
     });
 
@@ -48,6 +39,7 @@ describe('buildEnvContent', () => {
             DISCORD_CHANNEL_ID: 'c',
             DISCORD_USER_ID: 'u',
             DISCORD_APPLICATION_ID: 'a',
+            DISCORD_GUILD_ID: 'g',
         });
         expect(content.endsWith('\n')).toBe(true);
     });
@@ -109,7 +101,7 @@ describe('handleInit', () => {
             .mockResolvedValueOnce('new-ch') // update channel
             .mockResolvedValueOnce('')       // keep user ID
             .mockResolvedValueOnce('')       // keep app ID
-            .mockResolvedValueOnce('');      // skip guild
+            .mockResolvedValueOnce('');      // keep guild (no existing)
 
         vi.mocked(createInterface).mockReturnValue({
             question: mockQuestion,
@@ -161,7 +153,7 @@ describe('handleInit', () => {
             .mockResolvedValueOnce('ch')     // channel ID
             .mockResolvedValueOnce('uid')    // user ID
             .mockResolvedValueOnce('appid')  // app ID
-            .mockResolvedValueOnce('');      // guild ID (skip)
+            .mockResolvedValueOnce('gid');   // guild ID
 
         vi.mocked(createInterface).mockReturnValue({
             question: mockQuestion,

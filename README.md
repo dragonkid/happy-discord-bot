@@ -63,7 +63,7 @@ Enable Developer Mode in Discord Settings → Advanced, then:
 
 - **Channel ID**: right-click target channel → Copy Channel ID
 - **User ID**: right-click yourself → Copy User ID
-- **Guild ID** (optional, dev only): right-click server name → Copy Server ID
+- **Guild ID**: right-click server name → Copy Server ID
 
 ## Quick Start
 
@@ -71,13 +71,15 @@ Enable Developer Mode in Discord Settings → Advanced, then:
 
 ```bash
 npm install -g happy-discord-bot
-happy-discord-bot init              # Prompts for DISCORD_TOKEN, channel/user/app IDs
+happy-discord-bot init              # Prompts for DISCORD_TOKEN, channel/user/guild/app IDs
 happy-discord-bot auth login        # Create Happy account (or `auth restore` with existing secret)
 happy-discord-bot deploy-commands   # Register Discord slash commands
 happy-discord-bot daemon start      # Run as background daemon
 ```
 
 `init` saves config to `~/.happy-discord-bot/.env` (mode 0600). `auth login` generates a Happy account (secret + Ed25519 keypair) and saves credentials to `~/.happy-discord-bot/credentials.json`. If you already have a secret from another device, use `auth restore` instead.
+
+> **After `auth login`:** The bot account must be linked to your existing Happy account. Run `/approve` in Discord and paste the QR screenshot from the bot's login output to complete linking. Alternatively, scan the QR from the Happy mobile app.
 
 ### 2. Start a Claude Code session
 
@@ -93,7 +95,7 @@ happy daemon start                      # Start background daemon
 > - **Structured AskUserQuestion answers** ([#803](https://github.com/slopus/happy/pull/803)) — passes selected options through permission RPC so Claude sees structured selections instead of free-text
 > - **ExitPlanMode reject-with-feedback** ([#808](https://github.com/slopus/happy/pull/808)) — lets Claude continue re-planning after rejection with feedback instead of aborting
 
-With the daemon running, use the `/new` Discord command to create sessions from any directory. The bot auto-discovers sessions on startup and creates a thread for each one.
+With both daemons running, use the `/new` Discord command to create sessions from any directory. Existing sessions are auto-discovered on bot startup.
 
 ### 3. Use in Discord
 
@@ -278,7 +280,7 @@ npm run dev
 | `DISCORD_CHANNEL_ID` | Yes | Target channel ID |
 | `DISCORD_USER_ID` | Yes | Your Discord user ID |
 | `DISCORD_APPLICATION_ID` | Yes* | Application ID |
-| `DISCORD_GUILD_ID` | No | Guild ID for fast command deployment (dev only) |
+| `DISCORD_GUILD_ID` | Yes | Guild (server) ID — for instant slash command deployment |
 | `DISCORD_REQUIRE_MENTION` | No | Require @bot mention to forward messages (default: `false`) |
 | `HAPPY_TOKEN` | No** | Happy API token (env-based auth) |
 | `HAPPY_SECRET` | No** | Happy account secret, base64 (env-based auth) |
@@ -287,8 +289,6 @@ npm run dev
 
 \* Required for `npm run deploy-commands`.
 \*\* Alternative to `auth login` — for CI/deployment where interactive auth isn't possible.
-
-If `DISCORD_GUILD_ID` is set, `deploy-commands` deploys to that guild instantly. Otherwise they deploy globally (up to 1 hour propagation).
 
 ### npm scripts
 

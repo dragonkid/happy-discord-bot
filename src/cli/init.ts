@@ -8,7 +8,7 @@ interface ConfigAnswers {
     DISCORD_CHANNEL_ID: string;
     DISCORD_USER_ID: string;
     DISCORD_APPLICATION_ID: string;
-    DISCORD_GUILD_ID?: string;
+    DISCORD_GUILD_ID: string;
 }
 
 export function parseEnvFile(content: string): Record<string, string> {
@@ -33,9 +33,7 @@ export function buildEnvContent(answers: ConfigAnswers): string {
         `DISCORD_APPLICATION_ID=${answers.DISCORD_APPLICATION_ID}`,
     ];
 
-    if (answers.DISCORD_GUILD_ID) {
-        lines.push(`DISCORD_GUILD_ID=${answers.DISCORD_GUILD_ID}`);
-    }
+    lines.push(`DISCORD_GUILD_ID=${answers.DISCORD_GUILD_ID}`);
 
     return lines.join('\n') + '\n';
 }
@@ -66,16 +64,14 @@ export async function handleInit(): Promise<void> {
         const channelId = await ask('Discord channel ID', 'DISCORD_CHANNEL_ID');
         const userId = await ask('Your Discord user ID', 'DISCORD_USER_ID');
         const appId = await ask('Discord application ID', 'DISCORD_APPLICATION_ID');
-        const guildId = await ask('Discord guild ID', 'DISCORD_GUILD_ID', true);
+        const guildId = await ask('Discord guild (server) ID', 'DISCORD_GUILD_ID');
 
         const answers: ConfigAnswers = {
             DISCORD_TOKEN: token || defaults.DISCORD_TOKEN || '',
             DISCORD_CHANNEL_ID: channelId || defaults.DISCORD_CHANNEL_ID || '',
             DISCORD_USER_ID: userId || defaults.DISCORD_USER_ID || '',
             DISCORD_APPLICATION_ID: appId || defaults.DISCORD_APPLICATION_ID || '',
-            ...((guildId || defaults.DISCORD_GUILD_ID) && {
-                DISCORD_GUILD_ID: guildId || defaults.DISCORD_GUILD_ID,
-            }),
+            DISCORD_GUILD_ID: guildId || defaults.DISCORD_GUILD_ID || '',
         };
 
         const content = buildEnvContent(answers);
