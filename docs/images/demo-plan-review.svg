@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="400" viewBox="0 0 760 400">
+  <defs>
+    <style>
+      text { font-family: -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; }
+      .mono { font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace; }
+      .username-bot { fill: #57f287; font-size: 15px; font-weight: 600; }
+      .timestamp { fill: #949ba4; font-size: 11px; }
+      .body { fill: #dbdee1; font-size: 14.5px; }
+      .embed-title { fill: #f2f3f5; font-size: 14px; font-weight: 600; }
+      .plan-item { fill: #b5bac1; font-size: 13px; }
+      .btn-text { fill: #fff; font-size: 12.5px; font-weight: 500; }
+    </style>
+    <linearGradient id="header-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2b2d31"/>
+      <stop offset="1" stop-color="#2e3035"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="760" height="400" rx="12" fill="#313338"/>
+
+  <!-- Channel header -->
+  <rect width="760" height="50" rx="12" fill="url(#header-grad)"/>
+  <rect y="42" width="760" height="8" fill="url(#header-grad)"/>
+  <line x1="0" y1="50" x2="760" y2="50" stroke="#1e1f22" stroke-width="1"/>
+  <text x="48" y="32" fill="#f2f3f5" font-size="16" font-weight="700"># my-api-server @ macbook</text>
+  <text x="18" y="33" fill="#80848e" font-size="20" font-weight="400">#</text>
+
+  <!-- Bot message -->
+  <g transform="translate(20, 68)">
+    <circle cx="20" cy="20" r="20" fill="#57f287"/>
+    <text x="11" y="26" fill="#1e1f22" font-size="14" font-weight="800">HB</text>
+    <text x="50" y="16" class="username-bot">Happy Bot</text>
+    <rect x="138" y="5" width="32" height="17" rx="3" fill="#5865f2"/>
+    <text x="142" y="17" fill="#fff" font-size="9" font-weight="700">BOT</text>
+    <text x="178" y="16" class="timestamp">Today at 10:45 AM</text>
+    <text x="50" y="38" class="body">Claude wants to exit plan mode:</text>
+
+    <!-- Plan embed -->
+    <rect x="50" y="50" width="620" height="200" rx="6" fill="#2b2d31"/>
+    <rect x="50" y="50" width="4" height="200" rx="2" fill="#fee75c"/>
+
+    <!-- Embed header -->
+    <text x="68" y="74" fill="#fee75c" font-size="15">📋</text>
+    <text x="90" y="74" class="embed-title" font-size="15">ExitPlanMode</text>
+
+    <!-- Divider -->
+    <line x1="68" y1="84" x2="650" y2="84" stroke="#3f4147" stroke-width="1"/>
+
+    <!-- Plan heading -->
+    <text x="68" y="106" fill="#f2f3f5" font-size="14" font-weight="600">Implementation Plan</text>
+
+    <!-- Plan items with checkboxes -->
+    <rect x="68" y="116" width="14" height="14" rx="3" fill="none" stroke="#4e5058" stroke-width="1.5"/>
+    <text x="90" y="128" class="plan-item">Create src/routes/health.ts with GET handler</text>
+
+    <rect x="68" y="140" width="14" height="14" rx="3" fill="none" stroke="#4e5058" stroke-width="1.5"/>
+    <text x="90" y="152" class="plan-item">Register route in src/app.ts router</text>
+
+    <rect x="68" y="164" width="14" height="14" rx="3" fill="none" stroke="#4e5058" stroke-width="1.5"/>
+    <text x="90" y="176" class="plan-item">Add unit test in src/__tests__/health.test.ts</text>
+
+    <rect x="68" y="188" width="14" height="14" rx="3" fill="none" stroke="#4e5058" stroke-width="1.5"/>
+    <text x="90" y="200" class="plan-item">Update API docs with new endpoint</text>
+
+    <!-- File attachment -->
+    <rect x="68" y="216" width="200" height="26" rx="5" fill="#1e1f22"/>
+    <text x="80" y="234" fill="#dbdee1" font-size="13">📎</text>
+    <text x="98" y="234" fill="#00a8fc" font-size="12.5" font-weight="500">plan-exit-plan-mode.md</text>
+
+    <!-- Buttons -->
+    <rect x="68" y="260" width="86" height="30" rx="4" fill="#57f287"/>
+    <text x="82" y="280" fill="#1e1f22" font-size="13" font-weight="600">Approve</text>
+
+    <rect x="162" y="260" width="185" height="30" rx="4" fill="#5865f2"/>
+    <text x="176" y="280" class="btn-text">Approve + Allow Edits</text>
+
+    <rect x="355" y="260" width="68" height="30" rx="4" fill="#da373c"/>
+    <text x="372" y="280" class="btn-text">Reject</text>
+  </g>
+
+  <!-- Hint text -->
+  <text x="70" y="370" fill="#949ba4" font-size="12.5">💡 Reject opens a feedback dialog — Claude will revise the plan based on your notes.</text>
+</svg>

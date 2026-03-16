@@ -81,16 +81,39 @@ happy-discord-bot daemon start      # Run as background daemon
 
 ### 2. Start a Claude Code session
 
-The bot needs at least one active session to interact with. Install the `happy` CLI and start a session:
+The bot needs the `happy` daemon running to manage sessions. Install the CLI and start the daemon:
 
 ```bash
 npm install -g @dragonkid/happy-coder   # Install happy CLI
 happy auth                              # Authenticate (first time only)
-cd ~/your-project
-happy                                   # Start a Claude Code session
+happy daemon start                      # Start background daemon
 ```
 
-The bot auto-discovers sessions on startup. Send a message in the configured Discord channel to start interacting.
+With the daemon running, use the `/new` Discord command to create sessions from any directory. The bot auto-discovers sessions on startup and creates a thread for each one.
+
+### 3. Use in Discord
+
+1. Run `/new` in the bot channel — pick a project directory to start a Claude Code session
+2. The bot creates a thread (e.g. `my-project @ macbook`) — all conversation happens here
+3. Type a message in the thread — it forwards to Claude Code, replies stream back
+4. When Claude needs permission (file edit, shell command), approval buttons appear — click to approve or deny
+5. Use `/stop` to abort, `/compact` to free context, `/mode` to change permission level
+
+**Create a new session with `/new`:**
+
+<img src="docs/images/demo-new-session.svg" width="680" alt="Creating a new session with directory selection"/>
+
+**Each session gets its own thread:**
+
+<img src="docs/images/demo-threads.svg" width="680" alt="Multiple session threads in Discord channel"/>
+
+**Permission approval with action buttons:**
+
+<img src="docs/images/demo-conversation.svg" width="680" alt="Conversation with permission approval buttons"/>
+
+**Plan review before implementation:**
+
+<img src="docs/images/demo-plan-review.svg" width="680" alt="Plan review with approve/reject buttons"/>
 
 ## Configuration
 
