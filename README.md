@@ -1,6 +1,6 @@
 # Happy Discord Bot
 
-Discord bot that controls Claude Code sessions via Happy Coder's relay server. Single-user private bot with per-operation HITL permission approval.
+Discord bot that gives you **full Claude Code HITL (Human-in-the-Loop) control from Discord** — review every tool call, approve plans, answer questions, and manage sessions, all without leaving your phone or browser.
 
 ```
 Discord ←→ Bot ←→ Happy Relay ←→ happy CLI ←→ Claude Code
@@ -8,8 +8,8 @@ Discord ←→ Bot ←→ Happy Relay ←→ happy CLI ←→ Claude Code
 
 ## Features
 
-- **Message forwarding** — Discord messages auto-forward to Claude Code, replies stream back
-- **Permission approval** — per-operation buttons (Yes / Allow All Edits / For This Tool / No)
+- **Full HITL control** — every Claude Code interaction surfaces in Discord: permission prompts, plan reviews, questions, and task progress
+- **Permission approval** — per-operation buttons (Yes / Allow All Edits / For This Tool / No) with configurable auto-approve modes
 - **Thread per session** — each Claude Code session maps to a Discord thread for parallel conversations
 - **Interactive Q&A** — Claude's questions rendered as option buttons, answers sent as structured data
 - **Plan review** — approve or reject plans with optional feedback
@@ -84,10 +84,14 @@ happy-discord-bot daemon start      # Run as background daemon
 The bot needs the `happy` daemon running to manage sessions. Install the CLI and start the daemon:
 
 ```bash
-npm install -g @dragonkid/happy-coder   # Install happy CLI
+npm install -g @dragonkid/happy-coder   # Install happy CLI (fork with bot enhancements)
 happy auth                              # Authenticate (first time only)
 happy daemon start                      # Start background daemon
 ```
+
+> **Why `@dragonkid/happy-coder`?** This is a fork of [slopus/happy](https://github.com/slopus/happy) with two enhancements needed for full bot HITL support:
+> - **Structured AskUserQuestion answers** ([#803](https://github.com/slopus/happy/pull/803)) — passes selected options through permission RPC so Claude sees structured selections instead of free-text
+> - **ExitPlanMode reject-with-feedback** ([#808](https://github.com/slopus/happy/pull/808)) — lets Claude continue re-planning after rejection with feedback instead of aborting
 
 With the daemon running, use the `/new` Discord command to create sessions from any directory. The bot auto-discovers sessions on startup and creates a thread for each one.
 
