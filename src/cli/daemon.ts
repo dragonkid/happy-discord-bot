@@ -40,7 +40,7 @@ export function isDaemonRunning(stateDir: string): boolean {
     return isProcessAlive(state.pid);
 }
 
-function startDaemon(): void {
+export function startDaemon(): void {
     const stateDir = getStateDir();
     if (isDaemonRunning(stateDir)) {
         const state = readDaemonState(stateDir)!;
@@ -74,19 +74,19 @@ function startDaemon(): void {
     console.log(`Daemon started (PID ${state.pid})`);
 }
 
-async function stopDaemon(): Promise<void> {
+async function stopDaemon(): Promise<boolean> {
     const stateDir = getStateDir();
     const state = readDaemonState(stateDir);
 
     if (!state) {
         console.log('No daemon state found.');
-        return;
+        return true;
     }
 
     if (!isProcessAlive(state.pid)) {
         console.log('Daemon not running (stale state file). Cleaning up.');
         removeDaemonState(stateDir);
-        return;
+        return true;
     }
 
     process.kill(state.pid, 'SIGTERM');
@@ -97,11 +97,12 @@ async function stopDaemon(): Promise<void> {
         if (!isProcessAlive(state.pid)) {
             removeDaemonState(stateDir);
             console.log('Daemon stopped.');
-            return;
+            return true;
         }
         await new Promise(r => setTimeout(r, 200));
     }
     console.error(`Daemon did not exit within 10s. Try: kill -9 ${state.pid}`);
+    return false;
 }
 
 function statusDaemon(): void {
@@ -125,14 +126,24 @@ function statusDaemon(): void {
     console.log(`  Log:     ${join(stateDir, 'daemon.log')}`);
 }
 
+async function restartDaemon(): Promise<void> {
+    const stateDir = getStateDir();
+    if (isDaemonRunning(stateDir)) {
+        const stopped = await stopDaemon();
+        if (!stopped) return;
+    }
+    startDaemon();
+}
+
 export async function handleDaemon(args: string[]): Promise<void> {
     const sub = args[0];
     switch (sub) {
         case 'start': startDaemon(); break;
         case 'stop': await stopDaemon(); break;
+        case 'restart': await restartDaemon(); break;
         case 'status': statusDaemon(); break;
         default:
-            console.log('Usage: happy-discord-bot daemon <start|stop|status>');
+            console.log('Usage: happy-discord-bot daemon <start|stop|restart|status>');
             process.exit(1);
     }
 }

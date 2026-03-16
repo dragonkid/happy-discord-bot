@@ -38,7 +38,7 @@ Usage: happy-discord-bot [command]
 Commands:
   start               Run the bot (default)
   auth <action>       Manage Happy account (login|restore|status|logout)
-  daemon <action>     Manage background daemon (start|stop|status)
+  daemon <action>     Manage background daemon (start|stop|restart|status)
   logs                Tail daemon log output
   update              Check for updates and upgrade
   init                Interactive config setup

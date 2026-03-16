@@ -48,7 +48,7 @@ src/
 ├── store.ts              # Bot state persistence (~/.happy-discord-bot/state.json)
 ├── cli/
 │   ├── auth.ts           # Auth CLI: login/restore/status/logout
-│   ├── daemon.ts         # Daemon start/stop/status (detached child_process)
+│   ├── daemon.ts         # Daemon start/stop/restart/status (detached child_process)
 │   ├── logs.ts           # Tail daemon log (tail -f daemon.log)
 │   ├── update.ts         # Self-update (npm install -g + dual-process handoff)
 │   └── init.ts           # Interactive config setup (~/.happy-discord-bot/.env)
@@ -258,6 +258,7 @@ Bot does NOT read from `~/.happy/` — all credentials are self-managed.
 happy-discord-bot start             # Run bot (foreground, default)
 happy-discord-bot daemon start      # Run as background daemon
 happy-discord-bot daemon stop       # Stop daemon
+happy-discord-bot daemon restart    # Restart daemon (stop + start)
 happy-discord-bot daemon status     # Show daemon status
 happy-discord-bot auth login        # Generate new account (secret + Ed25519 → POST /v1/auth)
 happy-discord-bot auth restore      # Input existing secret (base64url) to reuse account
@@ -307,7 +308,7 @@ npm run test:e2e         # E2E smoke tests (requires .env.e2e, real services)
 ## Testing
 
 - Framework: Vitest
-- 26 test suites, 575 tests
+- 26 test suites, 581 tests
 - Test files: `src/**/__tests__/*.test.ts`
 - All Happy/Discord dependencies mocked (no real connections needed)
 

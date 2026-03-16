@@ -72,6 +72,21 @@ describe('parseEnvFile', () => {
         expect(result).toEqual({ DISCORD_TOKEN: 'tok=with=equals' });
     });
 
+    it('strips surrounding double quotes from values', () => {
+        const result = parseEnvFile('DISCORD_TOKEN="my-token"\n');
+        expect(result).toEqual({ DISCORD_TOKEN: 'my-token' });
+    });
+
+    it('strips surrounding single quotes from values', () => {
+        const result = parseEnvFile("DISCORD_TOKEN='my-token'\n");
+        expect(result).toEqual({ DISCORD_TOKEN: 'my-token' });
+    });
+
+    it('does not strip mismatched quotes', () => {
+        const result = parseEnvFile('DISCORD_TOKEN="my-token\'\n');
+        expect(result).toEqual({ DISCORD_TOKEN: '"my-token\'' });
+    });
+
     it('returns empty object for empty content', () => {
         expect(parseEnvFile('')).toEqual({});
     });

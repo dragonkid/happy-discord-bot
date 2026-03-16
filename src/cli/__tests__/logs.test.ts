@@ -22,23 +22,31 @@ describe('handleLogs', () => {
         delete process.env.BOT_STATE_DIR;
     });
 
-    it('prints error when log file does not exist', async () => {
+    it('prints error and exits with 1 when log file does not exist', async () => {
         vi.mocked(existsSync).mockReturnValue(false);
         const logSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
 
         await handleLogs();
 
         expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('No log file found'));
+        expect(exitSpy).toHaveBeenCalledWith(1);
         expect(spawn).not.toHaveBeenCalled();
         logSpy.mockRestore();
+        exitSpy.mockRestore();
     });
 
-    it('spawns tail -f on daemon.log when file exists', async () => {
+    it('spawns tail -f and resolves when child closes', async () => {
         vi.mocked(existsSync).mockReturnValue(true);
-        const mockOn = vi.fn();
-        vi.mocked(spawn).mockReturnValue({ on: mockOn } as any);
+        const handlers: Record<string, Function> = {};
+        vi.mocked(spawn).mockReturnValue({
+            on: vi.fn((event: string, cb: Function) => { handlers[event] = cb; }),
+        } as any);
 
-        await handleLogs();
+        const promise = handleLogs();
+        // Simulate child close
+        handlers['close']!();
+        await promise;
 
         expect(spawn).toHaveBeenCalledWith(
             'tail',

@@ -202,6 +202,7 @@ When installed globally (`npm install -g happy-discord-bot`):
 happy-discord-bot start             # Run bot (foreground, default)
 happy-discord-bot daemon start      # Run as background daemon
 happy-discord-bot daemon stop       # Stop daemon
+happy-discord-bot daemon restart    # Restart daemon (stop + start)
 happy-discord-bot daemon status     # Show daemon status
 happy-discord-bot update            # Check for updates and upgrade
 happy-discord-bot init              # Interactive config setup
@@ -220,9 +221,13 @@ The daemon runs the bot as a detached background process. State is tracked in `~
 
 ```bash
 happy-discord-bot daemon start      # Spawn detached process, print PID
-happy-discord-bot daemon status     # Show PID, version, start time
 happy-discord-bot daemon stop       # Send SIGTERM, wait for exit, clean up state
+happy-discord-bot daemon restart    # Stop (if running) then start
+happy-discord-bot daemon status     # Show PID, version, start time
+happy-discord-bot logs              # Tail daemon log (stdout + stderr)
 ```
+
+Use `logs` to monitor the daemon after starting it — helpful for verifying connection status or diagnosing errors.
 
 ### Updating
 

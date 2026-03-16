@@ -10,11 +10,15 @@ export async function handleLogs(): Promise<void> {
     if (!existsSync(logPath)) {
         console.error(`No log file found at ${logPath}`);
         console.error('Start the daemon first: happy-discord-bot daemon start');
-        return;
+        return void process.exit(1);
     }
 
     const child = spawn('tail', ['-f', logPath], { stdio: 'inherit' });
-    child.on('error', (err) => {
-        console.error(`Failed to tail log: ${err.message}`);
+    return new Promise<void>((resolve, reject) => {
+        child.on('close', () => resolve());
+        child.on('error', (err) => {
+            console.error(`Failed to tail log: ${err.message}`);
+            reject(err);
+        });
     });
 }

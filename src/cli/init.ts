@@ -18,7 +18,8 @@ export function parseEnvFile(content: string): Record<string, string> {
         if (!trimmed || trimmed.startsWith('#')) continue;
         const eqIndex = trimmed.indexOf('=');
         if (eqIndex === -1) continue;
-        result[trimmed.slice(0, eqIndex)] = trimmed.slice(eqIndex + 1);
+        const raw = trimmed.slice(eqIndex + 1);
+        result[trimmed.slice(0, eqIndex)] = raw.replace(/^(['"])(.*)\1$/, '$2');
     }
     return result;
 }
