@@ -224,8 +224,8 @@ async function handleSessions(interaction: ChatInputCommandInteraction, bridge: 
             for (const s of machineSessions) {
                 const path = extractPath(s.metadata);
                 const marker = s.id === currentSessionId ? '  **← current**' : '';
-                const statusStr = s.active ? 'active' : 'archived';
-                sections.push(`    \`${s.id.slice(0, 7)}\` ${path}  ${statusStr}  ${relativeTime(s.activeAt)}${marker}`);
+                const icon = s.active ? '🟢' : '⚪';
+                sections.push(`    ${icon} \`${s.id.slice(0, 7)}\` ${path}  ${relativeTime(s.activeAt)}${marker}`);
             }
         }
     }
