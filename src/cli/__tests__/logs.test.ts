@@ -38,9 +38,9 @@ describe('handleLogs', () => {
 
     it('spawns tail -f and resolves when child closes', async () => {
         vi.mocked(existsSync).mockReturnValue(true);
-        const handlers: Record<string, Function> = {};
+        const handlers: Record<string, (...args: unknown[]) => void> = {};
         vi.mocked(spawn).mockReturnValue({
-            on: vi.fn((event: string, cb: Function) => { handlers[event] = cb; }),
+            on: vi.fn((event: string, cb: (...args: unknown[]) => void) => { handlers[event] = cb; }),
         } as any);
 
         const promise = handleLogs();
