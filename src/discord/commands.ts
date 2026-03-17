@@ -232,7 +232,7 @@ async function handleSessions(interaction: ChatInputCommandInteraction, bridge: 
     sections.push(`\nBot v${getVersion()}`);
 
     const allLines = sections.join('\n');
-    let content = allLines.length > 1900 ? allLines.slice(0, 1900) + '\n...(truncated)' : allLines;
+    const content = allLines.length > 1900 ? allLines.slice(0, 1900) + '\n...(truncated)' : allLines;
 
     const activeSessions = sorted.filter((s) => s.active);
     const buttons = activeSessions.length > 0
