@@ -3,8 +3,24 @@ import { readFileSync, writeFileSync, mkdirSync, unlinkSync, openSync } from 'no
 import { join } from 'node:path';
 import { getVersion } from '../version.js';
 import { getStateDir } from '../state-dir.js';
+import { readBotCredentials } from '../credentials.js';
+import { decodeBase64, deriveContentKeyPair } from '../vendor/encryption.js';
+import { loadConfig as loadHappyConfig } from '../vendor/config.js';
+import { listSessions, listMachines, type DecryptedSession, type DecryptedMachine } from '../vendor/api.js';
+import type { SessionMetadata } from '../happy/types.js';
 
 const DAEMON_STATE_FILE = 'daemon.state.json';
+
+export function relativeTime(timestamp: number): string {
+    const seconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
+    if (seconds < 60) return 'just now';
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+}
 
 export interface DaemonState {
     pid: number;
@@ -40,7 +56,7 @@ export function isDaemonRunning(stateDir: string): boolean {
     return isProcessAlive(state.pid);
 }
 
-function startDaemon(): void {
+export function startDaemon(): void {
     const stateDir = getStateDir();
     if (isDaemonRunning(stateDir)) {
         const state = readDaemonState(stateDir)!;
@@ -74,19 +90,19 @@ function startDaemon(): void {
     console.log(`Daemon started (PID ${state.pid})`);
 }
 
-async function stopDaemon(): Promise<void> {
+async function stopDaemon(): Promise<boolean> {
     const stateDir = getStateDir();
     const state = readDaemonState(stateDir);
 
     if (!state) {
         console.log('No daemon state found.');
-        return;
+        return true;
     }
 
     if (!isProcessAlive(state.pid)) {
         console.log('Daemon not running (stale state file). Cleaning up.');
         removeDaemonState(stateDir);
-        return;
+        return true;
     }
 
     process.kill(state.pid, 'SIGTERM');
@@ -97,14 +113,97 @@ async function stopDaemon(): Promise<void> {
         if (!isProcessAlive(state.pid)) {
             removeDaemonState(stateDir);
             console.log('Daemon stopped.');
-            return;
+            return true;
         }
         await new Promise(r => setTimeout(r, 200));
     }
     console.error(`Daemon did not exit within 10s. Try: kill -9 ${state.pid}`);
+    return false;
 }
 
-function statusDaemon(): void {
+function isValidMetadata(m: unknown): m is SessionMetadata {
+    return !!m && typeof m === 'object' && 'path' in m && 'machineId' in m && 'host' in m;
+}
+
+function isMachineMetadata(m: unknown): m is { host: string } {
+    return !!m && typeof m === 'object' && 'host' in m
+        && typeof (m as Record<string, unknown>).host === 'string';
+}
+
+export async function showPairingStatus(stateDir: string): Promise<void> {
+    const botCreds = readBotCredentials(stateDir);
+    if (!botCreds) {
+        console.log('\nHappy Account');
+        console.log('  Not linked. Run `happy-discord-bot auth login`.');
+        return;
+    }
+
+    console.log('\nHappy Account');
+    console.log(`  Status:  Linked (${botCreds.token.slice(0, 8)}...)`);
+
+    let sessions: DecryptedSession[];
+    let machines: DecryptedMachine[];
+    try {
+        const secret = decodeBase64(botCreds.secret);
+        const contentKeyPair = deriveContentKeyPair(secret);
+        const credentials = { token: botCreds.token, secret, contentKeyPair };
+        const config = loadHappyConfig();
+        [sessions, machines] = await Promise.all([
+            listSessions(config, credentials),
+            listMachines(config, credentials),
+        ]);
+    } catch (err) {
+        console.log(`  Failed to fetch data: ${err instanceof Error ? err.message : String(err)}`);
+        return;
+    }
+
+    const activeCount = sessions.filter(s => s.active).length;
+    console.log(`  Sessions: ${sessions.length} total, ${activeCount} active`);
+
+    if (machines.length === 0 && sessions.length === 0) {
+        console.log('\nNo machines paired. Run `happy auth login` on the target machine, then use /approve in Discord.');
+        return;
+    }
+
+    // Build machine map from machines API
+    const machineMap = new Map<string, { host: string; machineId: string; active: boolean; sessions: DecryptedSession[] }>();
+    for (const m of machines) {
+        const meta = isMachineMetadata(m.metadata) ? m.metadata : null;
+        const host = meta?.host ?? m.id.slice(0, 8);
+        machineMap.set(m.id, { host, machineId: m.id, active: m.active, sessions: [] });
+    }
+
+    // Assign sessions to machines
+    for (const s of sessions) {
+        const meta = isValidMetadata(s.metadata) ? s.metadata : null;
+        const machineId = meta?.machineId ?? 'unknown';
+        const host = meta?.host ?? 'unknown';
+        if (!machineMap.has(machineId)) {
+            machineMap.set(machineId, { host, machineId, active: false, sessions: [] });
+        }
+        machineMap.get(machineId)!.sessions.push(s);
+    }
+
+    console.log('\nConnected Machines');
+    for (const { host, machineId, active, sessions: machineSessions } of machineMap.values()) {
+        const machineStatus = active ? 'online' : 'offline';
+        console.log(`  ${host} (${machineId}) [${machineStatus}]`);
+        if (machineSessions.length === 0) {
+            console.log('    No sessions');
+            continue;
+        }
+        const sorted = [...machineSessions].sort((a, b) => b.activeAt - a.activeAt);
+        for (const s of sorted) {
+            const meta = isValidMetadata(s.metadata) ? s.metadata : null;
+            const path = meta?.path ?? 'unknown';
+            const idPrefix = s.id.slice(0, 7);
+            const status = s.active ? 'active' : 'archived';
+            console.log(`    [${idPrefix}] ${path}  ${status}  ${relativeTime(s.activeAt)}`);
+        }
+    }
+}
+
+async function statusDaemon(): Promise<void> {
     const stateDir = getStateDir();
     const state = readDaemonState(stateDir);
 
@@ -123,6 +222,17 @@ function statusDaemon(): void {
     console.log(`  Version: ${state.version}`);
     console.log(`  Started: ${state.startTime}`);
     console.log(`  Log:     ${join(stateDir, 'daemon.log')}`);
+
+    await showPairingStatus(stateDir);
+}
+
+async function restartDaemon(): Promise<void> {
+    const stateDir = getStateDir();
+    if (isDaemonRunning(stateDir)) {
+        const stopped = await stopDaemon();
+        if (!stopped) return;
+    }
+    startDaemon();
 }
 
 export async function handleDaemon(args: string[]): Promise<void> {
@@ -130,9 +240,10 @@ export async function handleDaemon(args: string[]): Promise<void> {
     switch (sub) {
         case 'start': startDaemon(); break;
         case 'stop': await stopDaemon(); break;
-        case 'status': statusDaemon(); break;
+        case 'restart': await restartDaemon(); break;
+        case 'status': await statusDaemon(); break;
         default:
-            console.log('Usage: happy-discord-bot daemon <start|stop|status>');
+            console.log('Usage: happy-discord-bot daemon <start|stop|restart|status>');
             process.exit(1);
     }
 }

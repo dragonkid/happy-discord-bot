@@ -4,7 +4,7 @@ import type { HappyClient } from './happy/client.js';
 import type { DiscordBot } from './discord/bot.js';
 import type { BotConfig } from './config.js';
 import { encrypt, encodeBase64, decrypt, decodeBase64 } from './vendor/encryption.js';
-import { listActiveSessions, listSessions, deleteSession as apiDeleteSession, type DecryptedSession } from './vendor/api.js';
+import { listActiveSessions, listSessions, listMachines as apiListMachines, deleteSession as apiDeleteSession, type DecryptedSession, type DecryptedMachine } from './vendor/api.js';
 import type { StateTracker } from './happy/state-tracker.js';
 import type { PermissionCache } from './happy/permission-cache.js';
 import { loadClaudeAllowRules } from './happy/permission-cache.js';
@@ -352,16 +352,46 @@ export class Bridge {
         return listSessions(this.config.happy, this.config.credentials);
     }
 
+    async listMachines(): Promise<DecryptedMachine[]> {
+        return apiListMachines(this.config.happy, this.config.credentials);
+    }
+
+    async getMachineHomeDir(machineId: string): Promise<string | undefined> {
+        try {
+            const machines = await this.listMachines();
+            const machine = machines.find(m => m.id === machineId);
+            const meta = machine?.metadata;
+            if (meta && typeof meta === 'object' && 'homeDir' in meta && typeof (meta as Record<string, unknown>).homeDir === 'string') {
+                return (meta as Record<string, unknown>).homeDir as string;
+            }
+        } catch { /* best-effort */ }
+        return undefined;
+    }
+
     async createNewSession(machineId: string, directory: string): Promise<string> {
-        const result = await this.happy.machineRPC<{ sessionId: string }>(
+        const result = await this.happy.machineRPC<Record<string, unknown>>(
             machineId,
             'spawn-happy-session',
             { directory, approvedNewDirectoryCreation: true },
         );
 
-        const sessionId = (result as { sessionId?: string } | undefined)?.sessionId;
+        if (!result) {
+            throw new Error('Empty response from daemon (possible encryption mismatch)');
+        }
+        if (typeof result.error === 'string') {
+            // Webhook timeout means the process was spawned but slow to register.
+            // Fall back to polling for the new session by directory path.
+            if (result.error.includes('webhook timeout')) {
+                console.log(`[Bridge] Daemon webhook timed out, polling for session in ${directory}...`);
+                const session = await this.pollForNewSession(directory);
+                if (session) return session.id;
+                throw new Error('Session process started but did not register in time');
+            }
+            throw new Error(result.error);
+        }
+        const sessionId = typeof result.sessionId === 'string' ? result.sessionId : undefined;
         if (!sessionId) {
-            throw new Error('Daemon did not return a sessionId');
+            throw new Error(`Unexpected daemon response: ${JSON.stringify(result)}`);
         }
 
         const newSession = await this.waitForSession(sessionId);
@@ -852,6 +882,31 @@ export class Bridge {
             }
         }
         return sessions;
+    }
+
+    /**
+     * Poll for a newly created session by directory path.
+     * Used as fallback when daemon webhook times out but the process is still starting.
+     */
+    private async pollForNewSession(directory: string): Promise<DecryptedSession | null> {
+        const maxAttempts = 20; // 20 * 3s = 60s total
+        for (let i = 0; i < maxAttempts; i++) {
+            await new Promise((resolve) => setTimeout(resolve, 3000));
+            const sessions = await this.loadSessions();
+            const found = sessions.find((s) => {
+                const meta = s.metadata as { path?: string } | null;
+                return meta?.path === directory && s.active;
+            });
+            if (found) {
+                console.log(`[Bridge] Found session ${found.id} after polling (attempt ${i + 1})`);
+                this.happy.registerSessionEncryption(found.id, found.encryption);
+                this.setActiveSession(found.id);
+                this.persistModes();
+                await this.ensureThread(found.id, found.metadata);
+                return found;
+            }
+        }
+        return null;
     }
 
     private async waitForSession(sessionId: string, retries = 2): Promise<DecryptedSession | null> {

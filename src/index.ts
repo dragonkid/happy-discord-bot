@@ -122,57 +122,37 @@ async function main(): Promise<void> {
                 }
             }
 
-            // pendingApprove: intercept image for QR decode (only in the channel where /approve was invoked)
+            // pendingApprove: intercept happy:// URL (only in the channel where /approve was invoked)
             const pendingApprove = bridge.pendingApprove;
-            if (pendingApprove && message.channelId === pendingApprove.channelId && message.attachments.size > 0) {
-                const imageAttachment = [...message.attachments.values()].find(
-                    (a) => a.contentType?.startsWith('image/'),
-                );
-                if (imageAttachment) {
-                    bridge.clearPendingApprove();
-                    if (imageAttachment.size > 10 * 1024 * 1024) {
-                        await message.reply('Image too large (max 10 MB).');
+            if (pendingApprove && message.channelId === pendingApprove.channelId && text.startsWith('happy://')) {
+                bridge.clearPendingApprove();
+                try {
+                    const { parseAuthUrl, approveTerminalAuth } = await import('./happy/auth-approve.js');
+                    const { loadConfig } = await import('./vendor/config.js');
+                    const { decodeBase64 } = await import('./vendor/encryption.js');
+                    const { readBotCredentials } = await import('./credentials.js');
+                    const { getStateDir } = await import('./state-dir.js');
+
+                    const ephemeralPubKey = parseAuthUrl(text.trim());
+                    if (!ephemeralPubKey) {
+                        await message.reply('Invalid `happy://` URL. Please paste the full URL from `auth login` output.');
                         return;
                     }
-                    try {
-                        const { decodeQrFromImage, parseAccountAuthUrl, approveAccountAuth } = await import('./happy/auth-approve.js');
-                        const { loadConfig } = await import('./vendor/config.js');
-                        const { decodeBase64 } = await import('./vendor/encryption.js');
-                        const { readBotCredentials } = await import('./credentials.js');
-                        const { getStateDir } = await import('./state-dir.js');
-
-                        const resp = await fetch(imageAttachment.url);
-                        if (!resp.ok) {
-                            await message.reply(`Failed to download image: HTTP ${resp.status}`);
-                            return;
-                        }
-                        const buf = Buffer.from(await resp.arrayBuffer());
-                        const qrText = await decodeQrFromImage(buf);
-                        if (!qrText) {
-                            await message.reply('No QR code found in image.');
-                            return;
-                        }
-                        const ephemeralPubKey = parseAccountAuthUrl(qrText);
-                        if (!ephemeralPubKey) {
-                            await message.reply('QR code does not contain a valid Happy auth URL.');
-                            return;
-                        }
-                        const botCreds = readBotCredentials(getStateDir());
-                        if (!botCreds) {
-                            await message.reply('Bot not linked. Run `happy-discord-bot auth login` first.');
-                            return;
-                        }
-                        const { serverUrl } = loadConfig();
-                        const secret = decodeBase64(botCreds.secret);
-                        const token = botCreds.token;
-                        await approveAccountAuth(serverUrl, token, secret, ephemeralPubKey);
-                        await message.reply('Device approved.');
-                    } catch (err) {
-                        const detail = err instanceof Error ? err.message : String(err);
-                        await message.reply(`Approve failed: ${detail}`);
+                    const botCreds = readBotCredentials(getStateDir());
+                    if (!botCreds) {
+                        await message.reply('Bot not linked. Run `happy-discord-bot auth login` first.');
+                        return;
                     }
-                    return;
+                    const { serverUrl } = loadConfig();
+                    const secret = decodeBase64(botCreds.secret);
+                    const token = botCreds.token;
+                    await approveTerminalAuth(serverUrl, token, secret, ephemeralPubKey);
+                    await message.reply('Device approved.');
+                } catch (err) {
+                    const detail = err instanceof Error ? err.message : String(err);
+                    await message.reply(`Approve failed: ${detail}`);
                 }
+                return;
             }
 
             if (message.attachments.size > 0) {
@@ -266,23 +246,40 @@ async function main(): Promise<void> {
 
             // --- New Session custom path button ---
             if (parseCustomPathButton(interaction.customId)) {
-                const menuRow = interaction.message.components[0] as unknown as
-                    { components?: Array<{ type: number; options?: Array<{ value: string }> }> };
-                let machineId = '';
-                if (menuRow?.components?.[0]?.type === 3 /* StringSelect */) {
-                    const firstOption = menuRow.components[0].options?.[0];
-                    if (firstOption?.value) {
-                        // Index-based: re-fetch directories to get machineId
-                        try {
-                            const allSessions = await bridge.listAllSessions();
-                            const { extractDirectories } = await import('./happy/session-metadata.js');
-                            const dirs = extractDirectories(allSessions);
-                            if (dirs.length > 0) machineId = dirs[0].machineId;
-                        } catch {
-                            // fallback: empty
+                // Try machineId from button customId first (buildCustomPathOnly embeds it)
+                const embeddedId = interaction.customId.slice('newsess-custom:'.length);
+                let machineId = embeddedId !== 'btn' ? embeddedId : '';
+
+                // Fall back to extracting from select menu (buildNewSessionMenu case)
+                if (!machineId) {
+                    const menuRow = interaction.message.components[0] as unknown as
+                        { components?: Array<{ type: number; options?: Array<{ value: string }> }> };
+                    if (menuRow?.components?.[0]?.type === 3 /* StringSelect */) {
+                        const firstOption = menuRow.components[0].options?.[0];
+                        if (firstOption?.value) {
+                            try {
+                                const allSessions = await bridge.listAllSessions();
+                                const { extractDirectories } = await import('./happy/session-metadata.js');
+                                const dirs = extractDirectories(allSessions);
+                                if (dirs.length > 0) machineId = dirs[0].machineId;
+                            } catch {
+                                // fallback: empty
+                            }
                         }
                     }
                 }
+
+                // Last resort: query machines API
+                if (!machineId) {
+                    try {
+                        const machines = await bridge.listMachines();
+                        const active = machines.find(m => m.active);
+                        if (active) machineId = active.id;
+                    } catch {
+                        // fallback: empty
+                    }
+                }
+
                 if (!machineId) {
                     await interaction.reply({ content: 'No machine available.', ephemeral: true });
                     return;

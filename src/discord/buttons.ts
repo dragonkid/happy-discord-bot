@@ -323,6 +323,17 @@ export function buildNewSessionMenu(
     return [menuRow, btnRow];
 }
 
+export function buildCustomPathOnly(
+    machineId: string,
+): ActionRowBuilder<ButtonBuilder>[] {
+    const customBtn = new ButtonBuilder()
+        .setCustomId(`${NEW_SESSION_CUSTOM_PREFIX}${machineId}`)
+        .setLabel('Enter directory path...')
+        .setStyle(ButtonStyle.Primary);
+
+    return [new ActionRowBuilder<ButtonBuilder>().addComponents(customBtn)];
+}
+
 export function parseNewSessionSelect(customId: string): boolean {
     return customId.startsWith(NEW_SESSION_SELECT_PREFIX);
 }

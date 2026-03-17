@@ -56,6 +56,28 @@ export type DecryptedSession = {
     encryption: SessionEncryption;
 };
 
+export type RawMachine = {
+    id: string;
+    metadata: string | null;
+    metadataVersion: number;
+    daemonState: string | null;
+    daemonStateVersion: number;
+    dataEncryptionKey: string | null;
+    seq: number;
+    active: boolean;
+    activeAt: number;
+    createdAt: number;
+    updatedAt: number;
+};
+
+export type DecryptedMachine = {
+    id: string;
+    metadata: unknown;
+    active: boolean;
+    activeAt: number;
+    createdAt: number;
+};
+
 export type RawMessage = WireSessionMessage;
 
 export type DecryptedMessage = {
@@ -161,6 +183,42 @@ function authHeaders(creds: Credentials): Record<string, string> {
 }
 
 // --- API functions ---
+
+export async function listMachines(
+    config: Config,
+    creds: Credentials,
+): Promise<DecryptedMachine[]> {
+    const resp = await fetch(`${config.serverUrl}/v1/machines`, {
+        headers: authHeaders(creds),
+    });
+    await handleApiResponse(resp, 'listing machines');
+    const data = (await resp.json()) as RawMachine[];
+    return data.map(raw => {
+        let metadata: unknown = null;
+        if (raw.metadata) {
+            try {
+                const encrypted = decodeBase64(raw.metadata);
+                if (raw.dataEncryptionKey) {
+                    const encKey = decodeBase64(raw.dataEncryptionKey);
+                    const bundle = encKey.slice(1);
+                    const machineKey = decryptBoxBundle(bundle, creds.contentKeyPair.secretKey);
+                    if (machineKey) {
+                        metadata = decryptWithDataKey(encrypted, machineKey);
+                    }
+                } else {
+                    metadata = decryptLegacy(encrypted, creds.secret);
+                }
+            } catch { /* metadata decryption optional */ }
+        }
+        return {
+            id: raw.id,
+            metadata,
+            active: raw.active,
+            activeAt: raw.activeAt,
+            createdAt: raw.createdAt,
+        };
+    });
+}
 
 export async function listSessions(
     config: Config,

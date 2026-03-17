@@ -190,9 +190,10 @@ export async function handleNewSessionSelect(
     }
 }
 
-function expandHome(p: string): string {
-    if (p === '~') return process.env.HOME ?? p;
-    if (p.startsWith('~/')) return (process.env.HOME ?? '') + p.slice(1);
+function expandRemoteHome(p: string, remoteHomeDir: string | undefined): string {
+    if (!remoteHomeDir) return p;
+    if (p === '~') return remoteHomeDir;
+    if (p.startsWith('~/')) return remoteHomeDir + p.slice(1);
     return p;
 }
 
@@ -201,7 +202,10 @@ export async function handleNewSessionModal(
     machineId: string,
     bridge: Bridge,
 ): Promise<void> {
-    const directory = expandHome(interaction.fields.getTextInputValue('directory').trim());
+    const raw = interaction.fields.getTextInputValue('directory').trim();
+    // Expand ~ using the remote machine's home directory, not the bot's
+    const remoteHome = await bridge.getMachineHomeDir(machineId);
+    const directory = expandRemoteHome(raw, remoteHome);
     if (!directory) {
         await interaction.editReply({
             content: 'Please provide a directory path.',

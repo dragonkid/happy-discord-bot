@@ -265,9 +265,7 @@ describe('handleUpdate', () => {
 
         // Simulate old process dying immediately after SIGTERM
         const killSpy = vi.fn();
-        let killCallCount = 0;
         killSpy.mockImplementation((_pid: number, signal?: string | number) => {
-            killCallCount++;
             if (signal === 'SIGTERM') return;
             throw new Error('ESRCH'); // process dead
         });

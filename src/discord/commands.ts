@@ -5,8 +5,8 @@ import {
     type RESTPostAPIChatInputApplicationCommandsJSONBody,
 } from 'discord.js';
 import type { Bridge } from '../bridge.js';
-import { buildSessionButtons, buildNewSessionMenu, buildDeleteConfirmButtons, buildCleanupConfirmButtons } from './buttons.js';
-import { extractDirectories } from '../happy/session-metadata.js';
+import { buildSessionButtons, buildNewSessionMenu, buildCustomPathOnly, buildDeleteConfirmButtons, buildCleanupConfirmButtons } from './buttons.js';
+import { extractDirectories, extractMachines } from '../happy/session-metadata.js';
 import type { PermissionMode } from '../happy/types.js';
 import { queryUsage } from '../happy/usage.js';
 import { formatUsage } from './formatter.js';
@@ -99,7 +99,7 @@ const loop = new SlashCommandBuilder()
 
 const approve = new SlashCommandBuilder()
     .setName('approve')
-    .setDescription('Approve a Happy account auth request (paste QR screenshot next)');
+    .setDescription('Approve a Happy account auth request (paste happy:// URL next)');
 
 const update = new SlashCommandBuilder()
     .setName('update')
@@ -276,7 +276,19 @@ async function handleNewSession(interaction: ChatInputCommandInteraction, bridge
     const directories = extractDirectories(allSessions);
 
     if (directories.length === 0) {
-        await interaction.editReply('No machines found. Start a session manually first.');
+        // No sessions — try to discover machines directly
+        const machines = await bridge.listMachines();
+        const entries = extractMachines(machines);
+        const activeMachine = entries.find(m => m.active);
+        if (!activeMachine) {
+            await interaction.editReply('No machines found. Make sure the happy daemon is running and paired.');
+            return;
+        }
+        const components = buildCustomPathOnly(activeMachine.machineId);
+        await interaction.editReply({
+            content: `Connected to **${activeMachine.host}**. Enter a directory path to start a new session:`,
+            components,
+        });
         return;
     }
 
@@ -487,12 +499,12 @@ const PENDING_APPROVE_TIMEOUT_MS = 60_000;
 
 async function handleApprove(interaction: ChatInputCommandInteraction, bridge: Bridge): Promise<void> {
     if (bridge.pendingApprove) {
-        await interaction.reply({ content: 'Already waiting for a QR screenshot. Send the image or wait for timeout.', ephemeral: true });
+        await interaction.reply({ content: 'Already waiting for a happy:// URL. Paste the URL or wait for timeout.', ephemeral: true });
         return;
     }
 
     bridge.setPendingApprove(interaction.channelId, PENDING_APPROVE_TIMEOUT_MS);
-    await interaction.reply('Send a QR code screenshot within 60 seconds to approve the auth request.');
+    await interaction.reply('Paste the `happy://` URL from your `auth login` output within 60 seconds.');
 }
 
 // --- /update handler ---

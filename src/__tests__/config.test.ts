@@ -73,6 +73,7 @@ describe('loadBotConfig', () => {
         // Save and clear relevant env vars
         for (const key of envKeys) {
             savedEnv[key] = process.env[key];
+            // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
             delete process.env[key];
         }
         vi.mocked(readBotCredentials).mockReturnValue(null);
@@ -84,6 +85,7 @@ describe('loadBotConfig', () => {
             if (savedEnv[key] !== undefined) {
                 process.env[key] = savedEnv[key];
             } else {
+                // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
                 delete process.env[key];
             }
         }

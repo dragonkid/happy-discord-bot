@@ -33,6 +33,7 @@ function makeMockBridge(): Bridge {
     return {
         listSessions: vi.fn().mockResolvedValue([]),
         listAllSessions: vi.fn().mockResolvedValue([]),
+        listMachines: vi.fn().mockResolvedValue([]),
         createNewSession: vi.fn().mockResolvedValue('new-sess-id'),
         archiveSession: vi.fn().mockResolvedValue('sess-1'),
         deleteSession: vi.fn().mockResolvedValue('sess-1'),
@@ -195,15 +196,34 @@ describe('commands', () => {
             );
         });
 
-        it('/new shows error when no machines found', async () => {
+        it('/new shows error when no sessions and no machines', async () => {
             const bridge = makeMockBridge();
             vi.mocked(bridge.listAllSessions).mockResolvedValueOnce([]);
+            vi.mocked(bridge.listMachines).mockResolvedValueOnce([]);
 
             const interaction = mockInteraction('new');
             await handleCommand(interaction as any, bridge);
 
             expect(interaction.editReply).toHaveBeenCalledWith(
                 expect.stringContaining('No machines found'),
+            );
+        });
+
+        it('/new shows custom path button when no sessions but machine exists', async () => {
+            const bridge = makeMockBridge();
+            vi.mocked(bridge.listAllSessions).mockResolvedValueOnce([]);
+            vi.mocked(bridge.listMachines).mockResolvedValueOnce([
+                { id: 'machine-1', metadata: { machineId: 'machine-1', host: 'macbook' }, active: true, activeAt: 1000, createdAt: 0 },
+            ] as any);
+
+            const interaction = mockInteraction('new');
+            await handleCommand(interaction as any, bridge);
+
+            expect(interaction.editReply).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    content: expect.stringContaining('macbook'),
+                    components: expect.any(Array),
+                }),
             );
         });
 
@@ -571,10 +591,10 @@ describe('commands', () => {
             await handleCommand(interaction as any, bridge);
 
             expect(bridge.setPendingApprove).toHaveBeenCalledWith('ch-approve', 60_000);
-            expect(interaction.reply).toHaveBeenCalledWith(expect.stringContaining('QR code screenshot'));
+            expect(interaction.reply).toHaveBeenCalledWith(expect.stringContaining('happy://'));
         });
 
-        it('rejects when already waiting for QR', async () => {
+        it('rejects when already waiting for URL', async () => {
             const bridge = makeMockBridge();
             Object.defineProperty(bridge, 'pendingApprove', {
                 value: { channelId: 'ch-1', timestamp: Date.now(), timer: setTimeout(() => {}, 0) },

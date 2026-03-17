@@ -48,12 +48,13 @@ src/
 ├── store.ts              # Bot state persistence (~/.happy-discord-bot/state.json)
 ├── cli/
 │   ├── auth.ts           # Auth CLI: login/restore/status/logout
-│   ├── daemon.ts         # Daemon start/stop/status (detached child_process)
+│   ├── daemon.ts         # Daemon start/stop/restart/status (detached child_process)
+│   ├── logs.ts           # Tail daemon log (tail -f daemon.log)
 │   ├── update.ts         # Self-update (npm install -g + dual-process handoff)
 │   └── init.ts           # Interactive config setup (~/.happy-discord-bot/.env)
 ├── happy/
 │   ├── client.ts         # HappyClient: Socket.IO + sessionRPC + machineRPC + HTTP
-│   ├── auth-approve.ts   # QR decode (jsqr+sharp) + device approve via NaCl box
+│   ├── auth-approve.ts   # Parse happy:// auth URL + device approve via NaCl box
 │   ├── session-metadata.ts  # Session metadata decryption + directory extraction + threadName
 │   ├── usage.ts          # REST API wrapper for /v1/usage/query (token/cost)
 │   ├── skill-registry.ts # Skills/commands discovery (personal + project + plugins)
@@ -139,10 +140,11 @@ When a Discord message includes attachments (images, PDFs, code files, etc.), th
 ### /new Session Creation Flow
 1. User runs `/new` → bot fetches all sessions via `listAllSessions()`, decrypts metadata
 2. `extractDirectories()` deduplicates by path, filters E2E dirs, sorts by activeAt, limits to 25
-3. Bot shows `StringSelectMenu` with directory options + "Custom path..." button
-4. User selects directory (or enters custom path via modal) → `bridge.createNewSession(machineId, directory)`
-5. `machineRPC('spawn-happy-session', {directory, approvedNewDirectoryCreation})` → daemon spawns CLI session
-6. Bot polls `loadSessions()` to find new session → registers encryption key → sets active
+3. If directories exist: Bot shows `StringSelectMenu` with directory options + "Custom path..." button
+4. If no directories: Bot calls `listMachines()` (`GET /v1/machines`) to discover connected machines directly. If an active machine found, shows "Enter directory path..." button with the machine's ID embedded
+5. User selects directory (or enters custom path via modal) → `bridge.createNewSession(machineId, directory)`
+6. `machineRPC('spawn-happy-session', {directory, approvedNewDirectoryCreation})` → daemon spawns CLI session
+7. Bot polls `loadSessions()` to find new session → registers encryption key → sets active
 
 **StringSelectMenu values use index-based encoding** (`String(i)`) instead of JSON to stay within Discord's 100-char value limit. Handler re-fetches sessions to resolve the index.
 
@@ -176,13 +178,12 @@ When a Discord message includes attachments (images, PDFs, code files, etc.), th
 - Example: `/loop 5m /compact` runs `/compact` every 5 minutes.
 
 ### /approve Command
-- `/approve` — Two-step device authorization flow (replaces App's QR scan).
+- `/approve` — Two-step device authorization flow.
 - Step 1: User runs `/approve` → bot enters `pendingApprove` state (60s timeout), replies with instructions.
-- Step 2: User pastes QR screenshot → bot downloads image → `sharp` converts to RGBA → `jsqr` decodes QR URL.
-- QR format: `happy:///account?<base64url-encoded ephemeral public key>`.
-- Bot encrypts its secret via NaCl box for the ephemeral key → `POST /v1/auth/account/response`.
-- Channel-scoped: only images in the same channel as `/approve` trigger QR detection.
-- 10MB image size limit. Non-image attachments ignored.
+- Step 2: User pastes `happy://` URL from `auth login` output → bot parses ephemeral public key.
+- URL formats: `happy://terminal?<base64url-pubkey>` (CLI) or `happy:///account?<base64url-pubkey>` (mobile app).
+- Bot checks `GET /v1/auth/request/status` → if `pending`, encrypts secret via NaCl box → `POST /v1/auth/response`.
+- Channel-scoped: only messages starting with `happy://` in the same channel trigger URL detection.
 - `pendingApprove` auto-clears on timeout or after processing.
 
 ### /cleanup Command
@@ -257,13 +258,15 @@ Bot does NOT read from `~/.happy/` — all credentials are self-managed.
 happy-discord-bot start             # Run bot (foreground, default)
 happy-discord-bot daemon start      # Run as background daemon
 happy-discord-bot daemon stop       # Stop daemon
-happy-discord-bot daemon status     # Show daemon status
+happy-discord-bot daemon restart    # Restart daemon (stop + start)
+happy-discord-bot daemon status     # Show daemon status + connected machines
 happy-discord-bot auth login        # Generate new account (secret + Ed25519 → POST /v1/auth)
 happy-discord-bot auth restore      # Input existing secret (base64url) to reuse account
 happy-discord-bot auth status       # Show credential status
 happy-discord-bot auth logout       # Delete stored credentials
 happy-discord-bot update            # Check for updates and upgrade
 happy-discord-bot init              # Interactive config setup
+happy-discord-bot logs              # Tail daemon log output
 happy-discord-bot deploy-commands   # Register Discord slash commands
 happy-discord-bot version           # Show version
 ```
@@ -305,7 +308,7 @@ npm run test:e2e         # E2E smoke tests (requires .env.e2e, real services)
 ## Testing
 
 - Framework: Vitest
-- 25 test suites, 567 tests
+- 27 test suites, 600 tests
 - Test files: `src/**/__tests__/*.test.ts`
 - All Happy/Discord dependencies mocked (no real connections needed)
 

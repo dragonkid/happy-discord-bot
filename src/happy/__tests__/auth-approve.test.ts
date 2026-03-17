@@ -1,16 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('sharp', () => ({
-    default: vi.fn(() => ({
-        ensureAlpha: vi.fn().mockReturnThis(),
-        raw: vi.fn().mockReturnThis(),
-        toBuffer: vi.fn().mockResolvedValue({
-            data: Buffer.alloc(400), // 10x10 RGBA
-            info: { width: 10, height: 10, channels: 4 },
-        }),
-    })),
-}));
-
 vi.mock('../../vendor/encryption.js', () => ({
     decodeBase64Url: vi.fn((s: string) => {
         // Return 32 bytes for valid keys
@@ -21,7 +10,7 @@ vi.mock('../../vendor/encryption.js', () => ({
     libsodiumEncryptForPublicKey: vi.fn(() => new Uint8Array(80)),
 }));
 
-const { parseAccountAuthUrl, decodeQrFromImage, approveAccountAuth } = await import('../auth-approve.js');
+const { parseAuthUrl, approveTerminalAuth } = await import('../auth-approve.js');
 
 describe('auth-approve', () => {
     beforeEach(() => {
@@ -29,117 +18,136 @@ describe('auth-approve', () => {
         globalThis.fetch = vi.fn();
     });
 
-    describe('parseAccountAuthUrl', () => {
-        it('extracts public key from valid URL', () => {
-            // 32-byte key base64url encoded
+    describe('parseAuthUrl', () => {
+        it('extracts public key from happy://terminal? URL', () => {
             const key = Buffer.alloc(32, 0xaa).toString('base64url');
-            const result = parseAccountAuthUrl(`happy:///account?${key}`);
+            const result = parseAuthUrl(`happy://terminal?${key}`);
+            expect(result).toBeInstanceOf(Uint8Array);
+            expect(result!.length).toBe(32);
+        });
+
+        it('extracts public key from happy:///account? URL', () => {
+            const key = Buffer.alloc(32, 0xbb).toString('base64url');
+            const result = parseAuthUrl(`happy:///account?${key}`);
             expect(result).toBeInstanceOf(Uint8Array);
             expect(result!.length).toBe(32);
         });
 
         it('returns null for non-matching URL', () => {
-            expect(parseAccountAuthUrl('https://example.com')).toBeNull();
+            expect(parseAuthUrl('https://example.com')).toBeNull();
         });
 
         it('returns null for wrong scheme', () => {
             const key = Buffer.alloc(32).toString('base64url');
-            expect(parseAccountAuthUrl(`http:///account?${key}`)).toBeNull();
+            expect(parseAuthUrl(`http://terminal?${key}`)).toBeNull();
         });
 
         it('returns null for wrong key length', () => {
             const key = Buffer.alloc(16).toString('base64url');
-            expect(parseAccountAuthUrl(`happy:///account?${key}`)).toBeNull();
+            expect(parseAuthUrl(`happy://terminal?${key}`)).toBeNull();
         });
 
         it('returns null for empty query', () => {
-            expect(parseAccountAuthUrl('happy:///account?')).toBeNull();
+            expect(parseAuthUrl('happy://terminal?')).toBeNull();
         });
 
         it('returns null for malformed base64url (decodeBase64Url throws)', async () => {
             const { decodeBase64Url } = await import('../../vendor/encryption.js');
             vi.mocked(decodeBase64Url).mockImplementationOnce(() => { throw new Error('bad base64'); });
-            expect(parseAccountAuthUrl('happy:///account?!!!invalid!!!')).toBeNull();
+            expect(parseAuthUrl('happy://terminal?!!!invalid!!!')).toBeNull();
         });
     });
 
-    describe('decodeQrFromImage', () => {
-        it('returns null when no QR found (mock jsqr returns null)', async () => {
-            // jsqr is CJS and require'd in the module — mock via vi.mock doesn't work well for require()
-            // The default sharp mock returns a blank image which jsqr won't decode
-            const result = await decodeQrFromImage(Buffer.alloc(100));
-            expect(result).toBeNull();
-        });
-    });
+    describe('approveTerminalAuth', () => {
+        const mockStatusResponse = (status: string, supportsV2 = false) => ({
+            ok: true,
+            json: async () => ({ status, supportsV2 }),
+        } as Response);
 
-    describe('approveAccountAuth', () => {
-        it('sends encrypted response to server with correct body', async () => {
-            vi.mocked(globalThis.fetch).mockResolvedValue({ ok: true } as Response);
+        it('checks status then sends v1 encrypted response', async () => {
+            vi.mocked(globalThis.fetch)
+                .mockResolvedValueOnce(mockStatusResponse('pending'))
+                .mockResolvedValueOnce({ ok: true } as Response);
 
-            await approveAccountAuth(
+            await approveTerminalAuth(
                 'https://api.test.com',
                 'tok-123',
                 new Uint8Array(32),
                 new Uint8Array(32),
             );
 
-            expect(globalThis.fetch).toHaveBeenCalledWith(
-                'https://api.test.com/v1/auth/account/response',
-                expect.objectContaining({
-                    method: 'POST',
-                    headers: expect.objectContaining({
-                        'Authorization': 'Bearer tok-123',
-                        'Content-Type': 'application/json',
-                    }),
-                }),
+            // First call: status check
+            expect(vi.mocked(globalThis.fetch).mock.calls[0][0]).toMatch(
+                /\/v1\/auth\/request\/status\?publicKey=/,
             );
 
-            // Verify body contains publicKey and response fields
-            const callBody = JSON.parse(vi.mocked(globalThis.fetch).mock.calls[0][1]!.body as string);
+            // Second call: approve via /v1/auth/response
+            expect(vi.mocked(globalThis.fetch).mock.calls[1][0]).toBe(
+                'https://api.test.com/v1/auth/response',
+            );
+            const callBody = JSON.parse(vi.mocked(globalThis.fetch).mock.calls[1][1]!.body as string);
             expect(callBody).toHaveProperty('publicKey');
             expect(callBody).toHaveProperty('response');
-            expect(typeof callBody.publicKey).toBe('string');
-            expect(typeof callBody.response).toBe('string');
         });
 
-        it('throws on server error', async () => {
-            vi.mocked(globalThis.fetch).mockResolvedValue({
-                ok: false,
-                status: 403,
-                statusText: 'Forbidden',
-                text: async () => 'not allowed',
-            } as Response);
+        it('returns early when status is authorized', async () => {
+            vi.mocked(globalThis.fetch).mockResolvedValueOnce(mockStatusResponse('authorized'));
+
+            await approveTerminalAuth('https://api.test.com', 'tok', new Uint8Array(32), new Uint8Array(32));
+
+            // Only one fetch call (status check), no approve call
+            expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+        });
+
+        it('throws when status is not_found', async () => {
+            vi.mocked(globalThis.fetch).mockResolvedValueOnce(mockStatusResponse('not_found'));
 
             await expect(
-                approveAccountAuth('https://api.test.com', 'tok', new Uint8Array(32), new Uint8Array(32)),
+                approveTerminalAuth('https://api.test.com', 'tok', new Uint8Array(32), new Uint8Array(32)),
+            ).rejects.toThrow('Auth request not found or expired');
+        });
+
+        it('throws on approve server error', async () => {
+            vi.mocked(globalThis.fetch)
+                .mockResolvedValueOnce(mockStatusResponse('pending'))
+                .mockResolvedValueOnce({
+                    ok: false,
+                    status: 403,
+                    statusText: 'Forbidden',
+                    text: async () => 'not allowed',
+                } as Response);
+
+            await expect(
+                approveTerminalAuth('https://api.test.com', 'tok', new Uint8Array(32), new Uint8Array(32)),
             ).rejects.toThrow('Approve failed: 403 Forbidden');
         });
 
         it('truncates long error body to 200 chars', async () => {
             const longBody = 'x'.repeat(300);
-            vi.mocked(globalThis.fetch).mockResolvedValue({
-                ok: false,
-                status: 500,
-                statusText: 'Internal Server Error',
-                text: async () => longBody,
-            } as Response);
+            vi.mocked(globalThis.fetch)
+                .mockResolvedValueOnce(mockStatusResponse('pending'))
+                .mockResolvedValueOnce({
+                    ok: false,
+                    status: 500,
+                    statusText: 'Internal Server Error',
+                    text: async () => longBody,
+                } as Response);
 
             await expect(
-                approveAccountAuth('https://api.test.com', 'tok', new Uint8Array(32), new Uint8Array(32)),
+                approveTerminalAuth('https://api.test.com', 'tok', new Uint8Array(32), new Uint8Array(32)),
             ).rejects.toThrow('...');
         });
 
-        it('handles body read failure gracefully', async () => {
-            vi.mocked(globalThis.fetch).mockResolvedValue({
+        it('throws on status check failure', async () => {
+            vi.mocked(globalThis.fetch).mockResolvedValueOnce({
                 ok: false,
-                status: 502,
-                statusText: 'Bad Gateway',
-                text: async () => { throw new Error('stream broken'); },
-            } as unknown as Response);
+                status: 500,
+                statusText: 'Internal Server Error',
+            } as Response);
 
             await expect(
-                approveAccountAuth('https://api.test.com', 'tok', new Uint8Array(32), new Uint8Array(32)),
-            ).rejects.toThrow('Approve failed: 502 Bad Gateway');
+                approveTerminalAuth('https://api.test.com', 'tok', new Uint8Array(32), new Uint8Array(32)),
+            ).rejects.toThrow('Status check failed: 500');
         });
     });
 });

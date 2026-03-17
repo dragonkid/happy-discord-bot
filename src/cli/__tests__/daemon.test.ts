@@ -18,6 +18,28 @@ vi.mock('../../version.js', () => ({
     getVersion: vi.fn(() => '0.1.0'),
 }));
 
+vi.mock('../../credentials.js', () => ({
+    readBotCredentials: vi.fn(() => null),
+}));
+
+vi.mock('../../vendor/encryption.js', () => ({
+    decodeBase64: vi.fn(() => new Uint8Array(32)),
+    deriveContentKeyPair: vi.fn(() => ({
+        publicKey: new Uint8Array(32),
+        secretKey: new Uint8Array(64),
+    })),
+    encodeBase64: vi.fn((buf: Uint8Array) => Buffer.from(buf).toString('base64')),
+}));
+
+vi.mock('../../vendor/config.js', () => ({
+    loadConfig: vi.fn(() => ({ serverUrl: 'https://api.test.com' })),
+}));
+
+vi.mock('../../vendor/api.js', () => ({
+    listSessions: vi.fn(() => Promise.resolve([])),
+    listMachines: vi.fn(() => Promise.resolve([])),
+}));
+
 const { readDaemonState, writeDaemonState, removeDaemonState, isDaemonRunning, handleDaemon } = await import('../daemon.js');
 import type { DaemonState } from '../daemon.js';
 
@@ -221,7 +243,7 @@ describe('handleDaemon', () => {
             logSpy.mockRestore();
         });
 
-        it('prints daemon info when running', async () => {
+        it('prints daemon info and Happy Account when running', async () => {
             const state: DaemonState = { pid: process.pid, startTime: '2026-01-01T00:00:00Z', version: '0.1.0' };
             vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(state));
 
@@ -233,6 +255,84 @@ describe('handleDaemon', () => {
             expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Version: 0.1.0'));
             expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Started:'));
             expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Log:'));
+            // showPairingStatus called (readBotCredentials returns null by default)
+            expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Happy Account'));
+            logSpy.mockRestore();
+        });
+    });
+
+    describe('restart', () => {
+        it('stops then starts when daemon is running', async () => {
+            // Daemon is "running" (use own PID)
+            const stateJson = JSON.stringify({ pid: process.pid, startTime: '2026-01-01T00:00:00Z', version: '0.1.0' });
+
+            // Track whether stop has cleaned up state
+            let stopped = false;
+            vi.mocked(fs.readFileSync).mockImplementation(() => {
+                if (stopped) throw new Error('ENOENT');
+                return stateJson;
+            });
+            vi.mocked(fs.unlinkSync).mockImplementation(() => { stopped = true; });
+
+            // Mock kill: SIGTERM succeeds, then process appears dead
+            let killCallCount = 0;
+            const origKill = process.kill;
+            process.kill = vi.fn((_pid: number, signal?: string | number) => {
+                killCallCount++;
+                if (signal === 'SIGTERM') return true;
+                if (killCallCount <= 2) return true;
+                throw new Error('ESRCH');
+            }) as any;
+
+            vi.mocked(spawn).mockReturnValue({ pid: 99, unref: vi.fn() } as any);
+
+            const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+            await handleDaemon(['restart']);
+
+            expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Daemon stopped'));
+            expect(spawn).toHaveBeenCalled();
+            expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('PID 99'));
+
+            process.kill = origKill;
+            logSpy.mockRestore();
+        });
+
+        it('aborts start when stop times out', async () => {
+            const stateJson = JSON.stringify({ pid: process.pid, startTime: '2026-01-01T00:00:00Z', version: '0.1.0' });
+            vi.mocked(fs.readFileSync).mockReturnValue(stateJson);
+            vi.mocked(spawn).mockClear();
+
+            // Mock kill: SIGTERM succeeds, but process never dies (always alive)
+            const origKill = process.kill;
+            process.kill = vi.fn(() => true) as any;
+
+            // Speed up the 10s timeout by mocking Date.now
+            let now = 1000;
+            const origDateNow = Date.now;
+            Date.now = () => { now += 5000; return now; }; // jump 5s per call
+
+            const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+            const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+            await handleDaemon(['restart']);
+
+            expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('did not exit within 10s'));
+            expect(spawn).not.toHaveBeenCalled(); // should NOT start
+
+            process.kill = origKill;
+            Date.now = origDateNow;
+            logSpy.mockRestore();
+            errorSpy.mockRestore();
+        });
+
+        it('just starts when daemon is not running', async () => {
+            vi.mocked(fs.readFileSync).mockImplementation(() => { throw new Error('ENOENT'); });
+            vi.mocked(spawn).mockReturnValue({ pid: 77, unref: vi.fn() } as any);
+
+            const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+            await handleDaemon(['restart']);
+
+            expect(spawn).toHaveBeenCalled();
+            expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('PID 77'));
             logSpy.mockRestore();
         });
     });
