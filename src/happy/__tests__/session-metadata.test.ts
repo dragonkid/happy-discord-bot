@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { extractDirectories, threadName } from '../session-metadata.js';
 import type { DecryptedSession } from '../../vendor/api.js';
 
-function makeSession(path: string, machineId: string, activeAt: number): DecryptedSession {
+function makeSession(path: string, machineId: string, activeAt: number, host = 'test'): DecryptedSession {
     return {
         id: `sess-${activeAt}`,
         seq: 1,
@@ -10,7 +10,7 @@ function makeSession(path: string, machineId: string, activeAt: number): Decrypt
         updatedAt: activeAt,
         active: false,
         activeAt,
-        metadata: { path, machineId, host: 'test', version: '0.14.0', os: 'darwin' },
+        metadata: { path, machineId, host, version: '0.14.0', os: 'darwin' },
         agentState: null,
         dataEncryptionKey: null,
         encryption: { key: new Uint8Array(32), variant: 'dataKey' as const },
@@ -26,8 +26,25 @@ describe('extractDirectories', () => {
         ];
         const result = extractDirectories(sessions);
         expect(result).toHaveLength(2);
-        expect(result[0]).toEqual({ path: '/Users/user/project-a', machineId: 'machine-1', label: 'user/project-a' });
-        expect(result[1]).toEqual({ path: '/Users/user/project-b', machineId: 'machine-1', label: 'user/project-b' });
+        expect(result[0]).toEqual({ path: '/Users/user/project-a', machineId: 'machine-1', host: 'test', label: 'user/project-a' });
+        expect(result[1]).toEqual({ path: '/Users/user/project-b', machineId: 'machine-1', host: 'test', label: 'user/project-b' });
+    });
+
+    it('includes host from session metadata', () => {
+        const sessions = [
+            makeSession('/project', 'machine-1', 1000, 'arbitrage.local'),
+        ];
+        const result = extractDirectories(sessions);
+        expect(result[0].host).toBe('arbitrage.local');
+    });
+
+    it('falls back to machineId prefix when host missing', () => {
+        const sessions = [{
+            ...makeSession('/project', 'abcdef1234567890', 1000),
+            metadata: { path: '/project', machineId: 'abcdef1234567890' },
+        }] as DecryptedSession[];
+        const result = extractDirectories(sessions);
+        expect(result[0].host).toBe('abcdef12');
     });
 
     it('filters out e2e temp directories', () => {

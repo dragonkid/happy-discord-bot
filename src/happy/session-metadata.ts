@@ -4,6 +4,7 @@ import type { SessionMetadata } from './types.js';
 export interface DirectoryEntry {
     path: string;
     machineId: string;
+    host: string;
     label: string;
 }
 
@@ -65,25 +66,28 @@ export function extractMachines(machines: readonly DecryptedMachine[]): MachineE
 }
 
 export function extractDirectories(sessions: readonly DecryptedSession[]): DirectoryEntry[] {
-    const byPath = new Map<string, { machineId: string; activeAt: number }>();
+    const byPath = new Map<string, { machineId: string; host: string; activeAt: number }>();
 
     for (const session of sessions) {
         if (!isValidMetadata(session.metadata)) continue;
         const { path, machineId } = session.metadata;
         if (E2E_PATH_PATTERN.test(path)) continue;
 
+        const host = (session.metadata as unknown as Record<string, unknown>).host;
+        const hostStr = typeof host === 'string' && host ? host : machineId.slice(0, 8);
         const existing = byPath.get(path);
         if (!existing || session.activeAt > existing.activeAt) {
-            byPath.set(path, { machineId, activeAt: session.activeAt });
+            byPath.set(path, { machineId, host: hostStr, activeAt: session.activeAt });
         }
     }
 
     return Array.from(byPath.entries())
         .sort((a, b) => b[1].activeAt - a[1].activeAt)
         .slice(0, MAX_DIRECTORIES)
-        .map(([path, { machineId }]) => ({
+        .map(([path, { machineId, host }]) => ({
             path,
             machineId,
+            host,
             label: shortLabel(path),
         }));
 }
