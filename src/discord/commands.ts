@@ -275,24 +275,39 @@ async function handleNewSession(interaction: ChatInputCommandInteraction, bridge
     const allSessions = await bridge.listAllSessions();
     const directories = extractDirectories(allSessions);
 
+    const machines = await bridge.listMachines();
+    const entries = extractMachines(machines).filter(m => m.active);
+
     if (directories.length === 0) {
-        // No sessions — try to discover machines directly
-        const machines = await bridge.listMachines();
-        const entries = extractMachines(machines);
-        const activeMachine = entries.find(m => m.active);
-        if (!activeMachine) {
+        // No sessions — show custom path buttons for active machines
+        if (entries.length === 0) {
             await interaction.editReply('No machines found. Make sure the happy daemon is running and paired.');
             return;
         }
-        const components = buildCustomPathOnly(activeMachine.machineId);
-        await interaction.editReply({
-            content: `Connected to **${activeMachine.host}**. Enter a directory path to start a new session:`,
-            components,
-        });
+        const components = buildCustomPathOnly(entries);
+        const content = entries.length === 1
+            ? `Connected to **${entries[0].host}**. Enter a directory path to start a new session:`
+            : `${entries.length} machines connected. Select a machine to start a new session:`;
+        await interaction.editReply({ content, components });
         return;
     }
 
-    const components = buildNewSessionMenu(directories);
+    // Deduplicate machines from directories (for menu labels + custom path buttons)
+    const seenMachines = new Map<string, { machineId: string; host: string }>();
+    for (const dir of directories) {
+        if (!seenMachines.has(dir.machineId)) {
+            seenMachines.set(dir.machineId, { machineId: dir.machineId, host: dir.host });
+        }
+    }
+    // Also include active machines that may not have sessions in the directory list
+    for (const m of entries) {
+        if (!seenMachines.has(m.machineId)) {
+            seenMachines.set(m.machineId, { machineId: m.machineId, host: m.host });
+        }
+    }
+    const machineList = Array.from(seenMachines.values());
+
+    const components = buildNewSessionMenu(directories, machineList);
     await interaction.editReply({
         content: 'Select a directory for the new session:',
         components,

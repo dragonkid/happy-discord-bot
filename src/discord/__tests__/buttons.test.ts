@@ -305,24 +305,32 @@ describe('ExitPlanMode buttons', () => {
 });
 
 describe('New session menu', () => {
-    const directories = [
-        { path: '/Users/user/project-a', machineId: 'machine-1', label: 'user/project-a' },
-        { path: '/Users/user/project-b', machineId: 'machine-1', label: 'user/project-b' },
+    const singleMachineDirs = [
+        { path: '/Users/user/project-a', machineId: 'machine-1', host: 'arbitrage', label: 'user/project-a' },
+        { path: '/Users/user/project-b', machineId: 'machine-1', host: 'arbitrage', label: 'user/project-b' },
+    ];
+    const multiMachineDirs = [
+        { path: '/Users/dk/project-a', machineId: 'machine-1', host: 'arbitrage', label: 'dk/project-a' },
+        { path: '/Users/bob/project-b', machineId: 'machine-2', host: 'workstation', label: 'bob/project-b' },
+    ];
+    const singleMachineList = [{ machineId: 'machine-1', host: 'arbitrage' }];
+    const multiMachineList = [
+        { machineId: 'machine-1', host: 'arbitrage' },
+        { machineId: 'machine-2', host: 'workstation' },
     ];
 
     describe('buildNewSessionMenu', () => {
         it('creates a StringSelectMenu with directory options', () => {
-            const rows = buildNewSessionMenu(directories);
+            const rows = buildNewSessionMenu(singleMachineDirs, singleMachineList);
             expect(rows).toHaveLength(2);
             const menuRow = rows[0];
             expect(menuRow.components).toHaveLength(1);
-            // StringSelectMenuBuilder stores options differently than .data
             const menu = menuRow.components[0] as any;
             expect(menu.options?.length ?? menu.data?.options?.length).toBe(2);
         });
 
         it('uses index-based values to avoid 100-char limit', () => {
-            const rows = buildNewSessionMenu(directories);
+            const rows = buildNewSessionMenu(singleMachineDirs, singleMachineList);
             const menu = rows[0].components[0] as any;
             const options = menu.options ?? menu.data?.options ?? [];
             const values = options.map((o: any) => o.data?.value ?? o.value);
@@ -330,12 +338,39 @@ describe('New session menu', () => {
             expect(values[1]).toBe('1');
         });
 
-        it('includes a Custom path button in second row', () => {
-            const rows = buildNewSessionMenu(directories);
+        it('single machine — no hostname in description, single Custom path button', () => {
+            const rows = buildNewSessionMenu(singleMachineDirs, singleMachineList);
+            // Description should NOT contain @ hostname
+            const menu = rows[0].components[0] as any;
+            const options = menu.options ?? menu.data?.options ?? [];
+            const desc = options[0].data?.description ?? options[0].description;
+            expect(desc).not.toContain('@');
+            // Single Custom path button
             const btnRow = rows[1];
             expect(btnRow.components).toHaveLength(1);
             const btnData = btnRow.components[0].data as { custom_id: string; label: string };
             expect(btnData.label).toBe('Custom path...');
+            expect(btnData.custom_id).toBe('newsess-custom:btn');
+        });
+
+        it('multi machine — hostname in description, per-machine Custom path buttons', () => {
+            const rows = buildNewSessionMenu(multiMachineDirs, multiMachineList);
+            // Description should contain @ hostname
+            const menu = rows[0].components[0] as any;
+            const options = menu.options ?? menu.data?.options ?? [];
+            const desc0 = options[0].data?.description ?? options[0].description;
+            expect(desc0).toContain('@ arbitrage');
+            const desc1 = options[1].data?.description ?? options[1].description;
+            expect(desc1).toContain('@ workstation');
+            // Per-machine buttons
+            const btnRow = rows[1];
+            expect(btnRow.components).toHaveLength(2);
+            const btn0 = btnRow.components[0].data as { custom_id: string; label: string };
+            expect(btn0.custom_id).toBe('newsess-custom:machine-1');
+            expect(btn0.label).toContain('arbitrage');
+            const btn1 = btnRow.components[1].data as { custom_id: string; label: string };
+            expect(btn1.custom_id).toBe('newsess-custom:machine-2');
+            expect(btn1.label).toContain('workstation');
         });
     });
 
