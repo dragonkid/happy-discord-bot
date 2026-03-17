@@ -198,9 +198,15 @@ describe('handleNewSessionSelect', () => {
 });
 
 describe('handleNewSessionModal', () => {
-    it('calls bridge.createNewSession with custom directory', async () => {
+    function mockBridgeForModal(remoteHome = '/Users/remoteuser'): Bridge {
         const bridge = makeMockBridge('sess-1');
         (bridge as any).createNewSession = vi.fn().mockResolvedValue('new-sess');
+        (bridge as any).getMachineHomeDir = vi.fn().mockResolvedValue(remoteHome);
+        return bridge;
+    }
+
+    it('calls bridge.createNewSession with custom directory', async () => {
+        const bridge = mockBridgeForModal();
         const interaction = makeMockModalInteraction('/Users/user/custom-dir');
 
         await handleNewSessionModal(interaction, 'machine-1', bridge);
@@ -208,40 +214,36 @@ describe('handleNewSessionModal', () => {
         expect(bridge.createNewSession).toHaveBeenCalledWith('machine-1', '/Users/user/custom-dir');
     });
 
-    it('expands ~ to HOME in custom directory path', async () => {
-        const bridge = makeMockBridge('sess-1');
-        (bridge as any).createNewSession = vi.fn().mockResolvedValue('new-sess');
+    it('expands ~ using remote machine homeDir', async () => {
+        const bridge = mockBridgeForModal('/Users/dk');
         const interaction = makeMockModalInteraction('~/Coding/happy-discord-bot');
 
-        const originalHome = process.env.HOME;
-        process.env.HOME = '/Users/testuser';
-        try {
-            await handleNewSessionModal(interaction, 'machine-1', bridge);
-        } finally {
-            process.env.HOME = originalHome;
-        }
+        await handleNewSessionModal(interaction, 'machine-1', bridge);
 
-        expect(bridge.createNewSession).toHaveBeenCalledWith('machine-1', '/Users/testuser/Coding/happy-discord-bot');
+        expect(bridge.createNewSession).toHaveBeenCalledWith('machine-1', '/Users/dk/Coding/happy-discord-bot');
     });
 
-    it('expands bare ~ to HOME', async () => {
-        const bridge = makeMockBridge('sess-1');
-        (bridge as any).createNewSession = vi.fn().mockResolvedValue('new-sess');
+    it('expands bare ~ to remote homeDir', async () => {
+        const bridge = mockBridgeForModal('/Users/dk');
         const interaction = makeMockModalInteraction('~');
 
-        const originalHome = process.env.HOME;
-        process.env.HOME = '/Users/testuser';
-        try {
-            await handleNewSessionModal(interaction, 'machine-1', bridge);
-        } finally {
-            process.env.HOME = originalHome;
-        }
+        await handleNewSessionModal(interaction, 'machine-1', bridge);
 
-        expect(bridge.createNewSession).toHaveBeenCalledWith('machine-1', '/Users/testuser');
+        expect(bridge.createNewSession).toHaveBeenCalledWith('machine-1', '/Users/dk');
+    });
+
+    it('passes ~ through when homeDir unavailable', async () => {
+        const bridge = mockBridgeForModal(undefined as unknown as string);
+        (bridge as any).getMachineHomeDir = vi.fn().mockResolvedValue(undefined);
+        const interaction = makeMockModalInteraction('~/project');
+
+        await handleNewSessionModal(interaction, 'machine-1', bridge);
+
+        expect(bridge.createNewSession).toHaveBeenCalledWith('machine-1', '~/project');
     });
 
     it('shows error for empty directory', async () => {
-        const bridge = makeMockBridge('sess-1');
+        const bridge = mockBridgeForModal();
         const interaction = makeMockModalInteraction('   ');
 
         await handleNewSessionModal(interaction, 'machine-1', bridge);

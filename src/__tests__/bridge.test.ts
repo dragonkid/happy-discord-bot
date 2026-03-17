@@ -1186,7 +1186,13 @@ describe('Bridge', () => {
         it('throws when machineRPC returns undefined (decrypt failure)', async () => {
             vi.mocked(happy.machineRPC).mockResolvedValueOnce(undefined as any);
 
-            await expect(bridge.createNewSession('machine-1', '/test/dir')).rejects.toThrow('Daemon did not return a sessionId');
+            await expect(bridge.createNewSession('machine-1', '/test/dir')).rejects.toThrow('Empty response from daemon');
+        });
+
+        it('throws with daemon error message when present', async () => {
+            vi.mocked(happy.machineRPC).mockResolvedValueOnce({ error: 'Permission denied' } as any);
+
+            await expect(bridge.createNewSession('machine-1', '/test/dir')).rejects.toThrow('Permission denied');
         });
 
         it('retries listActiveSessions if new session not found initially', async () => {

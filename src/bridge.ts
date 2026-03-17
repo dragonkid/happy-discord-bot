@@ -356,16 +356,34 @@ export class Bridge {
         return apiListMachines(this.config.happy, this.config.credentials);
     }
 
+    async getMachineHomeDir(machineId: string): Promise<string | undefined> {
+        try {
+            const machines = await this.listMachines();
+            const machine = machines.find(m => m.id === machineId);
+            const meta = machine?.metadata;
+            if (meta && typeof meta === 'object' && 'homeDir' in meta && typeof (meta as Record<string, unknown>).homeDir === 'string') {
+                return (meta as Record<string, unknown>).homeDir as string;
+            }
+        } catch { /* best-effort */ }
+        return undefined;
+    }
+
     async createNewSession(machineId: string, directory: string): Promise<string> {
-        const result = await this.happy.machineRPC<{ sessionId: string }>(
+        const result = await this.happy.machineRPC<Record<string, unknown>>(
             machineId,
             'spawn-happy-session',
             { directory, approvedNewDirectoryCreation: true },
         );
 
-        const sessionId = (result as { sessionId?: string } | undefined)?.sessionId;
+        if (!result) {
+            throw new Error('Empty response from daemon (possible encryption mismatch)');
+        }
+        if (typeof result.error === 'string') {
+            throw new Error(result.error);
+        }
+        const sessionId = typeof result.sessionId === 'string' ? result.sessionId : undefined;
         if (!sessionId) {
-            throw new Error('Daemon did not return a sessionId');
+            throw new Error(`Unexpected daemon response: ${JSON.stringify(result)}`);
         }
 
         const newSession = await this.waitForSession(sessionId);
