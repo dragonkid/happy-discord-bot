@@ -80,7 +80,7 @@ describe('relativeTime', () => {
 
 const mockMachine = (overrides: Record<string, unknown> = {}) => ({
     id: 'machine-1',
-    metadata: { machineId: 'machine-1', host: 'host-a' },
+    metadata: { host: 'host-a' },
     active: true,
     activeAt: Date.now() - 60_000,
     createdAt: Date.now() - 86400_000,

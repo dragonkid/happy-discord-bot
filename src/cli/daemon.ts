@@ -125,9 +125,8 @@ function isValidMetadata(m: unknown): m is SessionMetadata {
     return !!m && typeof m === 'object' && 'path' in m && 'machineId' in m && 'host' in m;
 }
 
-function isMachineMetadata(m: unknown): m is { machineId: string; host: string } {
-    return !!m && typeof m === 'object' && 'machineId' in m && 'host' in m
-        && typeof (m as Record<string, unknown>).machineId === 'string'
+function isMachineMetadata(m: unknown): m is { host: string } {
+    return !!m && typeof m === 'object' && 'host' in m
         && typeof (m as Record<string, unknown>).host === 'string';
 }
 
