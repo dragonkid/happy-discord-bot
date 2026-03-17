@@ -54,7 +54,7 @@ src/
 │   └── init.ts           # Interactive config setup (~/.happy-discord-bot/.env)
 ├── happy/
 │   ├── client.ts         # HappyClient: Socket.IO + sessionRPC + machineRPC + HTTP
-│   ├── auth-approve.ts   # QR decode (jsqr+sharp) + device approve via NaCl box
+│   ├── auth-approve.ts   # Parse happy:// auth URL + device approve via NaCl box
 │   ├── session-metadata.ts  # Session metadata decryption + directory extraction + threadName
 │   ├── usage.ts          # REST API wrapper for /v1/usage/query (token/cost)
 │   ├── skill-registry.ts # Skills/commands discovery (personal + project + plugins)
@@ -177,13 +177,12 @@ When a Discord message includes attachments (images, PDFs, code files, etc.), th
 - Example: `/loop 5m /compact` runs `/compact` every 5 minutes.
 
 ### /approve Command
-- `/approve` — Two-step device authorization flow (replaces App's QR scan).
+- `/approve` — Two-step device authorization flow.
 - Step 1: User runs `/approve` → bot enters `pendingApprove` state (60s timeout), replies with instructions.
-- Step 2: User pastes QR screenshot → bot downloads image → `sharp` converts to RGBA → `jsqr` decodes QR URL.
-- QR format: `happy:///account?<base64url-encoded ephemeral public key>`.
+- Step 2: User pastes `happy://` URL from `auth login` output → bot parses ephemeral public key.
+- URL formats: `happy://terminal?<base64url-pubkey>` (CLI) or `happy:///account?<base64url-pubkey>` (mobile app).
 - Bot encrypts its secret via NaCl box for the ephemeral key → `POST /v1/auth/account/response`.
-- Channel-scoped: only images in the same channel as `/approve` trigger QR detection.
-- 10MB image size limit. Non-image attachments ignored.
+- Channel-scoped: only messages starting with `happy://` in the same channel trigger URL detection.
 - `pendingApprove` auto-clears on timeout or after processing.
 
 ### /cleanup Command

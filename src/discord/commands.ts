@@ -99,7 +99,7 @@ const loop = new SlashCommandBuilder()
 
 const approve = new SlashCommandBuilder()
     .setName('approve')
-    .setDescription('Approve a Happy account auth request (paste QR screenshot next)');
+    .setDescription('Approve a Happy account auth request (paste happy:// URL next)');
 
 const update = new SlashCommandBuilder()
     .setName('update')
@@ -487,12 +487,12 @@ const PENDING_APPROVE_TIMEOUT_MS = 60_000;
 
 async function handleApprove(interaction: ChatInputCommandInteraction, bridge: Bridge): Promise<void> {
     if (bridge.pendingApprove) {
-        await interaction.reply({ content: 'Already waiting for a QR screenshot. Send the image or wait for timeout.', ephemeral: true });
+        await interaction.reply({ content: 'Already waiting for a happy:// URL. Paste the URL or wait for timeout.', ephemeral: true });
         return;
     }
 
     bridge.setPendingApprove(interaction.channelId, PENDING_APPROVE_TIMEOUT_MS);
-    await interaction.reply('Send a QR code screenshot within 60 seconds to approve the auth request.');
+    await interaction.reply('Paste the `happy://` URL from your `auth login` output within 60 seconds.');
 }
 
 // --- /update handler ---

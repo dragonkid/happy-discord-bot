@@ -1,15 +1,13 @@
-import sharp from 'sharp';
 import { decodeBase64Url, encodeBase64, libsodiumEncryptForPublicKey } from '../vendor/encryption.js';
 
-// jsqr is CJS with `export default` in .d.ts — NodeNext sees it as namespace
-// eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/consistent-type-imports
-const jsQR: typeof import('jsqr')['default'] = require('jsqr');
-
 /**
- * Parse a happy:///account?<base64url-pubkey> URL and extract the ephemeral public key.
+ * Parse a happy:// auth URL and extract the ephemeral public key.
+ * Supports both formats:
+ *   - happy:///account?<base64url-pubkey>  (QR code / mobile app)
+ *   - happy://terminal?<base64url-pubkey>  (CLI terminal output)
  */
-export function parseAccountAuthUrl(url: string): Uint8Array | null {
-    const match = url.match(/^happy:\/\/\/account\?(.+)$/);
+export function parseAuthUrl(url: string): Uint8Array | null {
+    const match = url.match(/^happy:\/\/(?:\/account|terminal)\?(.+)$/);
     if (!match?.[1]) return null;
 
     try {
@@ -19,21 +17,6 @@ export function parseAccountAuthUrl(url: string): Uint8Array | null {
     } catch {
         return null;
     }
-}
-
-/**
- * Decode a QR code from an image buffer (PNG/JPEG).
- * Returns the decoded text content, or null if no QR code found.
- */
-export async function decodeQrFromImage(imageBuffer: Buffer): Promise<string | null> {
-    const { data, info } = await sharp(imageBuffer)
-        .ensureAlpha()
-        .raw()
-        .toBuffer({ resolveWithObject: true });
-
-    const pixels = new Uint8ClampedArray(data.buffer, data.byteOffset, data.byteLength);
-    const result = jsQR(pixels, info.width, info.height);
-    return result?.data ?? null;
 }
 
 /**

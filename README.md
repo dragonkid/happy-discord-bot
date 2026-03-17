@@ -20,7 +20,7 @@ Discord ←→ Bot ←→ Happy Relay ←→ happy CLI ←→ Claude Code
 - **Session management** — create, archive, delete sessions; batch cleanup of stale sessions
 - **Usage tracking** — query token usage and cost per session or across all sessions
 - **Built-in auth** — bot manages its own Happy account (`auth login` / `auth restore`)
-- **Device approval** — `/approve` command to link new devices via QR code screenshot
+- **Device approval** — `/approve` command to link new devices via `happy://` URL
 
 ## Prerequisites
 
@@ -79,7 +79,7 @@ happy-discord-bot daemon start      # Run as background daemon
 
 `init` saves config to `~/.happy-discord-bot/.env` (mode 0600). `auth login` generates a Happy account (secret + Ed25519 keypair) and saves credentials to `~/.happy-discord-bot/credentials.json`. If you already have a secret from another device, use `auth restore` instead.
 
-> **After `auth login`:** The bot account must be linked to your existing Happy account. Run `/approve` in Discord and paste the QR screenshot from the bot's login output to complete linking. Alternatively, scan the QR from the Happy mobile app.
+> **After `auth login`:** The bot account must be linked to your existing Happy account. Run `/approve` in Discord, then paste the `happy://` URL from the `auth login` output to complete linking.
 
 ### 2. Start a Claude Code session
 
@@ -135,7 +135,7 @@ Creates a new Happy account. The bot generates a 32-byte secret, derives an Ed25
 
 The command prints a backup key (base64url-encoded secret). **Save it** — you'll need it to restore access on another machine via `auth restore`.
 
-After login, the bot needs to be linked to an existing Happy account. From an already-linked device, use the `/approve` Discord command or scan the QR code from the Happy mobile app.
+After login, the bot needs to be linked to an existing Happy account. Run `/approve` in Discord, then paste the `happy://` URL from the login output.
 
 **Option B: Restore from existing secret**
 
@@ -172,7 +172,7 @@ Override the state directory with `BOT_STATE_DIR` env var.
 | `/usage [period]` | Token usage & cost — session-scoped in threads, account-wide in channel |
 | `/skills [name] [args]` | List, search, or invoke Claude Code skills/commands (with autocomplete) |
 | `/loop <args>` | Run a prompt or skill on a recurring interval (e.g. `5m /compact`) |
-| `/approve` | Link a new device to your Happy account via QR code screenshot |
+| `/approve` | Link a new device to your Happy account via `happy://` URL |
 | `/update` | Check for updates and upgrade the bot (safe dual-process handoff) |
 
 Commands in a thread automatically resolve to that thread's session.

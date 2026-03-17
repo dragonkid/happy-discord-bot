@@ -1,16 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('sharp', () => ({
-    default: vi.fn(() => ({
-        ensureAlpha: vi.fn().mockReturnThis(),
-        raw: vi.fn().mockReturnThis(),
-        toBuffer: vi.fn().mockResolvedValue({
-            data: Buffer.alloc(400), // 10x10 RGBA
-            info: { width: 10, height: 10, channels: 4 },
-        }),
-    })),
-}));
-
 vi.mock('../../vendor/encryption.js', () => ({
     decodeBase64Url: vi.fn((s: string) => {
         // Return 32 bytes for valid keys
@@ -21,7 +10,7 @@ vi.mock('../../vendor/encryption.js', () => ({
     libsodiumEncryptForPublicKey: vi.fn(() => new Uint8Array(80)),
 }));
 
-const { parseAccountAuthUrl, decodeQrFromImage, approveAccountAuth } = await import('../auth-approve.js');
+const { parseAuthUrl, approveAccountAuth } = await import('../auth-approve.js');
 
 describe('auth-approve', () => {
     beforeEach(() => {
@@ -29,46 +18,43 @@ describe('auth-approve', () => {
         globalThis.fetch = vi.fn();
     });
 
-    describe('parseAccountAuthUrl', () => {
-        it('extracts public key from valid URL', () => {
-            // 32-byte key base64url encoded
+    describe('parseAuthUrl', () => {
+        it('extracts public key from happy://terminal? URL', () => {
             const key = Buffer.alloc(32, 0xaa).toString('base64url');
-            const result = parseAccountAuthUrl(`happy:///account?${key}`);
+            const result = parseAuthUrl(`happy://terminal?${key}`);
+            expect(result).toBeInstanceOf(Uint8Array);
+            expect(result!.length).toBe(32);
+        });
+
+        it('extracts public key from happy:///account? URL', () => {
+            const key = Buffer.alloc(32, 0xbb).toString('base64url');
+            const result = parseAuthUrl(`happy:///account?${key}`);
             expect(result).toBeInstanceOf(Uint8Array);
             expect(result!.length).toBe(32);
         });
 
         it('returns null for non-matching URL', () => {
-            expect(parseAccountAuthUrl('https://example.com')).toBeNull();
+            expect(parseAuthUrl('https://example.com')).toBeNull();
         });
 
         it('returns null for wrong scheme', () => {
             const key = Buffer.alloc(32).toString('base64url');
-            expect(parseAccountAuthUrl(`http:///account?${key}`)).toBeNull();
+            expect(parseAuthUrl(`http://terminal?${key}`)).toBeNull();
         });
 
         it('returns null for wrong key length', () => {
             const key = Buffer.alloc(16).toString('base64url');
-            expect(parseAccountAuthUrl(`happy:///account?${key}`)).toBeNull();
+            expect(parseAuthUrl(`happy://terminal?${key}`)).toBeNull();
         });
 
         it('returns null for empty query', () => {
-            expect(parseAccountAuthUrl('happy:///account?')).toBeNull();
+            expect(parseAuthUrl('happy://terminal?')).toBeNull();
         });
 
         it('returns null for malformed base64url (decodeBase64Url throws)', async () => {
             const { decodeBase64Url } = await import('../../vendor/encryption.js');
             vi.mocked(decodeBase64Url).mockImplementationOnce(() => { throw new Error('bad base64'); });
-            expect(parseAccountAuthUrl('happy:///account?!!!invalid!!!')).toBeNull();
-        });
-    });
-
-    describe('decodeQrFromImage', () => {
-        it('returns null when no QR found (mock jsqr returns null)', async () => {
-            // jsqr is CJS and require'd in the module — mock via vi.mock doesn't work well for require()
-            // The default sharp mock returns a blank image which jsqr won't decode
-            const result = await decodeQrFromImage(Buffer.alloc(100));
-            expect(result).toBeNull();
+            expect(parseAuthUrl('happy://terminal?!!!invalid!!!')).toBeNull();
         });
     });
 

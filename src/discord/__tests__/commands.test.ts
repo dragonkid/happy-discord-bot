@@ -571,10 +571,10 @@ describe('commands', () => {
             await handleCommand(interaction as any, bridge);
 
             expect(bridge.setPendingApprove).toHaveBeenCalledWith('ch-approve', 60_000);
-            expect(interaction.reply).toHaveBeenCalledWith(expect.stringContaining('QR code screenshot'));
+            expect(interaction.reply).toHaveBeenCalledWith(expect.stringContaining('happy://'));
         });
 
-        it('rejects when already waiting for QR', async () => {
+        it('rejects when already waiting for URL', async () => {
             const bridge = makeMockBridge();
             Object.defineProperty(bridge, 'pendingApprove', {
                 value: { channelId: 'ch-1', timestamp: Date.now(), timer: setTimeout(() => {}, 0) },

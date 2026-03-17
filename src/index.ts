@@ -122,57 +122,37 @@ async function main(): Promise<void> {
                 }
             }
 
-            // pendingApprove: intercept image for QR decode (only in the channel where /approve was invoked)
+            // pendingApprove: intercept happy:// URL (only in the channel where /approve was invoked)
             const pendingApprove = bridge.pendingApprove;
-            if (pendingApprove && message.channelId === pendingApprove.channelId && message.attachments.size > 0) {
-                const imageAttachment = [...message.attachments.values()].find(
-                    (a) => a.contentType?.startsWith('image/'),
-                );
-                if (imageAttachment) {
-                    bridge.clearPendingApprove();
-                    if (imageAttachment.size > 10 * 1024 * 1024) {
-                        await message.reply('Image too large (max 10 MB).');
+            if (pendingApprove && message.channelId === pendingApprove.channelId && text.startsWith('happy://')) {
+                bridge.clearPendingApprove();
+                try {
+                    const { parseAuthUrl, approveAccountAuth } = await import('./happy/auth-approve.js');
+                    const { loadConfig } = await import('./vendor/config.js');
+                    const { decodeBase64 } = await import('./vendor/encryption.js');
+                    const { readBotCredentials } = await import('./credentials.js');
+                    const { getStateDir } = await import('./state-dir.js');
+
+                    const ephemeralPubKey = parseAuthUrl(text.trim());
+                    if (!ephemeralPubKey) {
+                        await message.reply('Invalid `happy://` URL. Please paste the full URL from `auth login` output.');
                         return;
                     }
-                    try {
-                        const { decodeQrFromImage, parseAccountAuthUrl, approveAccountAuth } = await import('./happy/auth-approve.js');
-                        const { loadConfig } = await import('./vendor/config.js');
-                        const { decodeBase64 } = await import('./vendor/encryption.js');
-                        const { readBotCredentials } = await import('./credentials.js');
-                        const { getStateDir } = await import('./state-dir.js');
-
-                        const resp = await fetch(imageAttachment.url);
-                        if (!resp.ok) {
-                            await message.reply(`Failed to download image: HTTP ${resp.status}`);
-                            return;
-                        }
-                        const buf = Buffer.from(await resp.arrayBuffer());
-                        const qrText = await decodeQrFromImage(buf);
-                        if (!qrText) {
-                            await message.reply('No QR code found in image.');
-                            return;
-                        }
-                        const ephemeralPubKey = parseAccountAuthUrl(qrText);
-                        if (!ephemeralPubKey) {
-                            await message.reply('QR code does not contain a valid Happy auth URL.');
-                            return;
-                        }
-                        const botCreds = readBotCredentials(getStateDir());
-                        if (!botCreds) {
-                            await message.reply('Bot not linked. Run `happy-discord-bot auth login` first.');
-                            return;
-                        }
-                        const { serverUrl } = loadConfig();
-                        const secret = decodeBase64(botCreds.secret);
-                        const token = botCreds.token;
-                        await approveAccountAuth(serverUrl, token, secret, ephemeralPubKey);
-                        await message.reply('Device approved.');
-                    } catch (err) {
-                        const detail = err instanceof Error ? err.message : String(err);
-                        await message.reply(`Approve failed: ${detail}`);
+                    const botCreds = readBotCredentials(getStateDir());
+                    if (!botCreds) {
+                        await message.reply('Bot not linked. Run `happy-discord-bot auth login` first.');
+                        return;
                     }
-                    return;
+                    const { serverUrl } = loadConfig();
+                    const secret = decodeBase64(botCreds.secret);
+                    const token = botCreds.token;
+                    await approveAccountAuth(serverUrl, token, secret, ephemeralPubKey);
+                    await message.reply('Device approved.');
+                } catch (err) {
+                    const detail = err instanceof Error ? err.message : String(err);
+                    await message.reply(`Approve failed: ${detail}`);
                 }
+                return;
             }
 
             if (message.attachments.size > 0) {
