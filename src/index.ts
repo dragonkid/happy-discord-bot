@@ -246,23 +246,40 @@ async function main(): Promise<void> {
 
             // --- New Session custom path button ---
             if (parseCustomPathButton(interaction.customId)) {
-                const menuRow = interaction.message.components[0] as unknown as
-                    { components?: Array<{ type: number; options?: Array<{ value: string }> }> };
-                let machineId = '';
-                if (menuRow?.components?.[0]?.type === 3 /* StringSelect */) {
-                    const firstOption = menuRow.components[0].options?.[0];
-                    if (firstOption?.value) {
-                        // Index-based: re-fetch directories to get machineId
-                        try {
-                            const allSessions = await bridge.listAllSessions();
-                            const { extractDirectories } = await import('./happy/session-metadata.js');
-                            const dirs = extractDirectories(allSessions);
-                            if (dirs.length > 0) machineId = dirs[0].machineId;
-                        } catch {
-                            // fallback: empty
+                // Try machineId from button customId first (buildCustomPathOnly embeds it)
+                const embeddedId = interaction.customId.slice('newsess-custom:'.length);
+                let machineId = embeddedId !== 'btn' ? embeddedId : '';
+
+                // Fall back to extracting from select menu (buildNewSessionMenu case)
+                if (!machineId) {
+                    const menuRow = interaction.message.components[0] as unknown as
+                        { components?: Array<{ type: number; options?: Array<{ value: string }> }> };
+                    if (menuRow?.components?.[0]?.type === 3 /* StringSelect */) {
+                        const firstOption = menuRow.components[0].options?.[0];
+                        if (firstOption?.value) {
+                            try {
+                                const allSessions = await bridge.listAllSessions();
+                                const { extractDirectories } = await import('./happy/session-metadata.js');
+                                const dirs = extractDirectories(allSessions);
+                                if (dirs.length > 0) machineId = dirs[0].machineId;
+                            } catch {
+                                // fallback: empty
+                            }
                         }
                     }
                 }
+
+                // Last resort: query machines API
+                if (!machineId) {
+                    try {
+                        const machines = await bridge.listMachines();
+                        const active = machines.find(m => m.active);
+                        if (active) machineId = active.id;
+                    } catch {
+                        // fallback: empty
+                    }
+                }
+
                 if (!machineId) {
                     await interaction.reply({ content: 'No machine available.', ephemeral: true });
                     return;

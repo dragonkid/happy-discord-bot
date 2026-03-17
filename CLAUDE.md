@@ -140,10 +140,11 @@ When a Discord message includes attachments (images, PDFs, code files, etc.), th
 ### /new Session Creation Flow
 1. User runs `/new` → bot fetches all sessions via `listAllSessions()`, decrypts metadata
 2. `extractDirectories()` deduplicates by path, filters E2E dirs, sorts by activeAt, limits to 25
-3. Bot shows `StringSelectMenu` with directory options + "Custom path..." button
-4. User selects directory (or enters custom path via modal) → `bridge.createNewSession(machineId, directory)`
-5. `machineRPC('spawn-happy-session', {directory, approvedNewDirectoryCreation})` → daemon spawns CLI session
-6. Bot polls `loadSessions()` to find new session → registers encryption key → sets active
+3. If directories exist: Bot shows `StringSelectMenu` with directory options + "Custom path..." button
+4. If no directories: Bot calls `listMachines()` (`GET /v1/machines`) to discover connected machines directly. If an active machine found, shows "Enter directory path..." button with the machine's ID embedded
+5. User selects directory (or enters custom path via modal) → `bridge.createNewSession(machineId, directory)`
+6. `machineRPC('spawn-happy-session', {directory, approvedNewDirectoryCreation})` → daemon spawns CLI session
+7. Bot polls `loadSessions()` to find new session → registers encryption key → sets active
 
 **StringSelectMenu values use index-based encoding** (`String(i)`) instead of JSON to stay within Discord's 100-char value limit. Handler re-fetches sessions to resolve the index.
 
@@ -307,7 +308,7 @@ npm run test:e2e         # E2E smoke tests (requires .env.e2e, real services)
 ## Testing
 
 - Framework: Vitest
-- 27 test suites, 596 tests
+- 27 test suites, 598 tests
 - Test files: `src/**/__tests__/*.test.ts`
 - All Happy/Discord dependencies mocked (no real connections needed)
 

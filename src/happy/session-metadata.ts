@@ -1,4 +1,4 @@
-import type { DecryptedSession } from '../vendor/api.js';
+import type { DecryptedSession, DecryptedMachine } from '../vendor/api.js';
 import type { SessionMetadata } from './types.js';
 
 export interface DirectoryEntry {
@@ -29,6 +29,40 @@ function shortLabel(fullPath: string): string {
     const segments = fullPath.split('/').filter(Boolean);
     if (segments.length < 2) return fullPath;
     return segments.slice(-2).join('/');
+}
+
+export function extractMachineIds(sessions: readonly DecryptedSession[]): string[] {
+    const seen = new Set<string>();
+    for (const session of sessions) {
+        if (!isValidMetadata(session.metadata)) continue;
+        seen.add(session.metadata.machineId);
+    }
+    return Array.from(seen);
+}
+
+export interface MachineEntry {
+    machineId: string;
+    host: string;
+    active: boolean;
+    activeAt: number;
+}
+
+function isMachineMetadata(m: unknown): m is { machineId: string; host: string } {
+    return !!m && typeof m === 'object' && 'machineId' in m && 'host' in m
+        && typeof (m as Record<string, unknown>).machineId === 'string'
+        && typeof (m as Record<string, unknown>).host === 'string';
+}
+
+export function extractMachines(machines: readonly DecryptedMachine[]): MachineEntry[] {
+    return machines.map(m => {
+        const meta = isMachineMetadata(m.metadata) ? m.metadata : null;
+        return {
+            machineId: m.id,
+            host: meta?.host ?? m.id.slice(0, 8),
+            active: m.active,
+            activeAt: m.activeAt,
+        };
+    });
 }
 
 export function extractDirectories(sessions: readonly DecryptedSession[]): DirectoryEntry[] {

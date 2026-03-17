@@ -6,7 +6,7 @@ import { getStateDir } from '../state-dir.js';
 import { readBotCredentials } from '../credentials.js';
 import { decodeBase64, deriveContentKeyPair } from '../vendor/encryption.js';
 import { loadConfig as loadHappyConfig } from '../vendor/config.js';
-import { listSessions, type DecryptedSession } from '../vendor/api.js';
+import { listSessions, listMachines, type DecryptedSession, type DecryptedMachine } from '../vendor/api.js';
 import type { SessionMetadata } from '../happy/types.js';
 
 const DAEMON_STATE_FILE = 'daemon.state.json';
@@ -125,6 +125,12 @@ function isValidMetadata(m: unknown): m is SessionMetadata {
     return !!m && typeof m === 'object' && 'path' in m && 'machineId' in m && 'host' in m;
 }
 
+function isMachineMetadata(m: unknown): m is { machineId: string; host: string } {
+    return !!m && typeof m === 'object' && 'machineId' in m && 'host' in m
+        && typeof (m as Record<string, unknown>).machineId === 'string'
+        && typeof (m as Record<string, unknown>).host === 'string';
+}
+
 export async function showPairingStatus(stateDir: string): Promise<void> {
     const botCreds = readBotCredentials(stateDir);
     if (!botCreds) {
@@ -137,39 +143,56 @@ export async function showPairingStatus(stateDir: string): Promise<void> {
     console.log(`  Status:  Linked (${botCreds.token.slice(0, 8)}...)`);
 
     let sessions: DecryptedSession[];
+    let machines: DecryptedMachine[];
     try {
         const secret = decodeBase64(botCreds.secret);
         const contentKeyPair = deriveContentKeyPair(secret);
         const credentials = { token: botCreds.token, secret, contentKeyPair };
         const config = loadHappyConfig();
-        sessions = await listSessions(config, credentials);
+        [sessions, machines] = await Promise.all([
+            listSessions(config, credentials),
+            listMachines(config, credentials),
+        ]);
     } catch (err) {
-        console.log(`  Failed to fetch sessions: ${err instanceof Error ? err.message : String(err)}`);
+        console.log(`  Failed to fetch data: ${err instanceof Error ? err.message : String(err)}`);
         return;
     }
 
     const activeCount = sessions.filter(s => s.active).length;
     console.log(`  Sessions: ${sessions.length} total, ${activeCount} active`);
 
-    if (sessions.length === 0) {
-        console.log('\nNo sessions. Use /new in Discord to create one.');
+    if (machines.length === 0 && sessions.length === 0) {
+        console.log('\nNo machines paired. Run `happy auth login` on the target machine, then use /approve in Discord.');
         return;
     }
 
-    // Group sessions by machine
-    const machines = new Map<string, { host: string; machineId: string; sessions: DecryptedSession[] }>();
+    // Build machine map from machines API
+    const machineMap = new Map<string, { host: string; machineId: string; active: boolean; sessions: DecryptedSession[] }>();
+    for (const m of machines) {
+        const meta = isMachineMetadata(m.metadata) ? m.metadata : null;
+        const host = meta?.host ?? m.id.slice(0, 8);
+        machineMap.set(m.id, { host, machineId: m.id, active: m.active, sessions: [] });
+    }
+
+    // Assign sessions to machines
     for (const s of sessions) {
         const meta = isValidMetadata(s.metadata) ? s.metadata : null;
         const machineId = meta?.machineId ?? 'unknown';
         const host = meta?.host ?? 'unknown';
-        const group = machines.get(machineId) ?? { host, machineId, sessions: [] };
-        group.sessions.push(s);
-        machines.set(machineId, group);
+        if (!machineMap.has(machineId)) {
+            machineMap.set(machineId, { host, machineId, active: false, sessions: [] });
+        }
+        machineMap.get(machineId)!.sessions.push(s);
     }
 
     console.log('\nConnected Machines');
-    for (const { host, machineId, sessions: machineSessions } of machines.values()) {
-        console.log(`  ${host} (${machineId})`);
+    for (const { host, machineId, active, sessions: machineSessions } of machineMap.values()) {
+        const machineStatus = active ? 'online' : 'offline';
+        console.log(`  ${host} (${machineId}) [${machineStatus}]`);
+        if (machineSessions.length === 0) {
+            console.log('    No sessions');
+            continue;
+        }
         const sorted = [...machineSessions].sort((a, b) => b.activeAt - a.activeAt);
         for (const s of sorted) {
             const meta = isValidMetadata(s.metadata) ? s.metadata : null;

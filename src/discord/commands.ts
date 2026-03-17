@@ -5,8 +5,8 @@ import {
     type RESTPostAPIChatInputApplicationCommandsJSONBody,
 } from 'discord.js';
 import type { Bridge } from '../bridge.js';
-import { buildSessionButtons, buildNewSessionMenu, buildDeleteConfirmButtons, buildCleanupConfirmButtons } from './buttons.js';
-import { extractDirectories } from '../happy/session-metadata.js';
+import { buildSessionButtons, buildNewSessionMenu, buildCustomPathOnly, buildDeleteConfirmButtons, buildCleanupConfirmButtons } from './buttons.js';
+import { extractDirectories, extractMachines } from '../happy/session-metadata.js';
 import type { PermissionMode } from '../happy/types.js';
 import { queryUsage } from '../happy/usage.js';
 import { formatUsage } from './formatter.js';
@@ -276,7 +276,19 @@ async function handleNewSession(interaction: ChatInputCommandInteraction, bridge
     const directories = extractDirectories(allSessions);
 
     if (directories.length === 0) {
-        await interaction.editReply('No machines found. Start a session manually first.');
+        // No sessions — try to discover machines directly
+        const machines = await bridge.listMachines();
+        const entries = extractMachines(machines);
+        const activeMachine = entries.find(m => m.active);
+        if (!activeMachine) {
+            await interaction.editReply('No machines found. Make sure the happy daemon is running and paired.');
+            return;
+        }
+        const components = buildCustomPathOnly(activeMachine.machineId);
+        await interaction.editReply({
+            content: `Connected to **${activeMachine.host}**. Enter a directory path to start a new session:`,
+            components,
+        });
         return;
     }
 

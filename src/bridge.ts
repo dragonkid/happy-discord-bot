@@ -4,7 +4,7 @@ import type { HappyClient } from './happy/client.js';
 import type { DiscordBot } from './discord/bot.js';
 import type { BotConfig } from './config.js';
 import { encrypt, encodeBase64, decrypt, decodeBase64 } from './vendor/encryption.js';
-import { listActiveSessions, listSessions, deleteSession as apiDeleteSession, type DecryptedSession } from './vendor/api.js';
+import { listActiveSessions, listSessions, listMachines as apiListMachines, deleteSession as apiDeleteSession, type DecryptedSession, type DecryptedMachine } from './vendor/api.js';
 import type { StateTracker } from './happy/state-tracker.js';
 import type { PermissionCache } from './happy/permission-cache.js';
 import { loadClaudeAllowRules } from './happy/permission-cache.js';
@@ -350,6 +350,10 @@ export class Bridge {
 
     async listAllSessions(): Promise<DecryptedSession[]> {
         return listSessions(this.config.happy, this.config.credentials);
+    }
+
+    async listMachines(): Promise<DecryptedMachine[]> {
+        return apiListMachines(this.config.happy, this.config.credentials);
     }
 
     async createNewSession(machineId: string, directory: string): Promise<string> {

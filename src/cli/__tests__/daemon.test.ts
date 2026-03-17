@@ -37,6 +37,7 @@ vi.mock('../../vendor/config.js', () => ({
 
 vi.mock('../../vendor/api.js', () => ({
     listSessions: vi.fn(() => Promise.resolve([])),
+    listMachines: vi.fn(() => Promise.resolve([])),
 }));
 
 const { readDaemonState, writeDaemonState, removeDaemonState, isDaemonRunning, handleDaemon } = await import('../daemon.js');

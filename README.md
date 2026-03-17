@@ -310,7 +310,7 @@ npm run test:e2e         # E2E smoke tests (requires .env.e2e, real services)
 Unit/integration tests use Vitest with all external dependencies mocked:
 
 ```bash
-npm test                 # 27 suites, 596 tests
+npm test                 # 27 suites, 598 tests
 ```
 
 E2E smoke tests require a second Discord bot, a dedicated test channel, and a running `happy` daemon. See `e2e/` directory and `.env.e2e.example` for setup.

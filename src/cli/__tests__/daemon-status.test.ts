@@ -36,11 +36,12 @@ vi.mock('../../vendor/config.js', () => ({
 
 vi.mock('../../vendor/api.js', () => ({
     listSessions: vi.fn(),
+    listMachines: vi.fn(),
 }));
 
 const { relativeTime, showPairingStatus } = await import('../daemon.js');
 const { readBotCredentials } = await import('../../credentials.js');
-const { listSessions } = await import('../../vendor/api.js');
+const { listSessions, listMachines } = await import('../../vendor/api.js');
 
 const mockSession = (overrides: Record<string, unknown> = {}) => ({
     id: 'sess-aaa111', seq: 1, createdAt: 0, updatedAt: 0,
@@ -77,9 +78,19 @@ describe('relativeTime', () => {
     });
 });
 
+const mockMachine = (overrides: Record<string, unknown> = {}) => ({
+    id: 'machine-1',
+    metadata: { machineId: 'machine-1', host: 'host-a' },
+    active: true,
+    activeAt: Date.now() - 60_000,
+    createdAt: Date.now() - 86400_000,
+    ...overrides,
+});
+
 describe('showPairingStatus', () => {
     beforeEach(() => {
         vi.restoreAllMocks();
+        vi.mocked(listMachines).mockResolvedValue([]);
     });
 
     it('prints "Not linked" when no credentials', async () => {
@@ -129,17 +140,35 @@ describe('showPairingStatus', () => {
         expect(calls).toContainEqual(expect.stringContaining('project-a'));
         expect(calls).toContainEqual(expect.stringContaining('[sess-bb]'));
         expect(calls).toContainEqual(expect.stringContaining('[sess-cc]'));
+        // Machines from sessions (not in machines API) show as offline
+        expect(calls).toContainEqual(expect.stringContaining('[offline]'));
         logSpy.mockRestore();
     });
 
-    it('prints "No sessions" when list is empty', async () => {
+    it('prints "No machines paired" when both lists are empty', async () => {
         vi.mocked(readBotCredentials).mockReturnValue({ token: 'tok-abc12345', secret: 'dGVzdA==' });
         vi.mocked(listSessions).mockResolvedValue([]);
+        vi.mocked(listMachines).mockResolvedValue([]);
         const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
         await showPairingStatus('/tmp/test');
 
-        expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('No sessions'));
+        expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('No machines paired'));
+        logSpy.mockRestore();
+    });
+
+    it('shows machine with no sessions', async () => {
+        vi.mocked(readBotCredentials).mockReturnValue({ token: 'tok-abc12345', secret: 'dGVzdA==' });
+        vi.mocked(listSessions).mockResolvedValue([]);
+        vi.mocked(listMachines).mockResolvedValue([mockMachine()]);
+        const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+        await showPairingStatus('/tmp/test');
+
+        const calls = logSpy.mock.calls.map(c => c[0]);
+        expect(calls).toContainEqual(expect.stringContaining('host-a (machine-1)'));
+        expect(calls).toContainEqual(expect.stringContaining('online'));
+        expect(calls).toContainEqual(expect.stringContaining('No sessions'));
         logSpy.mockRestore();
     });
 
