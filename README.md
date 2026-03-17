@@ -79,17 +79,17 @@ happy-discord-bot daemon start      # Run as background daemon
 
 `init` saves config to `~/.happy-discord-bot/.env` (mode 0600). `auth login` generates a Happy account (secret + Ed25519 keypair) and saves credentials to `~/.happy-discord-bot/credentials.json`. If you already have a secret from another device, use `auth restore` instead.
 
-> **After `auth login`:** The bot account must be linked to your existing Happy account. Run `/approve` in Discord, then paste the `happy://` URL from the `auth login` output to complete linking.
-
 ### 2. Start a Claude Code session
 
 The bot needs the `happy` daemon running to manage sessions. Install the CLI and start the daemon:
 
 ```bash
 npm install -g @dragonkid/happy-coder   # Install happy CLI (fork with bot enhancements)
-happy auth                              # Authenticate (first time only)
+happy auth login                        # Select "Mobile App" → copy the happy:// URL
 happy daemon start                      # Start background daemon
 ```
+
+> **Linking:** When `happy auth login` shows the `happy://terminal?...` URL, run `/approve` in the bot's Discord channel and paste the URL. The bot will link the CLI to its account and the CLI will show "Authentication successful".
 
 > **Why `@dragonkid/happy-coder`?** This is a fork of [slopus/happy](https://github.com/slopus/happy) with two enhancements needed for full bot HITL support:
 > - **Structured AskUserQuestion answers** ([#803](https://github.com/slopus/happy/pull/803)) — passes selected options through permission RPC so Claude sees structured selections instead of free-text
@@ -135,7 +135,7 @@ Creates a new Happy account. The bot generates a 32-byte secret, derives an Ed25
 
 The command prints a backup key (base64url-encoded secret). **Save it** — you'll need it to restore access on another machine via `auth restore`.
 
-After login, the bot needs to be linked to an existing Happy account. Run `/approve` in Discord, then paste the `happy://` URL from the login output.
+After login, link the CLI by running `happy auth login` (select "Mobile App"), then use the `/approve` Discord command to paste the `happy://terminal?...` URL.
 
 **Option B: Restore from existing secret**
 
