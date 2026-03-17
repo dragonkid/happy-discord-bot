@@ -12,6 +12,7 @@ import { queryUsage } from '../happy/usage.js';
 import { formatUsage } from './formatter.js';
 import type { SkillRegistry } from '../happy/skill-registry.js';
 import { getVersion } from '../version.js';
+import { relativeTime } from '../cli/daemon.js';
 
 // --- Command definitions ---
 
@@ -159,11 +160,16 @@ function extractHost(metadata: unknown): string {
     return 'unknown';
 }
 
-function extractDirName(metadata: unknown, fallbackId: string): string {
-    if (!metadata || typeof metadata !== 'object') return `session-${fallbackId.slice(0, 8)}`;
+function extractMachineId(metadata: unknown): string {
+    if (!metadata || typeof metadata !== 'object') return 'unknown';
     const m = metadata as Record<string, unknown>;
-    if (typeof m.path !== 'string') return `session-${fallbackId.slice(0, 8)}`;
-    return m.path.split('/').filter(Boolean).pop() ?? 'unknown';
+    return typeof m.machineId === 'string' ? m.machineId : 'unknown';
+}
+
+function extractPath(metadata: unknown): string {
+    if (!metadata || typeof metadata !== 'object') return 'unknown';
+    const m = metadata as Record<string, unknown>;
+    return typeof m.path === 'string' ? m.path : 'unknown';
 }
 
 // --- Handlers ---
@@ -171,59 +177,62 @@ function extractDirName(metadata: unknown, fallbackId: string): string {
 async function handleSessions(interaction: ChatInputCommandInteraction, bridge: Bridge): Promise<void> {
     await interaction.deferReply();
 
-    const sessions = await bridge.listAllSessions();
+    const [sessions, machines] = await Promise.all([
+        bridge.listAllSessions(),
+        bridge.listMachines(),
+    ]);
+    const machineEntries = extractMachines(machines);
 
-    if (sessions.length === 0) {
-        await interaction.editReply('No sessions found.');
+    if (sessions.length === 0 && machineEntries.length === 0) {
+        await interaction.editReply('No machines or sessions found.');
         return;
     }
-
-    // Sort: active first (by activeAt desc), then inactive (by activeAt desc)
-    const sorted = [...sessions].sort((a, b) => {
-        if (a.active !== b.active) return a.active ? -1 : 1;
-        return b.activeAt - a.activeAt;
-    });
 
     // In a thread, "current" = thread-bound session; in main channel, "current" = activeSession
     const threadSession = bridge.getSessionByThread(interaction.channelId);
     const currentSessionId = threadSession ?? bridge.activeSession;
 
-    // Group sessions by host
-    const groups = new Map<string, typeof sorted>();
-    for (const s of sorted) {
-        const host = extractHost(s.metadata);
-        const group = groups.get(host) ?? [];
-        group.push(s);
-        groups.set(host, group);
+    // Build machine map from machines API
+    type MachineGroup = { host: string; active: boolean; sessions: typeof sessions };
+    const machineMap = new Map<string, MachineGroup>();
+    for (const m of machineEntries) {
+        machineMap.set(m.machineId, { host: m.host, active: m.active, sessions: [] });
     }
 
-    const sections: string[] = [];
-    for (const [host, hostSessions] of groups) {
-        const header = `**${host}**`;
-        const lines = hostSessions.map((s) => {
-            const dir = extractDirName(s.metadata, s.id);
-            const marker = s.id === currentSessionId ? ' **← current**' : '';
-            const status = s.active ? '' : ' (archived)';
-            return `  ${s.active ? '🟢' : '⚪'} \`${s.id.slice(0, 8)}\` ${dir}${status}${marker}`;
-        });
-        sections.push([header, ...lines].join('\n'));
+    // Assign sessions to machines
+    const sorted = [...sessions].sort((a, b) => {
+        if (a.active !== b.active) return a.active ? -1 : 1;
+        return b.activeAt - a.activeAt;
+    });
+    for (const s of sorted) {
+        const machineId = extractMachineId(s.metadata);
+        const host = extractHost(s.metadata);
+        if (!machineMap.has(machineId)) {
+            machineMap.set(machineId, { host, active: false, sessions: [] });
+        }
+        machineMap.get(machineId)!.sessions.push(s);
+    }
+
+    // Format: Connected Machines
+    const sections: string[] = ['**Connected Machines**'];
+    for (const [machineId, { host, active, sessions: machineSessions }] of machineMap) {
+        const status = active ? 'online' : 'offline';
+        sections.push(`  **${host}** (${machineId.slice(0, 8)}) [${status}]`);
+        if (machineSessions.length === 0) {
+            sections.push('    No sessions');
+        } else {
+            for (const s of machineSessions) {
+                const path = extractPath(s.metadata);
+                const marker = s.id === currentSessionId ? '  **← current**' : '';
+                const statusStr = s.active ? 'active' : 'archived';
+                sections.push(`    \`${s.id.slice(0, 7)}\` ${path}  ${statusStr}  ${relativeTime(s.activeAt)}${marker}`);
+            }
+        }
     }
     sections.push(`\nBot v${getVersion()}`);
 
-    const allLines = sections.join('\n\n').split('\n');
-    let content = '';
-    let truncated = 0;
-    for (const line of allLines) {
-        const next = content ? `${content}\n${line}` : line;
-        if (next.length > 1900) {
-            truncated = allLines.length - content.split('\n').length;
-            break;
-        }
-        content = next;
-    }
-    if (truncated > 0) {
-        content += `\n... and ${truncated} more lines`;
-    }
+    const allLines = sections.join('\n');
+    let content = allLines.length > 1900 ? allLines.slice(0, 1900) + '\n...(truncated)' : allLines;
 
     const activeSessions = sorted.filter((s) => s.active);
     const buttons = activeSessions.length > 0
