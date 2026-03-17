@@ -299,39 +299,65 @@ export const NEW_SESSION_MODAL_PREFIX = 'newsess-modal:';
 
 export function buildNewSessionMenu(
     directories: readonly DirectoryEntry[],
+    machines: readonly { machineId: string; host: string }[],
 ): ActionRowBuilder<StringSelectMenuBuilder | ButtonBuilder>[] {
+    const multiMachine = machines.length > 1;
+
     const menu = new StringSelectMenuBuilder()
         .setCustomId(`${NEW_SESSION_SELECT_PREFIX}dir`)
         .setPlaceholder('Select a directory...')
         .addOptions(
-            directories.map((dir, i) => ({
-                label: dir.label.slice(0, 100),
-                description: dir.path.slice(0, 100),
-                value: String(i),
-            })),
+            directories.map((dir, i) => {
+                const desc = multiMachine
+                    ? `${dir.path} @ ${dir.host}`.slice(0, 100)
+                    : dir.path.slice(0, 100);
+                return {
+                    label: dir.label.slice(0, 100),
+                    description: desc,
+                    value: String(i),
+                };
+            }),
         );
 
     const menuRow = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu);
 
-    const customBtn = new ButtonBuilder()
-        .setCustomId(`${NEW_SESSION_CUSTOM_PREFIX}btn`)
-        .setLabel('Custom path...')
-        .setStyle(ButtonStyle.Secondary);
+    const buttons = multiMachine
+        ? machines.map(m =>
+            new ButtonBuilder()
+                .setCustomId(`${NEW_SESSION_CUSTOM_PREFIX}${m.machineId}`)
+                .setLabel(`Custom path @${m.host}...`.slice(0, 80))
+                .setStyle(ButtonStyle.Secondary),
+        )
+        : [
+            new ButtonBuilder()
+                .setCustomId(`${NEW_SESSION_CUSTOM_PREFIX}btn`)
+                .setLabel('Custom path...')
+                .setStyle(ButtonStyle.Secondary),
+        ];
 
-    const btnRow = new ActionRowBuilder<ButtonBuilder>().addComponents(customBtn);
+    const btnRow = new ActionRowBuilder<ButtonBuilder>().addComponents(...buttons);
 
     return [menuRow, btnRow];
 }
 
 export function buildCustomPathOnly(
-    machineId: string,
+    machines: readonly { machineId: string; host: string }[],
 ): ActionRowBuilder<ButtonBuilder>[] {
-    const customBtn = new ButtonBuilder()
-        .setCustomId(`${NEW_SESSION_CUSTOM_PREFIX}${machineId}`)
-        .setLabel('Enter directory path...')
-        .setStyle(ButtonStyle.Primary);
+    const buttons = machines.length > 1
+        ? machines.map(m =>
+            new ButtonBuilder()
+                .setCustomId(`${NEW_SESSION_CUSTOM_PREFIX}${m.machineId}`)
+                .setLabel(`New session @${m.host}...`.slice(0, 80))
+                .setStyle(ButtonStyle.Primary),
+        )
+        : [
+            new ButtonBuilder()
+                .setCustomId(`${NEW_SESSION_CUSTOM_PREFIX}${machines[0].machineId}`)
+                .setLabel('Enter directory path...')
+                .setStyle(ButtonStyle.Primary),
+        ];
 
-    return [new ActionRowBuilder<ButtonBuilder>().addComponents(customBtn)];
+    return [new ActionRowBuilder<ButtonBuilder>().addComponents(...buttons)];
 }
 
 export function parseNewSessionSelect(customId: string): boolean {

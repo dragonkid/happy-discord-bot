@@ -84,8 +84,11 @@ describe('commands', () => {
         it('/sessions calls bridge.listAllSessions and formats result', async () => {
             const bridge = makeMockBridge();
             vi.mocked(bridge.listAllSessions).mockResolvedValueOnce([
-                { id: 'sess-1', active: true, activeAt: 1000, metadata: null },
-                { id: 'sess-2', active: true, activeAt: 2000, metadata: null },
+                { id: 'sess-1', active: true, activeAt: Date.now(), metadata: { path: '/a', machineId: 'm1', host: 'h1' } },
+                { id: 'sess-2', active: true, activeAt: Date.now(), metadata: { path: '/b', machineId: 'm1', host: 'h1' } },
+            ] as any);
+            vi.mocked(bridge.listMachines).mockResolvedValueOnce([
+                { id: 'm1', metadata: { host: 'h1' }, active: true, activeAt: Date.now(), createdAt: Date.now() },
             ] as any);
             Object.defineProperty(bridge, 'activeSession', { value: 'sess-2' });
 
@@ -105,8 +108,11 @@ describe('commands', () => {
         it('/sessions marks thread-bound session as current when in a thread', async () => {
             const bridge = makeMockBridge();
             vi.mocked(bridge.listAllSessions).mockResolvedValueOnce([
-                { id: 'sess-1', active: true, activeAt: 1000, metadata: null },
-                { id: 'sess-2', active: true, activeAt: 2000, metadata: null },
+                { id: 'sess-1', active: true, activeAt: Date.now(), metadata: { path: '/a', machineId: 'm1', host: 'h1' } },
+                { id: 'sess-2', active: true, activeAt: Date.now(), metadata: { path: '/b', machineId: 'm1', host: 'h1' } },
+            ] as any);
+            vi.mocked(bridge.listMachines).mockResolvedValueOnce([
+                { id: 'm1', metadata: { host: 'h1' }, active: true, activeAt: Date.now(), createdAt: Date.now() },
             ] as any);
             Object.defineProperty(bridge, 'activeSession', { value: 'sess-1' });
             vi.mocked(bridge.getSessionByThread).mockReturnValueOnce('sess-2');
@@ -116,19 +122,20 @@ describe('commands', () => {
 
             const call = vi.mocked(interaction.editReply).mock.calls[0][0] as { content: string };
             expect(call.content).toContain('sess-2');
-            expect(call.content).toMatch(/sess-2.*← current/);
-            expect(call.content).not.toMatch(/sess-1.*← current/);
+            expect(call.content).toMatch(/sess-2.*current/);
+            expect(call.content).not.toMatch(/sess-1.*current/);
         });
 
-        it('/sessions shows "no sessions found" when empty', async () => {
+        it('/sessions shows "no machines" when both empty', async () => {
             const bridge = makeMockBridge();
             vi.mocked(bridge.listAllSessions).mockResolvedValueOnce([]);
+            vi.mocked(bridge.listMachines).mockResolvedValueOnce([]);
             const interaction = mockInteraction('sessions');
             await handleCommand(interaction as any, bridge);
 
-            expect(interaction.editReply).toHaveBeenCalledWith(
-                expect.stringContaining('No sessions found'),
-            );
+            const call = vi.mocked(interaction.editReply).mock.calls[0][0] as string | { content: string };
+            const content = typeof call === 'string' ? call : call.content;
+            expect(content).toMatch(/no (sessions|machines)/i);
         });
 
         it('/stop calls bridge.stopSession', async () => {
@@ -546,13 +553,17 @@ describe('commands', () => {
         });
     });
 
-    describe('/sessions host grouping', () => {
-        it('groups sessions by host and shows bot version', async () => {
+    describe('/sessions Connected Machines format', () => {
+        it('groups sessions by machine with online/offline status', async () => {
             const bridge = makeMockBridge();
             vi.mocked(bridge.listAllSessions).mockResolvedValueOnce([
-                { id: 'sess-1', active: true, activeAt: 1000, metadata: { path: '/a/proj1', machineId: 'm1', host: 'macbook' } },
-                { id: 'sess-2', active: true, activeAt: 2000, metadata: { path: '/a/proj2', machineId: 'm1', host: 'macbook' } },
-                { id: 'sess-3', active: true, activeAt: 3000, metadata: { path: '/b/proj3', machineId: 'm2', host: 'server-1' } },
+                { id: 'sess-1', active: true, activeAt: Date.now() - 60_000, metadata: { path: '/a/proj1', machineId: 'm1', host: 'macbook' } },
+                { id: 'sess-2', active: true, activeAt: Date.now(), metadata: { path: '/a/proj2', machineId: 'm1', host: 'macbook' } },
+                { id: 'sess-3', active: false, activeAt: Date.now() - 3600_000, metadata: { path: '/b/proj3', machineId: 'm2', host: 'server-1' } },
+            ] as any);
+            vi.mocked(bridge.listMachines).mockResolvedValueOnce([
+                { id: 'm1', metadata: { host: 'macbook' }, active: true, activeAt: Date.now(), createdAt: Date.now() },
+                { id: 'm2', metadata: { host: 'server-1' }, active: false, activeAt: Date.now() - 3600_000, createdAt: Date.now() },
             ] as any);
             Object.defineProperty(bridge, 'activeSession', { value: 'sess-2' });
 
@@ -561,22 +572,64 @@ describe('commands', () => {
 
             const call = vi.mocked(interaction.editReply).mock.calls[0][0] as { content: string };
             expect(call.content).toContain('macbook');
+            expect(call.content).toContain('[online]');
             expect(call.content).toContain('server-1');
+            expect(call.content).toContain('[offline]');
             expect(call.content).toMatch(/Bot v\d+\.\d+\.\d+/);
         });
 
-        it('shows directory name from metadata path', async () => {
+        it('shows machine without sessions', async () => {
             const bridge = makeMockBridge();
             vi.mocked(bridge.listAllSessions).mockResolvedValueOnce([
-                { id: 'sess-1', active: true, activeAt: 1000, metadata: { path: '/Users/user/my-project', host: 'macbook' } },
+                { id: 'sess-1', active: true, activeAt: Date.now(), metadata: { path: '/a/proj', machineId: 'm1', host: 'macbook' } },
             ] as any);
-            Object.defineProperty(bridge, 'activeSession', { value: 'sess-1' });
+            vi.mocked(bridge.listMachines).mockResolvedValueOnce([
+                { id: 'm1', metadata: { host: 'macbook' }, active: true, activeAt: Date.now(), createdAt: Date.now() },
+                { id: 'm2', metadata: { host: 'server-1' }, active: true, activeAt: Date.now(), createdAt: Date.now() },
+            ] as any);
 
             const interaction = mockInteraction('sessions');
             await handleCommand(interaction as any, bridge);
 
             const call = vi.mocked(interaction.editReply).mock.calls[0][0] as { content: string };
-            expect(call.content).toContain('my-project');
+            expect(call.content).toContain('server-1');
+            expect(call.content).toContain('No sessions');
+        });
+
+        it('shows full path and relative time for sessions', async () => {
+            const bridge = makeMockBridge();
+            vi.mocked(bridge.listAllSessions).mockResolvedValueOnce([
+                { id: 'sess-1', active: true, activeAt: Date.now(), metadata: { path: '/Users/dk/.openclaw', machineId: 'm1', host: 'arb' } },
+            ] as any);
+            vi.mocked(bridge.listMachines).mockResolvedValueOnce([
+                { id: 'm1', metadata: { host: 'arb' }, active: true, activeAt: Date.now(), createdAt: Date.now() },
+            ] as any);
+
+            const interaction = mockInteraction('sessions');
+            await handleCommand(interaction as any, bridge);
+
+            const call = vi.mocked(interaction.editReply).mock.calls[0][0] as { content: string };
+            expect(call.content).toContain('/Users/dk/.openclaw');
+            expect(call.content).toContain('just now');
+        });
+
+        it('marks current session', async () => {
+            const bridge = makeMockBridge();
+            vi.mocked(bridge.listAllSessions).mockResolvedValueOnce([
+                { id: 'sess-1', active: true, activeAt: Date.now(), metadata: { path: '/a', machineId: 'm1', host: 'h1' } },
+                { id: 'sess-2', active: true, activeAt: Date.now(), metadata: { path: '/b', machineId: 'm1', host: 'h1' } },
+            ] as any);
+            vi.mocked(bridge.listMachines).mockResolvedValueOnce([
+                { id: 'm1', metadata: { host: 'h1' }, active: true, activeAt: Date.now(), createdAt: Date.now() },
+            ] as any);
+            Object.defineProperty(bridge, 'activeSession', { value: 'sess-2' });
+
+            const interaction = mockInteraction('sessions');
+            await handleCommand(interaction as any, bridge);
+
+            const call = vi.mocked(interaction.editReply).mock.calls[0][0] as { content: string };
+            expect(call.content).toMatch(/sess-2.*current/);
+            expect(call.content).not.toMatch(/sess-1.*current/);
         });
     });
 
