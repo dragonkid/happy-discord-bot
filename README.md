@@ -88,6 +88,7 @@ npm install -g @dragonkid/happy-coder   # Install happy CLI (fork with bot enhan
 happy auth login                        # Select "Mobile App" → copy the happy:// URL
 happy daemon start                      # Start background daemon
 happy daemon status                     # Verify daemon is running
+happy daemon logs                       # Get the log path of the daemon for troubleshooting
 ```
 
 > **Linking:** When `happy auth login` shows the `happy://terminal?...` URL, run `/approve` in the bot's Discord channel and paste the URL. The bot will link the CLI to its account and the CLI will show "Authentication successful".
@@ -100,7 +101,7 @@ With both daemons running, use the `/new` Discord command to create sessions fro
 
 ### 3. Use in Discord
 
-1. Run `/new` in the bot channel — pick a project directory to start a Claude Code session
+1. Start a session — either run `happy` in a project directory on the target machine (recommended), or use `/new` in Discord to pick a directory remotely. Run `happy daemon status` to verify the daemon spawned session is ready.
 2. The bot creates a thread (e.g. `my-project @ macbook`) — all conversation happens here
 3. Type a message in the thread — it forwards to Claude Code, replies stream back
 4. When Claude needs permission (file edit, shell command), approval buttons appear — click to approve or deny
