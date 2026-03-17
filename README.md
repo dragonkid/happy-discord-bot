@@ -87,6 +87,7 @@ The bot needs the `happy` daemon running to manage sessions. Install the CLI and
 npm install -g @dragonkid/happy-coder   # Install happy CLI (fork with bot enhancements)
 happy auth login                        # Select "Mobile App" → copy the happy:// URL
 happy daemon start                      # Start background daemon
+happy daemon status                     # Verify daemon is running
 ```
 
 > **Linking:** When `happy auth login` shows the `happy://terminal?...` URL, run `/approve` in the bot's Discord channel and paste the URL. The bot will link the CLI to its account and the CLI will show "Authentication successful".
@@ -184,7 +185,7 @@ happy-discord-bot start              # Run bot (foreground, default)
 happy-discord-bot daemon start       # Run as background daemon
 happy-discord-bot daemon stop        # Stop daemon
 happy-discord-bot daemon restart     # Restart daemon (stop + start)
-happy-discord-bot daemon status      # Show daemon status
+happy-discord-bot daemon status      # Show daemon status + connected machines
 happy-discord-bot update             # Check for updates and upgrade
 happy-discord-bot init               # Interactive config setup
 happy-discord-bot auth login         # Create new Happy account
@@ -309,7 +310,7 @@ npm run test:e2e         # E2E smoke tests (requires .env.e2e, real services)
 Unit/integration tests use Vitest with all external dependencies mocked:
 
 ```bash
-npm test                 # 26 suites, 581 tests
+npm test                 # 27 suites, 595 tests
 ```
 
 E2E smoke tests require a second Discord bot, a dedicated test channel, and a running `happy` daemon. See `e2e/` directory and `.env.e2e.example` for setup.

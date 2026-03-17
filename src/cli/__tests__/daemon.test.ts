@@ -18,6 +18,27 @@ vi.mock('../../version.js', () => ({
     getVersion: vi.fn(() => '0.1.0'),
 }));
 
+vi.mock('../../credentials.js', () => ({
+    readBotCredentials: vi.fn(() => null),
+}));
+
+vi.mock('../../vendor/encryption.js', () => ({
+    decodeBase64: vi.fn(() => new Uint8Array(32)),
+    deriveContentKeyPair: vi.fn(() => ({
+        publicKey: new Uint8Array(32),
+        secretKey: new Uint8Array(64),
+    })),
+    encodeBase64: vi.fn((buf: Uint8Array) => Buffer.from(buf).toString('base64')),
+}));
+
+vi.mock('../../vendor/config.js', () => ({
+    loadConfig: vi.fn(() => ({ serverUrl: 'https://api.test.com' })),
+}));
+
+vi.mock('../../vendor/api.js', () => ({
+    listActiveSessions: vi.fn(() => Promise.resolve([])),
+}));
+
 const { readDaemonState, writeDaemonState, removeDaemonState, isDaemonRunning, handleDaemon } = await import('../daemon.js');
 import type { DaemonState } from '../daemon.js';
 
@@ -221,7 +242,7 @@ describe('handleDaemon', () => {
             logSpy.mockRestore();
         });
 
-        it('prints daemon info when running', async () => {
+        it('prints daemon info and Happy Account when running', async () => {
             const state: DaemonState = { pid: process.pid, startTime: '2026-01-01T00:00:00Z', version: '0.1.0' };
             vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(state));
 
@@ -233,6 +254,8 @@ describe('handleDaemon', () => {
             expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Version: 0.1.0'));
             expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Started:'));
             expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Log:'));
+            // showPairingStatus called (readBotCredentials returns null by default)
+            expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Happy Account'));
             logSpy.mockRestore();
         });
     });

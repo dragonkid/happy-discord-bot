@@ -258,7 +258,7 @@ happy-discord-bot start             # Run bot (foreground, default)
 happy-discord-bot daemon start      # Run as background daemon
 happy-discord-bot daemon stop       # Stop daemon
 happy-discord-bot daemon restart    # Restart daemon (stop + start)
-happy-discord-bot daemon status     # Show daemon status
+happy-discord-bot daemon status     # Show daemon status + connected machines
 happy-discord-bot auth login        # Generate new account (secret + Ed25519 → POST /v1/auth)
 happy-discord-bot auth restore      # Input existing secret (base64url) to reuse account
 happy-discord-bot auth status       # Show credential status
@@ -307,7 +307,7 @@ npm run test:e2e         # E2E smoke tests (requires .env.e2e, real services)
 ## Testing
 
 - Framework: Vitest
-- 26 test suites, 581 tests
+- 27 test suites, 595 tests
 - Test files: `src/**/__tests__/*.test.ts`
 - All Happy/Discord dependencies mocked (no real connections needed)
 
