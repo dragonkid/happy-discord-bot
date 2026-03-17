@@ -127,7 +127,7 @@ async function main(): Promise<void> {
             if (pendingApprove && message.channelId === pendingApprove.channelId && text.startsWith('happy://')) {
                 bridge.clearPendingApprove();
                 try {
-                    const { parseAuthUrl, approveAccountAuth } = await import('./happy/auth-approve.js');
+                    const { parseAuthUrl, approveTerminalAuth } = await import('./happy/auth-approve.js');
                     const { loadConfig } = await import('./vendor/config.js');
                     const { decodeBase64 } = await import('./vendor/encryption.js');
                     const { readBotCredentials } = await import('./credentials.js');
@@ -146,7 +146,7 @@ async function main(): Promise<void> {
                     const { serverUrl } = loadConfig();
                     const secret = decodeBase64(botCreds.secret);
                     const token = botCreds.token;
-                    await approveAccountAuth(serverUrl, token, secret, ephemeralPubKey);
+                    await approveTerminalAuth(serverUrl, token, secret, ephemeralPubKey);
                     await message.reply('Device approved.');
                 } catch (err) {
                     const detail = err instanceof Error ? err.message : String(err);

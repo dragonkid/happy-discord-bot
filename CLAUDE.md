@@ -181,7 +181,7 @@ When a Discord message includes attachments (images, PDFs, code files, etc.), th
 - Step 1: User runs `/approve` → bot enters `pendingApprove` state (60s timeout), replies with instructions.
 - Step 2: User pastes `happy://` URL from `auth login` output → bot parses ephemeral public key.
 - URL formats: `happy://terminal?<base64url-pubkey>` (CLI) or `happy:///account?<base64url-pubkey>` (mobile app).
-- Bot encrypts its secret via NaCl box for the ephemeral key → `POST /v1/auth/account/response`.
+- Bot checks `GET /v1/auth/request/status` → if `pending`, encrypts secret via NaCl box → `POST /v1/auth/response`.
 - Channel-scoped: only messages starting with `happy://` in the same channel trigger URL detection.
 - `pendingApprove` auto-clears on timeout or after processing.
 
