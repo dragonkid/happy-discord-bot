@@ -6,7 +6,7 @@ import { getStateDir } from '../state-dir.js';
 import { readBotCredentials } from '../credentials.js';
 import { decodeBase64, deriveContentKeyPair } from '../vendor/encryption.js';
 import { loadConfig as loadHappyConfig } from '../vendor/config.js';
-import { listActiveSessions, type DecryptedSession } from '../vendor/api.js';
+import { listSessions, type DecryptedSession } from '../vendor/api.js';
 import type { SessionMetadata } from '../happy/types.js';
 
 const DAEMON_STATE_FILE = 'daemon.state.json';
@@ -142,16 +142,17 @@ export async function showPairingStatus(stateDir: string): Promise<void> {
         const contentKeyPair = deriveContentKeyPair(secret);
         const credentials = { token: botCreds.token, secret, contentKeyPair };
         const config = loadHappyConfig();
-        sessions = await listActiveSessions(config, credentials);
+        sessions = await listSessions(config, credentials);
     } catch (err) {
         console.log(`  Failed to fetch sessions: ${err instanceof Error ? err.message : String(err)}`);
         return;
     }
 
-    console.log(`  Active sessions: ${sessions.length}`);
+    const activeCount = sessions.filter(s => s.active).length;
+    console.log(`  Sessions: ${sessions.length} total, ${activeCount} active`);
 
     if (sessions.length === 0) {
-        console.log('\nNo active sessions.');
+        console.log('\nNo sessions. Use /new in Discord to create one.');
         return;
     }
 
@@ -174,7 +175,8 @@ export async function showPairingStatus(stateDir: string): Promise<void> {
             const meta = isValidMetadata(s.metadata) ? s.metadata : null;
             const path = meta?.path ?? 'unknown';
             const idPrefix = s.id.slice(0, 7);
-            console.log(`    [${idPrefix}] ${path}  ${relativeTime(s.activeAt)}`);
+            const status = s.active ? 'active' : 'archived';
+            console.log(`    [${idPrefix}] ${path}  ${status}  ${relativeTime(s.activeAt)}`);
         }
     }
 }

@@ -35,12 +35,12 @@ vi.mock('../../vendor/config.js', () => ({
 }));
 
 vi.mock('../../vendor/api.js', () => ({
-    listActiveSessions: vi.fn(),
+    listSessions: vi.fn(),
 }));
 
 const { relativeTime, showPairingStatus } = await import('../daemon.js');
 const { readBotCredentials } = await import('../../credentials.js');
-const { listActiveSessions } = await import('../../vendor/api.js');
+const { listSessions } = await import('../../vendor/api.js');
 
 const mockSession = (overrides: Record<string, unknown> = {}) => ({
     id: 'sess-aaa111', seq: 1, createdAt: 0, updatedAt: 0,
@@ -94,7 +94,7 @@ describe('showPairingStatus', () => {
 
     it('prints account status and session count', async () => {
         vi.mocked(readBotCredentials).mockReturnValue({ token: 'tok-abc12345', secret: 'dGVzdA==' });
-        vi.mocked(listActiveSessions).mockResolvedValue([
+        vi.mocked(listSessions).mockResolvedValue([
             mockSession({
                 id: 'abc123def456',
                 activeAt: Date.now() - 120_000,
@@ -107,13 +107,13 @@ describe('showPairingStatus', () => {
 
         expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Linked'));
         expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('tok-abc1'));
-        expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Active sessions: 1'));
+        expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('1 active'));
         logSpy.mockRestore();
     });
 
     it('groups sessions by machine', async () => {
         vi.mocked(readBotCredentials).mockReturnValue({ token: 'tok-abc12345', secret: 'dGVzdA==' });
-        vi.mocked(listActiveSessions).mockResolvedValue([
+        vi.mocked(listSessions).mockResolvedValue([
             mockSession({ id: 'sess-aaa111', activeAt: Date.now() - 60_000, metadata: { path: '/home/user/project-a', machineId: 'machine-1', host: 'host-a' } }),
             mockSession({ id: 'sess-bbb222', seq: 2, activeAt: Date.now() - 300_000, metadata: { path: '/home/user/project-b', machineId: 'machine-1', host: 'host-a' } }),
             mockSession({ id: 'sess-ccc333', seq: 3, activeAt: Date.now() - 7200_000, metadata: { path: '/work/api', machineId: 'machine-2', host: 'host-b' } }),
@@ -132,20 +132,37 @@ describe('showPairingStatus', () => {
         logSpy.mockRestore();
     });
 
-    it('prints "No active sessions" when list is empty', async () => {
+    it('prints "No sessions" when list is empty', async () => {
         vi.mocked(readBotCredentials).mockReturnValue({ token: 'tok-abc12345', secret: 'dGVzdA==' });
-        vi.mocked(listActiveSessions).mockResolvedValue([]);
+        vi.mocked(listSessions).mockResolvedValue([]);
         const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
         await showPairingStatus('/tmp/test');
 
-        expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('No active sessions'));
+        expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('No sessions'));
+        logSpy.mockRestore();
+    });
+
+    it('shows active/archived status per session', async () => {
+        vi.mocked(readBotCredentials).mockReturnValue({ token: 'tok-abc12345', secret: 'dGVzdA==' });
+        vi.mocked(listSessions).mockResolvedValue([
+            mockSession({ id: 'sess-act111', active: true }),
+            mockSession({ id: 'sess-arc222', active: false, metadata: { path: '/home/user/old-project', machineId: 'machine-1', host: 'host-a' } }),
+        ]);
+        const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+        await showPairingStatus('/tmp/test');
+
+        const calls = logSpy.mock.calls.map(c => c[0]);
+        expect(calls).toContainEqual(expect.stringContaining('active'));
+        expect(calls).toContainEqual(expect.stringContaining('archived'));
+        expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('1 active'));
         logSpy.mockRestore();
     });
 
     it('handles network error gracefully', async () => {
         vi.mocked(readBotCredentials).mockReturnValue({ token: 'tok-abc12345', secret: 'dGVzdA==' });
-        vi.mocked(listActiveSessions).mockRejectedValue(new Error('fetch failed'));
+        vi.mocked(listSessions).mockRejectedValue(new Error('fetch failed'));
         const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
         await showPairingStatus('/tmp/test');
@@ -156,7 +173,7 @@ describe('showPairingStatus', () => {
 
     it('handles partial metadata (missing host)', async () => {
         vi.mocked(readBotCredentials).mockReturnValue({ token: 'tok-abc12345', secret: 'dGVzdA==' });
-        vi.mocked(listActiveSessions).mockResolvedValue([
+        vi.mocked(listSessions).mockResolvedValue([
             mockSession({ id: 'sess-ppp000', metadata: { path: '/partial/path', machineId: 'partial-machine' } }),
         ]);
         const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -172,7 +189,7 @@ describe('showPairingStatus', () => {
 
     it('handles session with missing metadata', async () => {
         vi.mocked(readBotCredentials).mockReturnValue({ token: 'tok-abc12345', secret: 'dGVzdA==' });
-        vi.mocked(listActiveSessions).mockResolvedValue([
+        vi.mocked(listSessions).mockResolvedValue([
             mockSession({ id: 'sess-xxx999', metadata: null }),
         ]);
         const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
