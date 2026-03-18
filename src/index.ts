@@ -2,7 +2,7 @@ import { loadBotConfig } from './config.js';
 import { HappyClient } from './happy/client.js';
 import { DiscordBot } from './discord/bot.js';
 import { handleCommand, handleSkillsAutocomplete, handleLoopAutocomplete } from './discord/commands.js';
-import { parseButtonId, parseExitPlanButtonId, parsePlanModalId, parseNewSessionSelect, parseCustomPathButton, parseCustomPathModal, buildCustomPathModal, parseDeleteButtonId, parseCleanupButtonId } from './discord/buttons.js';
+import { parseButtonId, parseExitPlanButtonId, parsePlanModalId, parseNewSessionSelect, parseCustomPathButton, parseCustomPathModal, buildCustomPathModal, parseDeleteButtonId, parseCleanupButtonId, YOLO_TOGGLE_PREFIX } from './discord/buttons.js';
 import { parseAskButtonId, parseSessionButtonId, handleAskButton, handleSessionButton, handleExitPlanButton, handleNewSessionSelect, handleNewSessionModal, handleDeleteButton, handleYoloToggle } from './discord/interactions.js';
 import { Bridge } from './bridge.js';
 import { StateTracker } from './happy/state-tracker.js';
@@ -245,7 +245,7 @@ async function main(): Promise<void> {
             }
 
             // --- YOLO toggle button ---
-            if (interaction.customId.startsWith('newsess-yolo:')) {
+            if (interaction.customId.startsWith(YOLO_TOGGLE_PREFIX)) {
                 await handleYoloToggle(interaction);
                 return;
             }
