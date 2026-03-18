@@ -1,5 +1,6 @@
 import {
     Client,
+    DiscordAPIError,
     GatewayIntentBits,
     Events,
     AttachmentBuilder,
@@ -183,16 +184,26 @@ export class DiscordBot {
         return thread.send({ content: text, files: [attachment], components });
     }
 
-    /** Archive a thread. */
+    /** Archive a thread. Silently ignores if thread was already deleted. */
     async archiveThread(threadId: string): Promise<void> {
-        const thread = await this.fetchThread(threadId);
-        await thread.setArchived(true);
+        try {
+            const thread = await this.fetchThread(threadId);
+            await thread.setArchived(true);
+        } catch (err) {
+            if (err instanceof DiscordAPIError && err.code === 10003) return;
+            throw err;
+        }
     }
 
-    /** Delete a thread. */
+    /** Delete a thread. Silently ignores if thread was already deleted. */
     async deleteThread(threadId: string): Promise<void> {
-        const thread = await this.fetchThread(threadId);
-        await thread.delete();
+        try {
+            const thread = await this.fetchThread(threadId);
+            await thread.delete();
+        } catch (err) {
+            if (err instanceof DiscordAPIError && err.code === 10003) return;
+            throw err;
+        }
     }
 
     /** Send typing indicator to a thread. */
