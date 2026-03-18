@@ -29,7 +29,7 @@ vi.mock('dotenv', () => ({
     config: vi.fn(),
 }));
 
-const { resolveEnvFile, loadBotConfig } = await import('../config.js');
+const { resolveEnvFile, loadBotConfig, validateConfig } = await import('../config.js');
 const { readBotCredentials } = await import('../credentials.js');
 
 // Save original env
@@ -201,5 +201,85 @@ describe('loadBotConfig', () => {
 
         const config = loadBotConfig();
         expect(config.happy.serverUrl).toBe('https://test.example.com');
+    });
+});
+
+describe('validateConfig', () => {
+    beforeEach(() => {
+        for (const key of envKeys) {
+            savedEnv[key] = process.env[key];
+            // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+            delete process.env[key];
+        }
+        vi.mocked(readBotCredentials).mockReturnValue(null);
+    });
+
+    afterEach(() => {
+        for (const key of envKeys) {
+            if (savedEnv[key] !== undefined) {
+                process.env[key] = savedEnv[key];
+            } else {
+                // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+                delete process.env[key];
+            }
+        }
+    });
+
+    it('returns ok when all config is present (env vars)', () => {
+        process.env.DISCORD_TOKEN = 'tok';
+        process.env.DISCORD_CHANNEL_ID = 'ch';
+        process.env.DISCORD_USER_ID = 'uid';
+        process.env.HAPPY_TOKEN = 'ht';
+        process.env.HAPPY_SECRET = 'hs';
+
+        const result = validateConfig();
+        expect(result.ok).toBe(true);
+        expect(result.errors).toEqual([]);
+    });
+
+    it('returns ok when credentials come from file', () => {
+        process.env.DISCORD_TOKEN = 'tok';
+        process.env.DISCORD_CHANNEL_ID = 'ch';
+        process.env.DISCORD_USER_ID = 'uid';
+        vi.mocked(readBotCredentials).mockReturnValue({ token: 't', secret: 's' });
+
+        const result = validateConfig();
+        expect(result.ok).toBe(true);
+    });
+
+    it('reports all missing Discord env vars', () => {
+        const result = validateConfig();
+        expect(result.ok).toBe(false);
+        expect(result.errors).toContain('DISCORD_TOKEN not set');
+        expect(result.errors).toContain('DISCORD_CHANNEL_ID not set');
+        expect(result.errors).toContain('DISCORD_USER_ID not set');
+    });
+
+    it('reports missing credentials when no env vars and no file', () => {
+        process.env.DISCORD_TOKEN = 'tok';
+        process.env.DISCORD_CHANNEL_ID = 'ch';
+        process.env.DISCORD_USER_ID = 'uid';
+
+        const result = validateConfig();
+        expect(result.ok).toBe(false);
+        expect(result.errors).toContain('No Happy credentials (run `happy-discord-bot auth login`)');
+    });
+
+    it('skips credential file check when env vars are set', () => {
+        process.env.DISCORD_TOKEN = 'tok';
+        process.env.DISCORD_CHANNEL_ID = 'ch';
+        process.env.DISCORD_USER_ID = 'uid';
+        process.env.HAPPY_TOKEN = 'ht';
+        process.env.HAPPY_SECRET = 'hs';
+
+        vi.mocked(readBotCredentials).mockClear();
+        validateConfig();
+        expect(readBotCredentials).not.toHaveBeenCalled();
+    });
+
+    it('collects multiple errors at once', () => {
+        const result = validateConfig();
+        expect(result.ok).toBe(false);
+        expect(result.errors.length).toBeGreaterThanOrEqual(4);
     });
 });

@@ -8,6 +8,7 @@ vi.mock('node:fs', () => ({
     mkdirSync: vi.fn(),
     unlinkSync: vi.fn(),
     openSync: vi.fn(() => 3), // fake fd
+    existsSync: vi.fn(() => false),
 }));
 
 vi.mock('node:child_process', () => ({
@@ -35,6 +36,11 @@ vi.mock('../../vendor/config.js', () => ({
     loadConfig: vi.fn(() => ({ serverUrl: 'https://api.test.com' })),
 }));
 
+vi.mock('../../config.js', () => ({
+    validateConfig: vi.fn(() => ({ ok: true, errors: [] })),
+    resolveEnvFile: vi.fn(() => '/tmp/daemon-test/.env'),
+}));
+
 vi.mock('../../vendor/api.js', () => ({
     listSessions: vi.fn(() => Promise.resolve([])),
     listMachines: vi.fn(() => Promise.resolve([])),
@@ -42,6 +48,7 @@ vi.mock('../../vendor/api.js', () => ({
 
 const { readDaemonState, writeDaemonState, removeDaemonState, isDaemonRunning, handleDaemon } = await import('../daemon.js');
 import type { DaemonState } from '../daemon.js';
+import { validateConfig, resolveEnvFile } from '../../config.js';
 
 describe('daemon state', () => {
     beforeEach(() => {
@@ -333,6 +340,77 @@ describe('handleDaemon', () => {
 
             expect(spawn).toHaveBeenCalled();
             expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('PID 77'));
+            logSpy.mockRestore();
+        });
+    });
+
+    describe('start config validation', () => {
+        it('fails with clear message when config is invalid', async () => {
+            vi.mocked(fs.readFileSync).mockImplementation(() => { throw new Error('ENOENT'); });
+            vi.mocked(spawn).mockClear();
+            vi.mocked(validateConfig).mockReturnValue({
+                ok: false,
+                errors: ['DISCORD_TOKEN not set', 'DISCORD_CHANNEL_ID not set'],
+            });
+            vi.mocked(resolveEnvFile).mockReturnValue('/home/user/.happy-discord-bot/.env');
+
+            const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+            vi.spyOn(process, 'exit').mockImplementation(() => { throw new Error('EXIT'); });
+
+            await expect(handleDaemon(['start'])).rejects.toThrow('EXIT');
+
+            expect(errorSpy).toHaveBeenCalledWith('Daemon start failed — missing configuration:');
+            expect(errorSpy).toHaveBeenCalledWith('  - DISCORD_TOKEN not set');
+            expect(errorSpy).toHaveBeenCalledWith('  - DISCORD_CHANNEL_ID not set');
+            expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('/home/user/.happy-discord-bot/.env'));
+            expect(spawn).not.toHaveBeenCalled();
+
+            errorSpy.mockRestore();
+        });
+
+        it('shows hint when no .env file found', async () => {
+            vi.mocked(fs.readFileSync).mockImplementation(() => { throw new Error('ENOENT'); });
+            vi.mocked(validateConfig).mockReturnValue({
+                ok: false,
+                errors: ['DISCORD_TOKEN not set'],
+            });
+            vi.mocked(resolveEnvFile).mockReturnValue(undefined);
+
+            const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+            vi.spyOn(process, 'exit').mockImplementation(() => { throw new Error('EXIT'); });
+
+            await expect(handleDaemon(['start'])).rejects.toThrow('EXIT');
+
+            expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('.env (not found)'));
+            errorSpy.mockRestore();
+        });
+
+        it('shows credential hint when Happy credentials missing', async () => {
+            vi.mocked(fs.readFileSync).mockImplementation(() => { throw new Error('ENOENT'); });
+            vi.mocked(validateConfig).mockReturnValue({
+                ok: false,
+                errors: ['No Happy credentials (run `happy-discord-bot auth login`)'],
+            });
+
+            const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+            vi.spyOn(process, 'exit').mockImplementation(() => { throw new Error('EXIT'); });
+
+            await expect(handleDaemon(['start'])).rejects.toThrow('EXIT');
+
+            expect(errorSpy).toHaveBeenCalledWith('  - No Happy credentials (run `happy-discord-bot auth login`)');
+            errorSpy.mockRestore();
+        });
+
+        it('proceeds to spawn when config is valid', async () => {
+            vi.mocked(fs.readFileSync).mockImplementation(() => { throw new Error('ENOENT'); });
+            vi.mocked(validateConfig).mockReturnValue({ ok: true, errors: [] });
+            vi.mocked(spawn).mockReturnValue({ pid: 55, unref: vi.fn() } as any);
+
+            const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+            await handleDaemon(['start']);
+
+            expect(spawn).toHaveBeenCalled();
+            expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('PID 55'));
             logSpy.mockRestore();
         });
     });

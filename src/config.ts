@@ -63,6 +63,29 @@ function loadCredentials(): Credentials {
     );
 }
 
+export interface ConfigValidationResult {
+    readonly ok: boolean;
+    readonly errors: readonly string[];
+}
+
+/** Lightweight pre-flight check — validates required env vars + credentials without constructing full config. */
+export function validateConfig(): ConfigValidationResult {
+    const errors: string[] = [];
+
+    if (!process.env.DISCORD_TOKEN) errors.push('DISCORD_TOKEN not set');
+    if (!process.env.DISCORD_CHANNEL_ID) errors.push('DISCORD_CHANNEL_ID not set');
+    if (!process.env.DISCORD_USER_ID) errors.push('DISCORD_USER_ID not set');
+
+    if (!process.env.HAPPY_TOKEN || !process.env.HAPPY_SECRET) {
+        const botCreds = readBotCredentials(getStateDir());
+        if (!botCreds) {
+            errors.push('No Happy credentials (run `happy-discord-bot auth login`)');
+        }
+    }
+
+    return { ok: errors.length === 0, errors };
+}
+
 export function loadBotConfig(): BotConfig {
     const happy = loadHappyConfig();
     const credentials = loadCredentials();

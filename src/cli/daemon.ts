@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { getVersion } from '../version.js';
 import { getStateDir } from '../state-dir.js';
 import { readBotCredentials } from '../credentials.js';
+import { validateConfig, resolveEnvFile } from '../config.js';
 import { decodeBase64, deriveContentKeyPair } from '../vendor/encryption.js';
 import { loadConfig as loadHappyConfig } from '../vendor/config.js';
 import { listSessions, listMachines, type DecryptedSession, type DecryptedMachine } from '../vendor/api.js';
@@ -62,6 +63,17 @@ export function startDaemon(): void {
         const state = readDaemonState(stateDir)!;
         console.log(`Daemon already running (PID ${state.pid})`);
         return;
+    }
+
+    const validation = validateConfig();
+    if (!validation.ok) {
+        const envFile = resolveEnvFile();
+        console.error('Daemon start failed — missing configuration:');
+        for (const err of validation.errors) {
+            console.error(`  - ${err}`);
+        }
+        console.error(`\nConfig file: ${envFile ?? `${stateDir}/.env (not found)`}`);
+        process.exit(1);
     }
 
     const cliPath = join(import.meta.dirname, '..', 'cli.js');
