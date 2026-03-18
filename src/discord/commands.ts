@@ -37,10 +37,10 @@ const mode = new SlashCommandBuilder()
             .setDescription('Permission mode')
             .setRequired(true)
             .addChoices(
-                { name: 'default', value: 'default' },
-                { name: 'accept-edits', value: 'acceptEdits' },
-                { name: 'bypass', value: 'bypassPermissions' },
-                { name: 'plan', value: 'plan' },
+                { name: 'default — Ask for every tool call', value: 'default' },
+                { name: 'accept-edits — Auto-approve Read/Edit/Write', value: 'acceptEdits' },
+                { name: 'bypass — Auto-approve everything', value: 'bypassPermissions' },
+                { name: 'plan — Require plan approval before edits', value: 'plan' },
             ),
     );
 
