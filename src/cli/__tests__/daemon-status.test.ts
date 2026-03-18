@@ -7,6 +7,7 @@ vi.mock('node:fs', () => ({
     mkdirSync: vi.fn(),
     unlinkSync: vi.fn(),
     openSync: vi.fn(() => 3),
+    existsSync: vi.fn(() => false),
 }));
 
 vi.mock('node:child_process', () => ({
@@ -32,6 +33,11 @@ vi.mock('../../vendor/encryption.js', () => ({
 
 vi.mock('../../vendor/config.js', () => ({
     loadConfig: vi.fn(() => ({ serverUrl: 'https://api.test.com' })),
+}));
+
+vi.mock('../../config.js', () => ({
+    validateConfig: vi.fn(() => ({ ok: true, errors: [] })),
+    resolveEnvFile: vi.fn(() => undefined),
 }));
 
 vi.mock('../../vendor/api.js', () => ({
