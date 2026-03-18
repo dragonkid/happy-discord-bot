@@ -368,11 +368,11 @@ export class Bridge {
         return undefined;
     }
 
-    async createNewSession(machineId: string, directory: string): Promise<string> {
+    async createNewSession(machineId: string, directory: string, dangerouslySkipPermissions = false): Promise<string> {
         const result = await this.happy.machineRPC<Record<string, unknown>>(
             machineId,
             'spawn-happy-session',
-            { directory, approvedNewDirectoryCreation: true },
+            { directory, approvedNewDirectoryCreation: true, dangerouslySkipPermissions },
         );
 
         if (!result) {

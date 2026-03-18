@@ -3,7 +3,7 @@ import { HappyClient } from './happy/client.js';
 import { DiscordBot } from './discord/bot.js';
 import { handleCommand, handleSkillsAutocomplete, handleLoopAutocomplete } from './discord/commands.js';
 import { parseButtonId, parseExitPlanButtonId, parsePlanModalId, parseNewSessionSelect, parseCustomPathButton, parseCustomPathModal, buildCustomPathModal, parseDeleteButtonId, parseCleanupButtonId } from './discord/buttons.js';
-import { parseAskButtonId, parseSessionButtonId, handleAskButton, handleSessionButton, handleExitPlanButton, handleNewSessionSelect, handleNewSessionModal, handleDeleteButton } from './discord/interactions.js';
+import { parseAskButtonId, parseSessionButtonId, handleAskButton, handleSessionButton, handleExitPlanButton, handleNewSessionSelect, handleNewSessionModal, handleDeleteButton, handleYoloToggle } from './discord/interactions.js';
 import { Bridge } from './bridge.js';
 import { StateTracker } from './happy/state-tracker.js';
 import { PermissionCache } from './happy/permission-cache.js';
@@ -241,6 +241,12 @@ async function main(): Promise<void> {
         if (interaction.isButton()) {
             if (interaction.user.id !== config.discord.userId) {
                 await interaction.reply({ content: 'Unauthorized.', ephemeral: true });
+                return;
+            }
+
+            // --- YOLO toggle button ---
+            if (interaction.customId.startsWith('newsess-yolo:')) {
+                await handleYoloToggle(interaction);
                 return;
             }
 

@@ -435,7 +435,7 @@ describe('YOLO toggle button', () => {
     describe('buildYoloToggleButton', () => {
         it('builds OFF button with Secondary style', () => {
             const btn = buildYoloToggleButton(false);
-            const data = btn.toJSON();
+            const data = btn.toJSON() as any;
             expect(data.custom_id).toBe('newsess-yolo:off');
             expect(data.label).toBe('YOLO: OFF');
             expect(data.style).toBe(ButtonStyle.Secondary);
@@ -443,7 +443,7 @@ describe('YOLO toggle button', () => {
 
         it('builds ON button with Danger style', () => {
             const btn = buildYoloToggleButton(true);
-            const data = btn.toJSON();
+            const data = btn.toJSON() as any;
             expect(data.custom_id).toBe('newsess-yolo:on');
             expect(data.label).toBe('YOLO: ON');
             expect(data.style).toBe(ButtonStyle.Danger);

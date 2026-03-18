@@ -1,5 +1,5 @@
-import type { ButtonInteraction, StringSelectMenuInteraction, ModalSubmitInteraction } from 'discord.js';
-import { parseAskButtonId, parseSessionButtonId, buildAskButtons, buildRejectPlanModal } from './buttons.js';
+import { ActionRowBuilder, ButtonBuilder, type ButtonInteraction, type StringSelectMenuInteraction, type ModalSubmitInteraction } from 'discord.js';
+import { parseAskButtonId, parseSessionButtonId, buildAskButtons, buildRejectPlanModal, YOLO_TOGGLE_PREFIX, buildYoloToggleButton, extractYoloState } from './buttons.js';
 import type { AskButtonAction, ParsedSessionButtonId, ParsedExitPlanButtonId, ParsedDeleteButtonId } from './buttons.js';
 import type { AskUserQuestionInput } from '../happy/types.js';
 import type { Bridge } from '../bridge.js';
@@ -107,6 +107,27 @@ export async function handleSessionButton(
     });
 }
 
+export async function handleYoloToggle(interaction: ButtonInteraction): Promise<void> {
+    const currentlyOn = interaction.customId === `${YOLO_TOGGLE_PREFIX}on`;
+    const newState = !currentlyOn;
+    const newYoloBtn = buildYoloToggleButton(newState);
+
+    // Rebuild all action rows, replacing the YOLO button
+    const updatedRows = interaction.message.components.map(row => {
+        const newRow = new ActionRowBuilder<ButtonBuilder>();
+        for (const comp of row.components) {
+            if (comp.customId?.startsWith(YOLO_TOGGLE_PREFIX)) {
+                newRow.addComponents(newYoloBtn);
+            } else {
+                newRow.addComponents(ButtonBuilder.from(comp as any));
+            }
+        }
+        return newRow;
+    });
+
+    await interaction.update({ components: updatedRows });
+}
+
 export async function handleExitPlanButton(
     interaction: ButtonInteraction,
     parsed: ParsedExitPlanButtonId,
@@ -176,7 +197,8 @@ export async function handleNewSessionSelect(
     }
 
     try {
-        const sessionId = await bridge.createNewSession(selection.machineId, selection.path);
+        const yolo = extractYoloState(interaction.message);
+        const sessionId = await bridge.createNewSession(selection.machineId, selection.path, yolo);
         await interaction.editReply({
             content: `Session created in \`${selection.path}\` (\`${sessionId.slice(0, 8)}\`)`,
             components: [],
@@ -215,7 +237,8 @@ export async function handleNewSessionModal(
     }
 
     try {
-        const sessionId = await bridge.createNewSession(machineId, directory);
+        const yolo = interaction.isFromMessage() ? extractYoloState(interaction.message) : false;
+        const sessionId = await bridge.createNewSession(machineId, directory, yolo);
         await interaction.editReply({
             content: `Session created in \`${directory}\` (\`${sessionId.slice(0, 8)}\`)`,
             components: [],

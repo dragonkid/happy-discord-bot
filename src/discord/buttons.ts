@@ -306,8 +306,8 @@ export function buildYoloToggleButton(on: boolean): ButtonBuilder {
         .setStyle(on ? ButtonStyle.Danger : ButtonStyle.Secondary);
 }
 
-export function extractYoloState(message: { components: readonly { components: readonly { customId?: string }[] }[] } | null): boolean {
-    if (!message) return false;
+export function extractYoloState(message: { components?: readonly { components: readonly { customId?: string }[] }[] } | null): boolean {
+    if (!message?.components) return false;
     for (const row of message.components) {
         for (const comp of row.components) {
             if (comp.customId === `${YOLO_TOGGLE_PREFIX}on`) return true;

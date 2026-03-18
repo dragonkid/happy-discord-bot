@@ -1171,7 +1171,7 @@ describe('Bridge', () => {
             expect(happy.machineRPC).toHaveBeenCalledWith(
                 'machine-1',
                 'spawn-happy-session',
-                { directory: '/test/dir', approvedNewDirectoryCreation: true },
+                { directory: '/test/dir', approvedNewDirectoryCreation: true, dangerouslySkipPermissions: false },
             );
             expect(result).toBe('new-sess-id');
             expect(bridge.activeSession).toBe('new-sess-id');
@@ -1193,6 +1193,58 @@ describe('Bridge', () => {
             vi.mocked(happy.machineRPC).mockResolvedValueOnce({ error: 'Permission denied' } as any);
 
             await expect(bridge.createNewSession('machine-1', '/test/dir')).rejects.toThrow('Permission denied');
+        });
+
+        it('passes dangerouslySkipPermissions to machineRPC', async () => {
+            vi.mocked(happy.machineRPC).mockResolvedValueOnce({ sessionId: 'new-sess-id' });
+            const { listActiveSessions } = await import('../vendor/api.js');
+            const newSession = {
+                id: 'new-sess-id',
+                seq: 1,
+                createdAt: 1000,
+                updatedAt: 2000,
+                active: true,
+                activeAt: 2000,
+                metadata: { path: '/test/dir' },
+                agentState: null,
+                dataEncryptionKey: null,
+                encryption: { key: new Uint8Array(32), variant: 'dataKey' as const },
+            };
+            vi.mocked(listActiveSessions).mockResolvedValueOnce([newSession] as DecryptedSession[]);
+
+            await bridge.createNewSession('machine-1', '/test/dir', true);
+
+            expect(happy.machineRPC).toHaveBeenCalledWith(
+                'machine-1',
+                'spawn-happy-session',
+                { directory: '/test/dir', approvedNewDirectoryCreation: true, dangerouslySkipPermissions: true },
+            );
+        });
+
+        it('defaults dangerouslySkipPermissions to false', async () => {
+            vi.mocked(happy.machineRPC).mockResolvedValueOnce({ sessionId: 'new-sess-id' });
+            const { listActiveSessions } = await import('../vendor/api.js');
+            const newSession = {
+                id: 'new-sess-id',
+                seq: 1,
+                createdAt: 1000,
+                updatedAt: 2000,
+                active: true,
+                activeAt: 2000,
+                metadata: { path: '/test/dir' },
+                agentState: null,
+                dataEncryptionKey: null,
+                encryption: { key: new Uint8Array(32), variant: 'dataKey' as const },
+            };
+            vi.mocked(listActiveSessions).mockResolvedValueOnce([newSession] as DecryptedSession[]);
+
+            await bridge.createNewSession('machine-1', '/test/dir');
+
+            expect(happy.machineRPC).toHaveBeenCalledWith(
+                'machine-1',
+                'spawn-happy-session',
+                { directory: '/test/dir', approvedNewDirectoryCreation: true, dangerouslySkipPermissions: false },
+            );
         });
 
         it('retries listActiveSessions if new session not found initially', async () => {
