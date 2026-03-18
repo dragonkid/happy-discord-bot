@@ -112,10 +112,17 @@ export async function handleYoloToggle(interaction: ButtonInteraction): Promise<
     const newState = !currentlyOn;
     const newYoloBtn = buildYoloToggleButton(newState);
 
-    // Rebuild all action rows, replacing the YOLO button
+    // Rebuild action rows, only modifying the row that contains the YOLO button.
+    // Other rows (e.g. StringSelectMenu) are passed through unchanged via ActionRowBuilder.from().
     const updatedRows = interaction.message.components.map(row => {
+        if (!('components' in row)) return ActionRowBuilder.from(row as any);
+        const hasYolo = row.components.some(comp =>
+            'customId' in comp && (comp.customId as string | null)?.startsWith(YOLO_TOGGLE_PREFIX),
+        );
+        if (!hasYolo) return ActionRowBuilder.from(row as any);
+
+        // Rebuild only the row containing the YOLO button
         const newRow = new ActionRowBuilder<ButtonBuilder>();
-        if (!('components' in row)) return newRow;
         for (const comp of row.components) {
             const cid = 'customId' in comp ? (comp.customId as string | null) : null;
             if (cid?.startsWith(YOLO_TOGGLE_PREFIX)) {
@@ -127,7 +134,7 @@ export async function handleYoloToggle(interaction: ButtonInteraction): Promise<
         return newRow;
     });
 
-    await interaction.update({ components: updatedRows });
+    await interaction.update({ components: updatedRows as any });
 }
 
 export async function handleExitPlanButton(
