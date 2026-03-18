@@ -17,12 +17,15 @@ import {
     parseCustomPathButton,
     buildCustomPathModal,
     parseCustomPathModal,
+    buildCustomPathOnly,
     NEW_SESSION_SELECT_PREFIX,
     NEW_SESSION_CUSTOM_PREFIX,
     NEW_SESSION_MODAL_PREFIX,
     buildDeleteConfirmButtons,
     parseDeleteButtonId,
     parseCleanupButtonId,
+    buildYoloToggleButton,
+    extractYoloState,
 } from '../buttons.js';
 import { ButtonStyle, type APIButtonComponentWithCustomId } from 'discord.js';
 
@@ -345,9 +348,9 @@ describe('New session menu', () => {
             const options = menu.options ?? menu.data?.options ?? [];
             const desc = options[0].data?.description ?? options[0].description;
             expect(desc).not.toContain('@');
-            // Single Custom path button
+            // Custom path button + YOLO toggle
             const btnRow = rows[1];
-            expect(btnRow.components).toHaveLength(1);
+            expect(btnRow.components).toHaveLength(2);
             const btnData = btnRow.components[0].data as { custom_id: string; label: string };
             expect(btnData.label).toBe('Custom path...');
             expect(btnData.custom_id).toBe('newsess-custom:btn');
@@ -362,15 +365,29 @@ describe('New session menu', () => {
             expect(desc0).toContain('@ arbitrage');
             const desc1 = options[1].data?.description ?? options[1].description;
             expect(desc1).toContain('@ workstation');
-            // Per-machine buttons
+            // Per-machine buttons + YOLO toggle
             const btnRow = rows[1];
-            expect(btnRow.components).toHaveLength(2);
+            expect(btnRow.components).toHaveLength(3);
             const btn0 = btnRow.components[0].data as { custom_id: string; label: string };
             expect(btn0.custom_id).toBe('newsess-custom:machine-1');
             expect(btn0.label).toContain('arbitrage');
             const btn1 = btnRow.components[1].data as { custom_id: string; label: string };
             expect(btn1.custom_id).toBe('newsess-custom:machine-2');
             expect(btn1.label).toContain('workstation');
+        });
+
+        it('includes YOLO toggle button in button row', () => {
+            const rows = buildNewSessionMenu(singleMachineDirs, singleMachineList);
+            const btnRow = rows[1];
+            const buttons = btnRow.components;
+            const yoloBtn = buttons.find((b: any) => {
+                const data = b.toJSON();
+                return data.custom_id?.startsWith('newsess-yolo:');
+            });
+            expect(yoloBtn).toBeDefined();
+            const data = (yoloBtn as any).toJSON();
+            expect(data.custom_id).toBe('newsess-yolo:off');
+            expect(data.label).toBe('YOLO: OFF');
         });
     });
 
@@ -411,6 +428,77 @@ describe('New session menu', () => {
         it('returns null for non-matching prefix', () => {
             expect(parseCustomPathModal('other:id')).toBeNull();
         });
+    });
+});
+
+describe('YOLO toggle button', () => {
+    describe('buildYoloToggleButton', () => {
+        it('builds OFF button with Secondary style', () => {
+            const btn = buildYoloToggleButton(false);
+            const data = btn.toJSON();
+            expect(data.custom_id).toBe('newsess-yolo:off');
+            expect(data.label).toBe('YOLO: OFF');
+            expect(data.style).toBe(ButtonStyle.Secondary);
+        });
+
+        it('builds ON button with Danger style', () => {
+            const btn = buildYoloToggleButton(true);
+            const data = btn.toJSON();
+            expect(data.custom_id).toBe('newsess-yolo:on');
+            expect(data.label).toBe('YOLO: ON');
+            expect(data.style).toBe(ButtonStyle.Danger);
+        });
+    });
+
+    describe('extractYoloState', () => {
+        it('returns false when message is null', () => {
+            expect(extractYoloState(null)).toBe(false);
+        });
+
+        it('returns false when no YOLO button found', () => {
+            const msg = { components: [] } as any;
+            expect(extractYoloState(msg)).toBe(false);
+        });
+
+        it('returns false when YOLO button is off', () => {
+            const msg = {
+                components: [{
+                    components: [{ customId: 'newsess-yolo:off' }],
+                }],
+            } as any;
+            expect(extractYoloState(msg)).toBe(false);
+        });
+
+        it('returns true when YOLO button is on', () => {
+            const msg = {
+                components: [{
+                    components: [{ customId: 'newsess-yolo:on' }],
+                }],
+            } as any;
+            expect(extractYoloState(msg)).toBe(true);
+        });
+
+        it('finds YOLO button in second action row', () => {
+            const msg = {
+                components: [
+                    { components: [{ customId: 'newsess-sel:dir' }] },
+                    { components: [{ customId: 'newsess-custom:btn' }, { customId: 'newsess-yolo:on' }] },
+                ],
+            } as any;
+            expect(extractYoloState(msg)).toBe(true);
+        });
+    });
+});
+
+describe('buildCustomPathOnly', () => {
+    it('includes YOLO toggle button', () => {
+        const rows = buildCustomPathOnly([{ machineId: 'machine-1', host: 'macbook' }]);
+        const allButtons = rows.flatMap(r => r.components);
+        const yoloBtn = allButtons.find((b: any) => {
+            const data = b.toJSON();
+            return data.custom_id?.startsWith('newsess-yolo:');
+        });
+        expect(yoloBtn).toBeDefined();
     });
 });
 
