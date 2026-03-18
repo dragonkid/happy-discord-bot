@@ -225,7 +225,8 @@ async function handleSessions(interaction: ChatInputCommandInteraction, bridge: 
                 const path = extractPath(s.metadata);
                 const marker = s.id === currentSessionId ? '  **← current**' : '';
                 const icon = s.active ? '🟢' : '⚪';
-                sections.push(`    ${icon} \`${s.id.slice(0, 7)}\` ${path}  ${relativeTime(s.activeAt)}${marker}`);
+                const yolo = (s.metadata as unknown as Record<string, unknown>)?.dangerouslySkipPermissions ? ' [YOLO]' : '';
+                sections.push(`    ${icon}${yolo} \`${s.id.slice(0, 7)}\` ${path}  ${relativeTime(s.activeAt)}${marker}`);
             }
         }
     }
