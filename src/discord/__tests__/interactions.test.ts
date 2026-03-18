@@ -326,6 +326,41 @@ describe('handleYoloToggle', () => {
         expect(yoloBtn.toJSON().label).toBe('YOLO: ON');
     });
 
+    it('preserves StringSelectMenu row when toggling', async () => {
+        const interaction = {
+            customId: 'newsess-yolo:off',
+            message: {
+                components: [
+                    {
+                        // Row 0: StringSelectMenu (no customId on row, but has components with type 3)
+                        components: [
+                            { type: 3, customId: 'newsess-sel:dir', toJSON: () => ({ type: 3, custom_id: 'newsess-sel:dir' }) },
+                        ],
+                        toJSON: () => ({ type: 1, components: [{ type: 3, custom_id: 'newsess-sel:dir' }] }),
+                    },
+                    {
+                        // Row 1: Buttons + YOLO
+                        components: [
+                            { customId: 'newsess-custom:btn', toJSON: () => ({ type: 2, custom_id: 'newsess-custom:btn', label: 'Custom path...', style: 2 }) },
+                            { customId: 'newsess-yolo:off', toJSON: () => ({ type: 2, custom_id: 'newsess-yolo:off', label: 'YOLO: OFF', style: 2 }) },
+                        ],
+                    },
+                ],
+            },
+            update: vi.fn(),
+        } as any;
+        await handleYoloToggle(interaction);
+        expect(interaction.update).toHaveBeenCalled();
+        const call = interaction.update.mock.calls[0][0];
+        // Row 0 should be preserved (not converted to ButtonBuilder)
+        expect(call.components).toHaveLength(2);
+        // Row 1 should have flipped YOLO button
+        const row1Btns = call.components[1].components ?? [];
+        const yoloBtn = row1Btns.find((b: any) => b.toJSON().custom_id?.startsWith('newsess-yolo:'));
+        expect(yoloBtn).toBeDefined();
+        expect(yoloBtn.toJSON().custom_id).toBe('newsess-yolo:on');
+    });
+
     it('flips YOLO ON to OFF', async () => {
         const interaction = {
             customId: 'newsess-yolo:on',

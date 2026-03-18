@@ -246,7 +246,12 @@ async function main(): Promise<void> {
 
             // --- YOLO toggle button ---
             if (interaction.customId.startsWith(YOLO_TOGGLE_PREFIX)) {
-                await handleYoloToggle(interaction);
+                try {
+                    await handleYoloToggle(interaction);
+                } catch (err) {
+                    console.error('[Discord] YOLO toggle error:', err);
+                    await interaction.reply({ content: 'Error toggling YOLO mode.', ephemeral: true }).catch(() => {});
+                }
                 return;
             }
 
