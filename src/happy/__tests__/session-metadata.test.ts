@@ -134,4 +134,25 @@ describe('threadName', () => {
     it('returns fallback for undefined metadata', () => {
         expect(threadName(undefined, 'abcd1234')).toBe('session-abcd1234');
     });
+
+    it('appends [YOLO] when dangerouslySkipPermissions is true', () => {
+        expect(threadName(
+            { path: '/Users/dk/project', machineId: 'abc', host: 'macbook', dangerouslySkipPermissions: true },
+            'sess-1',
+        )).toBe('project @ macbook [YOLO]');
+    });
+
+    it('omits [YOLO] when dangerouslySkipPermissions is false', () => {
+        expect(threadName(
+            { path: '/Users/dk/project', machineId: 'abc', host: 'macbook', dangerouslySkipPermissions: false },
+            'sess-1',
+        )).toBe('project @ macbook');
+    });
+
+    it('omits [YOLO] when dangerouslySkipPermissions is null', () => {
+        expect(threadName(
+            { path: '/Users/dk/project', machineId: 'abc', host: 'macbook', dangerouslySkipPermissions: null },
+            'sess-1',
+        )).toBe('project @ macbook');
+    });
 });

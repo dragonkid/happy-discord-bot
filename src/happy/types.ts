@@ -110,6 +110,7 @@ export interface SessionMetadata {
     version?: string;
     os?: string;
     lifecycleState?: string;
+    dangerouslySkipPermissions?: boolean | null;
 }
 
 // --- RPC types ---

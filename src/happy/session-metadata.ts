@@ -23,7 +23,8 @@ export function threadName(metadata: unknown, fallbackSessionId: string): string
     }
     const dir = metadata.path.split('/').filter(Boolean).pop() ?? 'unknown';
     const host = metadata.host || metadata.machineId.slice(0, 8);
-    return `${dir} @ ${host}`;
+    const yolo = (metadata as unknown as Record<string, unknown>).dangerouslySkipPermissions ? ' [YOLO]' : '';
+    return `${dir} @ ${host}${yolo}`;
 }
 
 function shortLabel(fullPath: string): string {
