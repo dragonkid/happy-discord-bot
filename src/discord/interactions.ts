@@ -115,8 +115,10 @@ export async function handleYoloToggle(interaction: ButtonInteraction): Promise<
     // Rebuild all action rows, replacing the YOLO button
     const updatedRows = interaction.message.components.map(row => {
         const newRow = new ActionRowBuilder<ButtonBuilder>();
+        if (!('components' in row)) return newRow;
         for (const comp of row.components) {
-            if (comp.customId?.startsWith(YOLO_TOGGLE_PREFIX)) {
+            const cid = 'customId' in comp ? (comp.customId as string | null) : null;
+            if (cid?.startsWith(YOLO_TOGGLE_PREFIX)) {
                 newRow.addComponents(newYoloBtn);
             } else {
                 newRow.addComponents(ButtonBuilder.from(comp as any));

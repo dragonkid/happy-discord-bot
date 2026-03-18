@@ -306,9 +306,11 @@ export function buildYoloToggleButton(on: boolean): ButtonBuilder {
         .setStyle(on ? ButtonStyle.Danger : ButtonStyle.Secondary);
 }
 
-export function extractYoloState(message: { components?: readonly { components: readonly { customId?: string }[] }[] } | null): boolean {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function extractYoloState(message: any): boolean {
     if (!message?.components) return false;
     for (const row of message.components) {
+        if (!row.components) continue;
         for (const comp of row.components) {
             if (comp.customId === `${YOLO_TOGGLE_PREFIX}on`) return true;
         }
