@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.1.7
+
+### Features
+
+- **YOLO mode for /new** -- Toggle button in `/new` session creation to spawn sessions with `--dangerously-skip-permissions`. Unified UX: one toggle serves both directory dropdown and custom path modal. Sessions spawned with YOLO show `[YOLO]` indicator in `/sessions`.
+
+### Fixes
+
+- **Unknown Channel (10003)** -- `archiveThread` and `deleteThread` now handle missing channels gracefully
+
+### Chore
+
+- 634 tests across 27 suites
+
 ## v0.1.6
 
 ### Features
