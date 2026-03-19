@@ -297,6 +297,27 @@ export const NEW_SESSION_SELECT_PREFIX = 'newsess-sel:';
 export const NEW_SESSION_CUSTOM_PREFIX = 'newsess-custom:';
 export const NEW_SESSION_MODAL_PREFIX = 'newsess-modal:';
 
+export const YOLO_TOGGLE_PREFIX = 'newsess-yolo:';
+
+export function buildYoloToggleButton(on: boolean): ButtonBuilder {
+    return new ButtonBuilder()
+        .setCustomId(`${YOLO_TOGGLE_PREFIX}${on ? 'on' : 'off'}`)
+        .setLabel(`YOLO: ${on ? 'ON' : 'OFF'}`)
+        .setStyle(on ? ButtonStyle.Danger : ButtonStyle.Secondary);
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function extractYoloState(message: any): boolean {
+    if (!message?.components) return false;
+    for (const row of message.components) {
+        if (!row.components) continue;
+        for (const comp of row.components) {
+            if (comp.customId === `${YOLO_TOGGLE_PREFIX}on`) return true;
+        }
+    }
+    return false;
+}
+
 export function buildNewSessionMenu(
     directories: readonly DirectoryEntry[],
     machines: readonly { machineId: string; host: string }[],
@@ -335,9 +356,17 @@ export function buildNewSessionMenu(
                 .setStyle(ButtonStyle.Secondary),
         ];
 
-    const btnRow = new ActionRowBuilder<ButtonBuilder>().addComponents(...buttons);
+    const yoloBtn = buildYoloToggleButton(false);
+    const allButtons = [...buttons, yoloBtn];
 
-    return [menuRow, btnRow];
+    // Discord allows max 5 buttons per row
+    if (allButtons.length <= 5) {
+        const btnRow = new ActionRowBuilder<ButtonBuilder>().addComponents(...allButtons);
+        return [menuRow, btnRow];
+    }
+    const btnRow = new ActionRowBuilder<ButtonBuilder>().addComponents(...buttons);
+    const yoloRow = new ActionRowBuilder<ButtonBuilder>().addComponents(yoloBtn);
+    return [menuRow, btnRow, yoloRow];
 }
 
 export function buildCustomPathOnly(
@@ -357,7 +386,15 @@ export function buildCustomPathOnly(
                 .setStyle(ButtonStyle.Primary),
         ];
 
-    return [new ActionRowBuilder<ButtonBuilder>().addComponents(...buttons)];
+    const yoloBtn = buildYoloToggleButton(false);
+    const allButtons = [...buttons, yoloBtn];
+
+    if (allButtons.length <= 5) {
+        return [new ActionRowBuilder<ButtonBuilder>().addComponents(...allButtons)];
+    }
+    const btnRow = new ActionRowBuilder<ButtonBuilder>().addComponents(...buttons);
+    const yoloRow = new ActionRowBuilder<ButtonBuilder>().addComponents(yoloBtn);
+    return [btnRow, yoloRow];
 }
 
 export function parseNewSessionSelect(customId: string): boolean {

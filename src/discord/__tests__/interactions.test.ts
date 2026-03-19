@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { handleExitPlanButton, handleNewSessionSelect, handleNewSessionModal, handleDeleteButton } from '../interactions.js';
+import { handleExitPlanButton, handleNewSessionSelect, handleNewSessionModal, handleDeleteButton, handleYoloToggle } from '../interactions.js';
 import type { ButtonInteraction, StringSelectMenuInteraction, ModalSubmitInteraction } from 'discord.js';
 import type { Bridge } from '../../bridge.js';
 import type { StateTracker } from '../../happy/state-tracker.js';
@@ -128,6 +128,7 @@ function makeMockSelectInteraction(value: string): StringSelectMenuInteraction {
 function makeMockModalInteraction(directory: string): ModalSubmitInteraction {
     return {
         message: { content: '' },
+        isFromMessage: vi.fn().mockReturnValue(false),
         fields: {
             getTextInputValue: vi.fn().mockReturnValue(directory),
         },
@@ -150,7 +151,7 @@ describe('handleNewSessionSelect', () => {
 
         await handleNewSessionSelect(interaction, bridge);
 
-        expect(bridge.createNewSession).toHaveBeenCalledWith('machine-1', '/Users/user/project');
+        expect(bridge.createNewSession).toHaveBeenCalledWith('machine-1', '/Users/user/project', false);
         expect(interaction.editReply).toHaveBeenCalledWith(
             expect.objectContaining({
                 content: expect.stringContaining('Session created'),
@@ -211,7 +212,7 @@ describe('handleNewSessionModal', () => {
 
         await handleNewSessionModal(interaction, 'machine-1', bridge);
 
-        expect(bridge.createNewSession).toHaveBeenCalledWith('machine-1', '/Users/user/custom-dir');
+        expect(bridge.createNewSession).toHaveBeenCalledWith('machine-1', '/Users/user/custom-dir', false);
     });
 
     it('expands ~ using remote machine homeDir', async () => {
@@ -220,7 +221,7 @@ describe('handleNewSessionModal', () => {
 
         await handleNewSessionModal(interaction, 'machine-1', bridge);
 
-        expect(bridge.createNewSession).toHaveBeenCalledWith('machine-1', '/Users/dk/Coding/happy-discord-bot');
+        expect(bridge.createNewSession).toHaveBeenCalledWith('machine-1', '/Users/dk/Coding/happy-discord-bot', false);
     });
 
     it('expands bare ~ to remote homeDir', async () => {
@@ -229,7 +230,7 @@ describe('handleNewSessionModal', () => {
 
         await handleNewSessionModal(interaction, 'machine-1', bridge);
 
-        expect(bridge.createNewSession).toHaveBeenCalledWith('machine-1', '/Users/dk');
+        expect(bridge.createNewSession).toHaveBeenCalledWith('machine-1', '/Users/dk', false);
     });
 
     it('passes ~ through when homeDir unavailable', async () => {
@@ -239,7 +240,7 @@ describe('handleNewSessionModal', () => {
 
         await handleNewSessionModal(interaction, 'machine-1', bridge);
 
-        expect(bridge.createNewSession).toHaveBeenCalledWith('machine-1', '~/project');
+        expect(bridge.createNewSession).toHaveBeenCalledWith('machine-1', '~/project', false);
     });
 
     it('shows error for empty directory', async () => {
@@ -298,5 +299,135 @@ describe('handleDeleteButton', () => {
         expect(interaction.editReply).toHaveBeenCalledWith(expect.objectContaining({
             content: expect.stringContaining('Failed to delete'),
         }));
+    });
+});
+
+describe('handleYoloToggle', () => {
+    it('flips YOLO OFF to ON', async () => {
+        const interaction = {
+            customId: 'newsess-yolo:off',
+            message: {
+                components: [{
+                    components: [
+                        { customId: 'newsess-custom:btn', toJSON: () => ({ type: 2, custom_id: 'newsess-custom:btn', label: 'Custom path...', style: 2 }) },
+                        { customId: 'newsess-yolo:off', toJSON: () => ({ type: 2, custom_id: 'newsess-yolo:off', label: 'YOLO: OFF', style: 2 }) },
+                    ],
+                }],
+            },
+            update: vi.fn(),
+        } as any;
+        await handleYoloToggle(interaction);
+        expect(interaction.update).toHaveBeenCalled();
+        const call = interaction.update.mock.calls[0][0];
+        const allBtns = call.components.flatMap((r: any) => r.components ?? []);
+        const yoloBtn = allBtns.find((b: any) => b.toJSON().custom_id?.startsWith('newsess-yolo:'));
+        expect(yoloBtn).toBeDefined();
+        expect(yoloBtn.toJSON().custom_id).toBe('newsess-yolo:on');
+        expect(yoloBtn.toJSON().label).toBe('YOLO: ON');
+    });
+
+    it('preserves StringSelectMenu row when toggling', async () => {
+        const interaction = {
+            customId: 'newsess-yolo:off',
+            message: {
+                components: [
+                    {
+                        // Row 0: StringSelectMenu (no customId on row, but has components with type 3)
+                        components: [
+                            { type: 3, customId: 'newsess-sel:dir', toJSON: () => ({ type: 3, custom_id: 'newsess-sel:dir' }) },
+                        ],
+                        toJSON: () => ({ type: 1, components: [{ type: 3, custom_id: 'newsess-sel:dir' }] }),
+                    },
+                    {
+                        // Row 1: Buttons + YOLO
+                        components: [
+                            { customId: 'newsess-custom:btn', toJSON: () => ({ type: 2, custom_id: 'newsess-custom:btn', label: 'Custom path...', style: 2 }) },
+                            { customId: 'newsess-yolo:off', toJSON: () => ({ type: 2, custom_id: 'newsess-yolo:off', label: 'YOLO: OFF', style: 2 }) },
+                        ],
+                    },
+                ],
+            },
+            update: vi.fn(),
+        } as any;
+        await handleYoloToggle(interaction);
+        expect(interaction.update).toHaveBeenCalled();
+        const call = interaction.update.mock.calls[0][0];
+        // Row 0 should be preserved (not converted to ButtonBuilder)
+        expect(call.components).toHaveLength(2);
+        // Row 1 should have flipped YOLO button
+        const row1Btns = call.components[1].components ?? [];
+        const yoloBtn = row1Btns.find((b: any) => b.toJSON().custom_id?.startsWith('newsess-yolo:'));
+        expect(yoloBtn).toBeDefined();
+        expect(yoloBtn.toJSON().custom_id).toBe('newsess-yolo:on');
+    });
+
+    it('flips YOLO ON to OFF', async () => {
+        const interaction = {
+            customId: 'newsess-yolo:on',
+            message: {
+                components: [{
+                    components: [
+                        { customId: 'newsess-custom:btn', toJSON: () => ({ type: 2, custom_id: 'newsess-custom:btn', label: 'Custom path...', style: 2 }) },
+                        { customId: 'newsess-yolo:on', toJSON: () => ({ type: 2, custom_id: 'newsess-yolo:on', label: 'YOLO: ON', style: 4 }) },
+                    ],
+                }],
+            },
+            update: vi.fn(),
+        } as any;
+        await handleYoloToggle(interaction);
+        const call = interaction.update.mock.calls[0][0];
+        const allBtns = call.components.flatMap((r: any) => r.components ?? []);
+        const yoloBtn = allBtns.find((b: any) => b.toJSON().custom_id?.startsWith('newsess-yolo:'));
+        expect(yoloBtn.toJSON().custom_id).toBe('newsess-yolo:off');
+    });
+});
+
+describe('handleNewSessionSelect YOLO passthrough', () => {
+    it('passes YOLO ON state to createNewSession', async () => {
+        const bridge = makeMockBridge('sess-1');
+        (bridge as any).listAllSessions = vi.fn().mockResolvedValue([
+            {
+                id: 'sess-1',
+                activeAt: 3000,
+                metadata: { path: '/Users/user/project', machineId: 'machine-1', host: 'test' },
+            },
+        ]);
+        (bridge as any).createNewSession = vi.fn().mockResolvedValue('new-sess');
+        const interaction = makeMockSelectInteraction('0');
+        interaction.message = {
+            ...interaction.message,
+            components: [
+                { components: [{ customId: 'newsess-sel:dir' }] },
+                { components: [{ customId: 'newsess-custom:btn' }, { customId: 'newsess-yolo:on' }] },
+            ],
+        } as any;
+
+        await handleNewSessionSelect(interaction, bridge);
+
+        expect(bridge.createNewSession).toHaveBeenCalledWith('machine-1', '/Users/user/project', true);
+    });
+
+    it('passes YOLO OFF state to createNewSession', async () => {
+        const bridge = makeMockBridge('sess-1');
+        (bridge as any).listAllSessions = vi.fn().mockResolvedValue([
+            {
+                id: 'sess-1',
+                activeAt: 3000,
+                metadata: { path: '/Users/user/project', machineId: 'machine-1', host: 'test' },
+            },
+        ]);
+        (bridge as any).createNewSession = vi.fn().mockResolvedValue('new-sess');
+        const interaction = makeMockSelectInteraction('0');
+        interaction.message = {
+            ...interaction.message,
+            components: [
+                { components: [{ customId: 'newsess-sel:dir' }] },
+                { components: [{ customId: 'newsess-custom:btn' }, { customId: 'newsess-yolo:off' }] },
+            ],
+        } as any;
+
+        await handleNewSessionSelect(interaction, bridge);
+
+        expect(bridge.createNewSession).toHaveBeenCalledWith('machine-1', '/Users/user/project', false);
     });
 });
